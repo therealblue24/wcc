@@ -12,6 +12,8 @@ assert() {
   expect="$1"
   actual=$2
 
+  printf "\e[0m"
+
   ./bin/wcc test/$actual -o prog.s -O3
   compilerstatus="$?"
 
@@ -78,3 +80,5 @@ if [ "$passing" = "1" ]; then
 else
   printf "\e[0;33msome tests failed\n"
 fi
+
+printf "\e[0m"
