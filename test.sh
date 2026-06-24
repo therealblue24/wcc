@@ -26,9 +26,9 @@ assert() {
   rm prog prog.s
   
   if [ "$status" = "$expect" ]; then
-    echo "ok $actual => $status"
+    printf "\e[0;32mok $actual => $status\n"
   else
-    echo "not ok $actual => $status"
+    printf "\e[0;31mnot ok $actual => $status\n"
     passing=0
   fi
 }
@@ -76,5 +76,5 @@ assert 5 "cond_expr.c"
 if [ "$passing" = "1" ]; then
   echo "all tests passed"
 else
-  echo "some tests failed"
+  printf "\e[0;33msome tests failed\n"
 fi
