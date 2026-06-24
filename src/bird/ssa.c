@@ -4,6 +4,7 @@
 #include "bird.h"
 #include "bird/ir.h"
 #include "ir.h"
+#include <stdint.h>
 
 static void find_before_last_term_ins(ir_blk_t *blk)
 {
@@ -752,10 +753,16 @@ static int blocks_cmp(const void *a, const void *b)
 {
 	ir_blk_t **blk1 = (ir_blk_t **)a;
 	ir_blk_t **blk2 = (ir_blk_t **)b;
-	long ord1 = (*blk1)->postnum;
-	long ord2 = (*blk2)->postnum;
-
-	return ord1 - ord2;
+	int64_t ord1 = (*blk1)->postnum;
+	int64_t ord2 = (*blk2)->postnum;
+	int64_t cmp = ord1 - ord2;
+	if(cmp < 0) {
+		return -1;
+	}
+	if(cmp > 0) {
+		return +1;
+	}
+	return 0;
 }
 
 static void order_blocks(ir_func_t *fun)
@@ -774,7 +781,7 @@ static void order_blocks(ir_func_t *fun)
 	/* mark dead blocks at end */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		if(fun->blocks[i]->postnum == -1) {
-			fun->blocks[i]->postnum = 1000000000;
+			fun->blocks[i]->postnum = INT64_MAX - 1;
 		}
 	}
 
@@ -784,7 +791,22 @@ static void order_blocks(ir_func_t *fun)
 
 static void basic_block_placement(ir_func_t *fun)
 {
+	ir_fix(fun);
 	order_blocks(fun);
+
+	/* remove all dead blocks */
+	for(size_t i = list_len(fun->blocks) - 1; i >= 0; i--) {
+		if(fun->blocks[i]->postnum == (INT64_MAX - 1)) {
+			list_hdr(fun->blocks)->size = i;
+			break;
+		}
+
+		if(i == 0) {
+			break;
+		}
+	}
+
+	return;
 }
 
 /* turn the IR from an SSA form into a typical 3AC IR.
