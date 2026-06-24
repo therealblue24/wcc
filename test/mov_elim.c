@@ -1,10 +1,10 @@
 int main()
 {
 	int i = 5;
-	int k = i;
-	int j = k;
-	int l = j;
-	int z = l;
-	int res = z;
+	int k = i + 0;
+	int j = k + 0;
+	int l = j + 0;
+	int z = l + 0;
+	int res = z + 0;
 	return res;
 }
