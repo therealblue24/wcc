@@ -906,7 +906,7 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 			ir_blk_t *blk = func->blocks[j];
 			blk->num = acc++;
 		}
-		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, opt, arch);
+		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 5 : 5, opt, arch);
 
 		if(debug) {
 			printf("Final IR:\n");

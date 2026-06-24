@@ -74,8 +74,7 @@ bool type_is_ptr(type_t *ty)
 
 bool type_is_signed(type_t *ty)
 {
-	/* all integers are signed right now */
-	return type_is_int(ty) && !ty->unsignd;
+	return !ty->unsignd;
 }
 
 type_t *type_ptr_to(type_t *ty)

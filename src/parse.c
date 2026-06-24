@@ -253,12 +253,14 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 {
 	uint64_t align = 0;
 	type_t *res = TY_VOID;
+	bool unsign = false;
 
 	while(is_declspec(tok)) {
 		if(token_eq(tok, "long")) {
 			tok = token_skip(tok, "long");
 			*rest = tok;
 			res = TY_LONG;
+			res->unsignd = unsign;
 			break;
 		}
 
@@ -266,6 +268,7 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			tok = token_skip(tok, "int");
 			*rest = tok;
 			res = TY_INT;
+			res->unsignd = unsign;
 			break;
 		}
 
@@ -273,6 +276,7 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			tok = token_skip(tok, "short");
 			*rest = tok;
 			res = TY_SHORT;
+			res->unsignd = unsign;
 			break;
 		}
 
@@ -280,6 +284,7 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			tok = token_skip(tok, "char");
 			*rest = tok;
 			res = TY_CHAR;
+			res->unsignd = unsign;
 			break;
 		}
 
@@ -294,18 +299,19 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			tok = token_skip(tok, "_Bool");
 			*rest = tok;
 			res = TY_BOOL;
+			res->unsignd = unsign;
 			break;
 		}
 
 		if(token_eq(tok, "signed")) {
 			tok = token_skip(tok, "signed");
-			res->unsignd = false;
+			unsign = false;
 			continue;
 		}
 
 		if(token_eq(tok, "unsigned")) {
 			tok = token_skip(tok, "unsigned");
-			res->unsignd = true;
+			unsign = true;
 			continue;
 		}
 

@@ -334,9 +334,9 @@ reg_t *codegen_expr(node_t *node)
 		break;
 	case NODE_SHR:
 		if(type->unsignd) {
-			emit_ashr(res, lhs, rhs);
-		} else {
 			emit_shr(res, lhs, rhs);
+		} else {
+			emit_ashr(res, lhs, rhs);
 		}
 		break;
 	case NODE_AND:

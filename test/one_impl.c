@@ -16,7 +16,7 @@ long argument_waster(long a, long b, long c, long d, long e, long f, long g,
 
 void putchar(int c);
 
-void print_num_helper(int num)
+void print_num_helper(long num)
 {
 	/* https://stackoverflow.com/a/59389473 */
 
@@ -29,9 +29,29 @@ void print_num_helper(int num)
 	return;
 }
 
-void print_num(int num)
+void print_num(long num)
 {
 	print_num_helper(num);
-	putchar(10);
+	putchar('\n');
+	return;
+}
+
+void print_num_helper_unsignd(unsigned long num)
+{
+	/* https://stackoverflow.com/a/59389473 */
+
+	if(num >= 10) {
+		print_num_helper(num / 10);
+	}
+
+	putchar((num % 10) + '0');
+
+	return;
+}
+
+void print_num_unsignd(unsigned long num)
+{
+	print_num_helper_unsignd(num);
+	putchar('\n');
 	return;
 }
