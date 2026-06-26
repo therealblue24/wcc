@@ -1250,7 +1250,12 @@ static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 	tok = token_skip(tok, "(");
 
 	if(token_eq(tok, "void")) {
-		tok = token_skip(tok, "void");
+		token_t *nxt = token_skip(tok, "void");
+		if(token_eat(&nxt, ")")) {
+			tok = nxt;
+			func->args = NULL;
+			goto end;
+		}
 	}
 
 	if(token_eq(tok, ")")) {
