@@ -45,6 +45,8 @@ enum node_kind {
 	NODE_DEREF, /* * */
 	NODE_FUNCALL, /* func() */
 	NODE_STMT_EXPR, /* statement expression */
+	NODE_BREAK, /* break */
+	NODE_CONTINUE, /* continue */
 };
 
 /* a variable */

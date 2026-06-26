@@ -1,13 +1,21 @@
 #include "codegen.h"
 #include "parse.h"
 #include "type.h"
+#include "zz/list.h"
 #include <stdlib.h>
 #include "bird/ir.h"
 
 static ir_func_t *fun;
 static obj_t *fun_obj;
-long blk_num;
+static long blk_num;
 static ir_blk_t *outblk;
+
+typedef struct flow {
+	ir_blk_t *break_to;
+	ir_blk_t *continue_to;
+} flow_t;
+
+static LIST(flow_t) break_stack;
 
 #define MAKE(ty, r0, r1, r2, imm) ir_inst_make(IR_INST_##ty, r0, r1, r2, imm)
 
@@ -443,6 +451,24 @@ void codegen_stmt(node_t *node)
 		(void)codegen_expr(node->lhs);
 		break;
 
+	case NODE_BREAK: {
+		if(list_len(break_stack) == 0) {
+			compile_err_node(node, "nothing to break to");
+		}
+		flow_t f = list_peek(break_stack);
+		emit_jmp(f.break_to);
+		break;
+	}
+
+	case NODE_CONTINUE: {
+		if(list_len(break_stack) == 0) {
+			compile_err_node(node, "nothing to continue to");
+		}
+		flow_t f = list_peek(break_stack);
+		emit_jmp(f.continue_to);
+		break;
+	}
+
 	case NODE_RET: {
 		type_t *rettype = fun_obj->type->to;
 		if(node->lhs && rettype->kind != TYPE_VOID) {
@@ -469,17 +495,26 @@ void codegen_stmt(node_t *node)
 	case NODE_DOWHILE: {
 		ir_blk_t *then = emit_blk();
 		ir_blk_t *resume = emit_blk();
+		ir_blk_t *condchk = emit_blk();
+		list_append(break_stack,
+					((flow_t){ .break_to = resume, .continue_to = condchk }));
 		emit_jmp(then);
 		outblk = then;
 		codegen_stmt(node->then);
+		emit_jmp(condchk);
+		outblk = condchk;
 		reg_t *cond = codegen_expr(node->cond);
 		emit_br(cond, then, resume);
 		outblk = resume;
+		list_back(break_stack);
 	}; break;
 	case NODE_WHILE: {
 		ir_blk_t *condchk = emit_blk();
 		ir_blk_t *loop = emit_blk();
 		ir_blk_t *resume = emit_blk();
+
+		list_append(break_stack,
+					((flow_t){ .break_to = resume, .continue_to = condchk }));
 
 		emit_jmp(condchk);
 
@@ -491,6 +526,7 @@ void codegen_stmt(node_t *node)
 		codegen_stmt(node->then);
 		emit_jmp(condchk);
 		outblk = resume;
+		list_back(break_stack);
 	}; break;
 	case NODE_FOR: {
 		/* initializer */
@@ -498,7 +534,16 @@ void codegen_stmt(node_t *node)
 
 		ir_blk_t *condchk = emit_blk(); /* check if need to go loop or resume */
 		ir_blk_t *then = emit_blk();
+		ir_blk_t *inc = then;
 		ir_blk_t *resume = emit_blk();
+
+		if(node->inc) {
+			inc = emit_blk();
+		}
+
+		list_append(break_stack,
+					((flow_t){ .break_to = resume,
+							   .continue_to = node->inc ? inc : condchk }));
 
 		emit_jmp(condchk);
 
@@ -515,13 +560,16 @@ void codegen_stmt(node_t *node)
 
 		outblk = then;
 		codegen_stmt(node->then);
+
 		if(node->inc) {
+			emit_jmp(inc);
+			outblk = inc;
 			UNUSED(codegen_expr(node->inc));
 		}
 
 		emit_jmp(condchk);
 		outblk = resume;
-
+		list_back(break_stack);
 	} break;
 	case NODE_IF: {
 		reg_t *cond = codegen_expr(node->cond);
@@ -729,6 +777,8 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 
 	assign_globals(globals);
 
+	break_stack = list_make(flow_t);
+
 	for(size_t i = 0; i < list_len(globals); i++) {
 		blk_num = 0;
 		obj_t *cur_fn = globals[i];
@@ -766,6 +816,7 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		codegen_stmt(cur_fn->body);
+		list_hdr(break_stack)->size = 0;
 
 		varopt(func);
 
@@ -805,5 +856,6 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 	}
 	list_delete(prog.funcs);
 	list_delete(prog.globs);
+	list_delete(break_stack);
 	return;
 }

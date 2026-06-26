@@ -242,7 +242,11 @@ static const char *arg_reg[6] = { "rdi", "rsi", "rdx", "rcx", "r8", "r9" };
 static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 								 long last_i)
 {
-	fprintf(f, ".BB%ld:\n", blk->num);
+	int can_omit = list_len(blk->pred) == 1 &&
+				   blk->pred[0]->num == blk->num - 1;
+	if(!can_omit) {
+		fprintf(f, ".BB%ld:\n", blk->num);
+	}
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 		int r0i = -1;
 		UNUSEDA int r1i = -1;

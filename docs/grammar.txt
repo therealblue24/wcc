@@ -41,6 +41,8 @@ stmt = "return" expr? ";"
       | "for" "(" declaration expr? ";" expr? ")" stmt
       | "while" "(" expr ")" stmt
       | "do" stmt "while" "(" expr ")" ";"
+	  | "break" ";"
+      | "continue" ";"
 	  | compound-stmt
 	  | expr-stmt
 compound-stmt = "{" (declaration | stmt)* "}"

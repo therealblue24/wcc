@@ -623,6 +623,7 @@ end:
 
 static node_t *parse_stmt(token_t *tok, token_t **rest)
 {
+	token_t *save = tok;
 	/* return */
 	if(tok->kind == TOK_KEYWORD && token_eq(tok, "return")) {
 		node_t *stmt = node_unary(NODE_RET, NULL, tok);
@@ -707,6 +708,9 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 		tok = token_skip(tok, "do");
 		node_t *dowhile = node_make(NODE_DOWHILE, tok);
 		dowhile->then = parse_stmt(tok, &tok);
+		if(!token_eq(tok, "while")) {
+			compile_err_node(dowhile, "there is nothing we can `do`");
+		}
 		tok = token_skip(tok, "while");
 		tok = token_skip(tok, "(");
 		dowhile->cond = parse_expr(tok, &tok);
@@ -716,7 +720,23 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 		return dowhile;
 	}
 
-	/*  compound-stmt */
+	/* break */
+	if(token_eat(&tok, "break")) {
+		node_t *break_node = node_make(NODE_BREAK, save);
+		tok = token_skip(tok, ";");
+		*rest = tok;
+		return break_node;
+	}
+
+	/* continue */
+	if(token_eat(&tok, "continue")) {
+		node_t *cont_node = node_make(NODE_CONTINUE, save);
+		tok = token_skip(tok, ";");
+		*rest = tok;
+		return cont_node;
+	}
+
+	/* compound-stmt */
 	if(token_eq(tok, "{")) {
 		node_t *compound_stmt = parse_compound_stmt(tok, &tok);
 		*rest = tok;

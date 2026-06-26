@@ -152,7 +152,12 @@ print:
 		fprintf(stderr, "\r\n");
 		fprintf(stderr, "       ");
 		while(cur_col < col) {
-			fputc(' ', stderr);
+			char c = *ln++;
+			if(c == '\t') {
+				fputc('\t', stderr);
+			} else {
+				fputc(' ', stderr);
+			}
 			cur_col++;
 		}
 		fputc('^', stderr);

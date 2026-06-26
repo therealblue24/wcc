@@ -62,10 +62,23 @@ void *list_donotuse_fit(void *list, size_t count, size_t size);
 		(list)[--list_hdr((list))->size];                          \
 	})
 
+/* Peeks an element at end of list `list` */
+#define list_peek(list)                                            \
+	({                                                             \
+		ASSERT(list_hdr((list))->size, "tried to pop empty list"); \
+		(list)[list_hdr((list))->size - 1];                        \
+	})
+
 /* list_size and list_len are the same. gets size/length of list */
 #define list_size(list) (list_hdr((list))->size)
 #define list_len(list) (list_hdr((list))->size)
 /* gets capacity of list */
 #define list_cap(list) (list_hdr((list))->cap)
+
+/* list_hdr(list)->size--; */
+#define list_back(list)           \
+	do {                          \
+		list_hdr((list))->size--; \
+	} while(0)
 
 #endif /* LIST_H_ */

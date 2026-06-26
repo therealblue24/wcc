@@ -819,6 +819,7 @@ void ir_ssa_exit(ir_func_t *fun)
 	split_critical(fun);
 	insert_parallel_moves(fun);
 	deparallelize_pmovs(fun);
+	ir_blk_flow(fun);
 	basic_block_placement(fun);
 	ir_nopremover(fun);
 	ir_fix(fun);
