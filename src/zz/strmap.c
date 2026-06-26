@@ -72,6 +72,9 @@ static void strmap_rebuild(void *map, size_t size)
 
 void strmap_donotuse_delete(void *map)
 {
+	if(!map) {
+		return;
+	}
 	strmap_hdr_t *hdr = strmap_hdr(map);
 
 	zz_hashstr_t **keys = hdr->data[0];

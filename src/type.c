@@ -77,6 +77,13 @@ bool type_is_signed(type_t *ty)
 	return !ty->unsignd;
 }
 
+type_t *type_clone(type_t *ty)
+{
+	type_t *typtr = scr_alloc(sizeof(type_t));
+	*typtr = *ty;
+	return typtr;
+}
+
 type_t *type_ptr_to(type_t *ty)
 {
 	type_t *typtr = scr_alloc(sizeof(type_t));
@@ -222,4 +229,5 @@ void type_propagate(node_t *node)
 	default:
 		break;
 	}
+	return;
 }

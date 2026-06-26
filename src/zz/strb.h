@@ -6,7 +6,7 @@
 #include "base.h"
 
 #define STRB_INITIAL_CAP (32)
-#define STRB_GROWTH_RATE (64)
+#define STRB_GROWTH_RATE (2)
 
 typedef struct strb {
 	char *str; /* string */

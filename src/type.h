@@ -42,6 +42,7 @@ bool type_is_int(type_t *ty);
 bool type_is_ptr(type_t *ty);
 bool type_is_signed(type_t *ty);
 
+type_t *type_clone(type_t *ty);
 type_t *type_ptr_to(type_t *ty);
 type_t *type_arr_to(type_t *ty, size_t alen);
 type_t *type_func_to(type_t *ret_ty);

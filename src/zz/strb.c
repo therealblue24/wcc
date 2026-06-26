@@ -12,7 +12,7 @@ static void strb_fit(strb_t *strb, size_t to, size_t add)
 		strb->cap = STRB_INITIAL_CAP;
 	}
 
-	size_t new_size = size_max(strb->cap, to);
+	size_t new_size = size_max(strb->cap, strb->cap * to);
 	if(new_size == strb->cap) {
 		return;
 	}

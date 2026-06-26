@@ -252,49 +252,49 @@ static bool is_declspec(token_t *tok)
 static type_t *parse_declspec(token_t *tok, token_t **rest)
 {
 	uint64_t align = 0;
-	type_t *res = TY_VOID;
+	type_t *res = NULL;
 	bool unsign = false;
 
 	while(is_declspec(tok)) {
 		if(token_eq(tok, "long")) {
 			tok = token_skip(tok, "long");
 			*rest = tok;
-			res = TY_LONG;
+			res = type_clone(TY_LONG);
 			break;
 		}
 
 		if(token_eq(tok, "int")) {
 			tok = token_skip(tok, "int");
 			*rest = tok;
-			res = TY_INT;
+			res = type_clone(TY_INT);
 			break;
 		}
 
 		if(token_eq(tok, "short")) {
 			tok = token_skip(tok, "short");
 			*rest = tok;
-			res = TY_SHORT;
+			res = type_clone(TY_SHORT);
 			break;
 		}
 
 		if(token_eq(tok, "char")) {
 			tok = token_skip(tok, "char");
 			*rest = tok;
-			res = TY_CHAR;
+			res = type_clone(TY_CHAR);
 			break;
 		}
 
 		if(token_eq(tok, "void")) {
 			tok = token_skip(tok, "void");
 			*rest = tok;
-			res = TY_VOID;
+			res = type_clone(TY_VOID);
 			break;
 		}
 
 		if(token_eq(tok, "_Bool")) {
 			tok = token_skip(tok, "_Bool");
 			*rest = tok;
-			res = TY_BOOL;
+			res = type_clone(TY_BOOL);
 			break;
 		}
 
@@ -330,6 +330,10 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 
 		compile_err(tok->loc, "invalid declaration specifier type '%.*s'",
 					tok->len, tok->loc);
+	}
+
+	if(!res) {
+		compile_err(tok->loc, "incomplete declaration specifier");
 	}
 
 	if(align) {
@@ -1230,10 +1234,7 @@ static void parse_global_var(type_t *decltype, token_t *tok, token_t **rest)
 static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 {
 	local_order = 0;
-	if(locals) {
-		strmap_delete(locals);
-		locals = NULL;
-	}
+	strmap_delete(locals);
 	locals = strmap_make(obj_t *);
 
 	obj_t *func;
@@ -1297,7 +1298,6 @@ end:
 		return NULL;
 	}
 
-	strmap_put(locals, func->name, func);
 	strmap_put(known_funcs, func->name, func);
 
 	func->body = parse_compound_stmt(tok, &tok);
@@ -1349,9 +1349,7 @@ parse_res_t parse_do(token_t *toks)
 		}
 out:
 
-		if(locals) {
-			strmap_delete(locals);
-		}
+		strmap_delete(locals);
 		locals = NULL;
 	}
 
