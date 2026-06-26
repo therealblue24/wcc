@@ -330,6 +330,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 					stack_used += 8;
 				}
 			}
+			fprintf(f, "\txor eax, eax\n");
 			fprintf(f, "\tcall %s\n", ins->fname);
 			if(r0) {
 				fprintf(f, "\tmov %s, rax\n", r0);

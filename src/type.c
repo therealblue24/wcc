@@ -149,16 +149,21 @@ void type_propagate(node_t *node)
 	}
 
 	switch(node->kind) {
+	case NODE_NUM:
+	case NODE_FUNCALL:
+		node->type = TY_LONG;
+		break;
+
 	case NODE_EQ:
 	case NODE_LE:
 	case NODE_NE:
 	case NODE_LT:
 	case NODE_GT:
 	case NODE_GE:
-	case NODE_NUM:
-	case NODE_FUNCALL:
-		node->type = TY_LONG;
+		/* TODO: is this correct? */
+		node->type = node->lhs->type->unsignd ? TY_ULONG : TY_LONG;
 		break;
+
 	case NODE_VAR:
 		node->type = node->var->type;
 		if(node->var->type->kind == TYPE_VOID) {
