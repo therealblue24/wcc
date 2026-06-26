@@ -133,8 +133,11 @@ test: $(BINDIR)/$(APP)
 	@./test.sh
 
 testfast:
-	@make -B RELEASE=yes
+	@make -B RELEASE=yes fast
 	@make test
+
+fast:
+	@make -j$(shell nproc)
 
 testsanitizers:
 	@make -B SANITIZERS=yes

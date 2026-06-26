@@ -354,8 +354,8 @@ static int rewrite_mov(ir_inst_t *ins)
 	 * %r0 = spill_load %r1
 	 */
 	if(!ins->r0->spilld && ins->r1->spilld) {
+		ins->size = ins->type == IR_INST_MOV ? 8 : ins->size;
 		ins->type = IR_INST_LOADSS;
-		ins->size = 8;
 		ins->imm = ins->r1->off;
 		return 1;
 	}
@@ -365,6 +365,7 @@ static int rewrite_mov(ir_inst_t *ins)
 	 * ->
 	 * spill_store %r0, %r1 */
 	if(ins->r0->spilld && !ins->r1->spilld) {
+		ins->size = ins->type == IR_INST_MOV ? 8 : ins->size;
 		ins->type = IR_INST_STORESS;
 		ins->size = 8;
 		ins->imm = ins->r0->off;
@@ -382,7 +383,8 @@ static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
 	}
 
 	/* special case */
-	if(ins->type == IR_INST_MOV) {
+	if(ins->type == IR_INST_MOV || ins->type == IR_INST_ZXT ||
+	   ins->type == IR_INST_SXT) {
 		if(rewrite_mov(ins))
 			return;
 	}

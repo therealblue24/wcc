@@ -13,3 +13,4 @@ oldsrc
 prog
 prog.s
 *.s
+*.asm

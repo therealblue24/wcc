@@ -260,7 +260,6 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			tok = token_skip(tok, "long");
 			*rest = tok;
 			res = TY_LONG;
-			res->unsignd = unsign;
 			break;
 		}
 
@@ -268,7 +267,6 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			tok = token_skip(tok, "int");
 			*rest = tok;
 			res = TY_INT;
-			res->unsignd = unsign;
 			break;
 		}
 
@@ -276,7 +274,6 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			tok = token_skip(tok, "short");
 			*rest = tok;
 			res = TY_SHORT;
-			res->unsignd = unsign;
 			break;
 		}
 
@@ -284,7 +281,6 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			tok = token_skip(tok, "char");
 			*rest = tok;
 			res = TY_CHAR;
-			res->unsignd = unsign;
 			break;
 		}
 
@@ -299,7 +295,6 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			tok = token_skip(tok, "_Bool");
 			*rest = tok;
 			res = TY_BOOL;
-			res->unsignd = unsign;
 			break;
 		}
 
@@ -340,6 +335,8 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 	if(align) {
 		res->align = align;
 	}
+
+	res->unsignd = unsign;
 
 	return res;
 }

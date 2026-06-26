@@ -83,6 +83,7 @@ type_t *type_ptr_to(type_t *ty)
 	memcpy(typtr, TY_PTR, sizeof(type_t));
 	typtr->to = ty;
 	typtr->ident = ty->ident;
+	typtr->unsignd = true;
 	return typtr;
 }
 
@@ -95,6 +96,7 @@ type_t *type_arr_to(type_t *type, size_t alen)
 	typtr->to = type;
 	typtr->alen = alen;
 	typtr->ident = type->ident;
+	typtr->unsignd = type->unsignd;
 	return typtr;
 }
 

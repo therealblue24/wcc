@@ -230,6 +230,7 @@ static void ir_placemarks(ir_func_t *func)
 				inst->r0->lhs = inst->r1;
 				inst->r0->rhs = inst->r2;
 				inst->r0->imm = inst->imm;
+				inst->r0->size = inst->size;
 			}
 
 			if(inst->type == IR_INST_PHI) {
@@ -589,9 +590,42 @@ static UNUSEDA int ir_fold(ir_func_t *func)
 	return change;
 }
 
+static int ir_extelim(ir_inst_t *ins)
+{
+	int change = 0;
+
+	/* nothing to do */
+	if(ins->r1->insty != IR_INST_ZXT && ins->r1->insty != IR_INST_SXT) {
+		return 0;
+	}
+
+chk_large:
+	/* larger extension after shorter extension is a mov */
+	if(ins->size >= ins->r1->size) {
+		ins->type = IR_INST_MOV;
+		ins->size = 8;
+		return 1;
+	}
+
+	/* shorter zero extension after larger zero extension: use the shorter */
+	if(ins->size <= ins->r1->size) {
+		ins->r1 = ins->r1->lhs;
+		change = 1;
+	}
+
+	goto chk_large;
+
+	return change;
+}
+
 static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 {
 	int change = 0;
+
+	/* extension elimination */
+	if(ins->type == IR_INST_ZXT || ins->type == IR_INST_SXT) {
+		change |= ir_extelim(ins);
+	}
 
 	/* %r0 = eor/sub/sdiv/udiv/smod/umod %r1, %r1
 	 * ->

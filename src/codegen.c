@@ -576,7 +576,7 @@ static UNUSEDA void assign_globals(LIST(obj_t *) globals)
 }
 
 /* calculate stack frame space needed for function `fn`. returns maximum alignment */
-static size_t calc_stack_needed(obj_t *fn)
+static size_t calc_stack_needed(obj_t *fn, enum ir_arch arch)
 {
 	size_t max_align = 0;
 	size_t space = 0;
@@ -601,11 +601,20 @@ static size_t calc_stack_needed(obj_t *fn)
 	}
 
 	/* deal with arrays now */
+	/* TODO: smarter spill'd register placement */
 	for(size_t i = 0; i < list_len(arrays); i++) {
 		obj_t *obj = arrays[i];
 		if(obj->skip) {
 			continue;
 		}
+
+		/* align arrays with size >= 16 to alignment 16
+		 * if needed. This is needed for system V ABI. */
+		if(obj->type->size >= 16 && obj->type->align < 16 &&
+		   arch == IR_ARCH_X64_SYSV) {
+			obj->type->align = 16;
+		}
+
 		space += obj->type->size;
 		space = align_to(space, obj->type->align);
 		obj->off = -(long)space;
@@ -681,8 +690,11 @@ static void varopt(ir_func_t *func)
 
 				reg_t *replacement = ins->r1->lhs;
 
-				/* rewrite %var = load %addr into %var = %var_reg */
-				ins->type = IR_INST_MOV;
+				/* rewrite %var = load %addr into %var = (EXT) %var_reg */
+				bool ext = !obj->type->unsignd;
+				size_t sz = obj->type->size;
+				ins->type = ext ? IR_INST_SXT : IR_INST_ZXT;
+				ins->size = sz;
 				ins->r1 = replacement;
 				continue;
 			}
@@ -741,7 +753,7 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		ir_blk_t *blk = emit_blk();
 		outblk = blk;
 
-		(void)calc_stack_needed(cur_fn);
+		(void)calc_stack_needed(cur_fn, backend);
 
 		obj_t *fnargs = cur_fn->args;
 		for(; fnargs; fnargs = fnargs->next) {
@@ -777,7 +789,7 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		fun->blocks[0]->insts = fun->blocks[0]->insts->next;
 		ir_inst_delete(nop);
 
-		size_t max_align = calc_stack_needed(cur_fn);
+		size_t max_align = calc_stack_needed(cur_fn, backend);
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		fun->align_needed = align_to(max_align, 16);
 

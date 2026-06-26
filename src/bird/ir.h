@@ -108,6 +108,7 @@ typedef struct reg {
 	enum ins_type insty;
 	struct reg *lhs;
 	struct reg *rhs;
+	size_t size;
 	bool phi_related; /* argument/def to phi; do NOT eliminate */
 	bool multiple_defs; /* register was assigned multiple times */
 } reg_t;
