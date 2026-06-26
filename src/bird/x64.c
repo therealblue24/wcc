@@ -76,6 +76,9 @@ void ir_func_opt_x64(ir_func_t *fun, int opt_level)
 void ir_prog_begin_x64_sysv(FILE *f, ir_prog_t *prog)
 {
 	UNUSED(prog);
+	fprintf(f, "\t.section \".note.GNU-stack\", \"\", @progbits\n");
+	fprintf(f, "\t.text\n");
+
 	fprintf(f, "\t.align 16\n");
 	fprintf(f, "\t.intel_syntax noprefix\n");
 	return;
@@ -470,7 +473,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_SHL:
 		case IR_INST_SHR:
 		case IR_INST_ASHR:
-			fprintf(f, "\tmov ecx, %s\n", r0d);
+			fprintf(f, "\tmov ecx, %s\n", r2d);
 			switch(ins->type) {
 			case IR_INST_SHL:
 				fprintf(f, "\tshl %s, cl\n", r0);

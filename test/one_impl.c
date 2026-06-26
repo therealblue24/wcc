@@ -31,6 +31,10 @@ void print_num_helper(long num)
 
 void print_num(long num)
 {
+	if(num < 0) {
+		putchar('-');
+		num = -num;
+	}
 	print_num_helper(num);
 	putchar('\n');
 	return;
