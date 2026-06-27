@@ -334,6 +334,11 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 					stack_used += 8;
 				}
 			}
+			/* set RAX to zero.
+			 * needed for varadic functions
+			 * where `al` is the number of float va-args
+			 * we don't support varadic functions, but we do
+			 * support calling them without any va-args */
 			fprintf(f, "\txor eax, eax\n");
 			fprintf(f, "\tcall %s\n", ins->fname);
 			if(r0) {

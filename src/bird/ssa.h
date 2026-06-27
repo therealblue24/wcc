@@ -10,4 +10,7 @@ void ir_ssa_enter(ir_func_t *fun);
  * Removes and deallocates all phis, turning them into NOPs. */
 void ir_ssa_exit(ir_func_t *fun);
 
+/* orders basic blocks in IR */
+void ir_basic_block_placement(ir_func_t *fun);
+
 #endif /* IR_SSA_H_ */

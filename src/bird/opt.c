@@ -1,7 +1,4 @@
-#include "bird/ir.h"
-#include "zz/base.h"
 #include "bird.h"
-#include "ssa.h"
 
 extern int debug;
 

@@ -736,6 +736,42 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 		return cont_node;
 	}
 
+	/* switch */
+	if(token_eat(&tok, "switch")) {
+		node_t *switch_node = node_make(NODE_SWITCH, save);
+		tok = token_skip(tok, "(");
+		switch_node->cond = parse_expr(tok, &tok);
+		tok = token_skip(tok, ")");
+		switch_node->then = parse_stmt(tok, &tok);
+		if(switch_node->then->kind != NODE_BLOCK) {
+			node_t *blk = node_make(NODE_BLOCK, switch_node->then->tok);
+			blk->body = switch_node->then;
+			switch_node->then = blk;
+		}
+		*rest = tok;
+		return switch_node;
+	}
+
+	/* case num: */
+	if(token_eat(&tok, "case")) {
+		node_t *case_node = node_make(NODE_CASE, save);
+		case_node->cond = node_num(tok->num, tok);
+		tok = tok->next;
+		tok = token_skip(tok, ":");
+		case_node->then = parse_stmt(tok, &tok);
+		*rest = tok;
+		return case_node;
+	}
+
+	/* default: */
+	if(token_eat(&tok, "default")) {
+		node_t *def_node = node_make(NODE_DEFAULT, save);
+		tok = token_skip(tok, ":");
+		def_node->then = parse_stmt(tok, &tok);
+		*rest = tok;
+		return def_node;
+	}
+
 	/* compound-stmt */
 	if(token_eq(tok, "{")) {
 		node_t *compound_stmt = parse_compound_stmt(tok, &tok);

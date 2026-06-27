@@ -5,15 +5,13 @@ Curently the "version" of C it can compile is Turing Complete and has functions,
 
 Generates code for aarch64 & x86_64. I have not tested if the x86_64 backend works on the latest commit because I don't have an x86 machine.
 
-> The x64 backend does not work as of now, trying to fix
-
 You can also check out the IR backend, `bIRd` in `src/bird`, which can probably be ported to other projects.
 
 
 ## Usage
 
 ```
-wcc version 0.0.2 build Jun 12 2026
+wcc version 0.0.2 build Jun 27 2026
 Usage: ./bin/wcc <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/--help]
   -o <output>:          file to output assembly to (stdout is default)
   -t <arch>-<abi>:      target architecture, abi
@@ -54,4 +52,4 @@ $ make help
 ```sh
 $ make count
 ```
-Swag Point Counter: `7603`
+Swag Point Counter: `8252`

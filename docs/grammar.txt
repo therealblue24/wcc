@@ -41,6 +41,9 @@ stmt = "return" expr? ";"
       | "for" "(" declaration expr? ";" expr? ")" stmt
       | "while" "(" expr ")" stmt
       | "do" stmt "while" "(" expr ")" ";"
+	  | "switch" "(" expr ")" stmt
+	  | "case" num ":" stmt
+	  | "default" ":" stmt
 	  | "break" ";"
       | "continue" ";"
 	  | compound-stmt

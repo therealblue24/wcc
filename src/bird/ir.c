@@ -1,4 +1,3 @@
-#include "bird/ir.h"
 #include "bird.h"
 #include "zz/arena.h"
 
@@ -721,8 +720,8 @@ static UNUSEDA void ir_dump_stats(ir_func_t *fun)
 		print_reglist(blk->regs_in);
 		printf("\tregs_out = ");
 		print_reglist(blk->regs_out);
-		// printf("\tregs_def = ");
-		// print_reglist(blk->regs_def);
+		printf("\tregs_def = ");
+		print_reglist(blk->regs_def);
 
 		printf("\tpreds = ");
 		print_blklist(blk->pred);
@@ -901,11 +900,14 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 			blk->tail->next = NULL;
 		}
 
+		ir_basic_block_placement(func);
+
 		ir_opt(func, opt, arch);
 		for(size_t j = 0; j < list_len(func->blocks); j++) {
 			ir_blk_t *blk = func->blocks[j];
 			blk->num = acc++;
 		}
+		ir_blk_flow(func);
 		ir_finalize(func, arch == IR_ARCH_AARCH64_APPLE ? 9 : 5, opt, arch);
 
 		if(debug) {
@@ -916,6 +918,7 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 			ir_dump(func, 'r');
 			printf("====\n");
 		}
+		ir_blk_flow(func);
 		ir_func_emit(f, func, arch);
 	}
 

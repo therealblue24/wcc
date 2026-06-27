@@ -6,5 +6,6 @@
 #include "regalloc.h"
 #include "aarch64.h"
 #include "x64.h"
+#include "ssa.h"
 
 #endif /* BIRD_H_ */

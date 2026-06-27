@@ -1,5 +1,4 @@
 #include "bird.h"
-#include "ir.h"
 #include <limits.h>
 #include <stdlib.h>
 
@@ -176,10 +175,8 @@ void ir_blk_fixup_entry(ir_func_t *fun)
 	for(size_t i = 0; i < list_len(entry->regs_in); i++) {
 		reg_t *reg = entry->regs_in[i];
 		ir_inst_t *def = ir_inst_make(IR_INST_IMM, reg, NULL, NULL, 0);
-		prev->next = def;
 		def->next = cur;
-		prev = cur;
-		cur = cur->next;
+		prev->next = def;
 	}
 
 	entry->insts = entry->insts->next;

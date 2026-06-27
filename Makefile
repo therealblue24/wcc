@@ -7,12 +7,12 @@ BINDIR = bin
 APP = wcc
 
 # default compiler flags
-CFLAGS = -std=c11 -Wall -Wextra -Isrc -g3
+CFLAGS = -std=c11 -Wall -Wextra -Isrc -Isrc/bird -g3
 CFLAGS += -MMD -MP
 # default linker flags
 LDFLAGS = 
 
-# Optimize code (-O2, etc)
+# Optimize code (-Os, etc)
 RELEASE ?= no
 # -Weverything but sane
 CODE_REVIEW ?= no
@@ -21,9 +21,9 @@ SANITIZERS ?= no
 # foritfy source code?
 FORTIFY ?= no
 
-# for release, enable -O2 and LTO
+# for release, enable -Os and LTO
 ifeq ($(RELEASE), yes)
-	CFLAGS += -O2
+	CFLAGS += -Os
 	LDFLAGS += -flto
 endif
 

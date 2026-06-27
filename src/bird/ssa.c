@@ -1,13 +1,16 @@
 /* Implementation of the "Simple and Efficient Construction of Static Single Assignment Form" algorithm, by Matthias Braun, Sebastian Buchwald, Sebastian Hack, Roland Leißa, Christoph Mallon, and Andreas Zwinkau. */
 
-#include "bird/bird.h"
 #include "bird.h"
-#include "bird/ir.h"
-#include "ir.h"
 #include <stdint.h>
 
 static void find_before_last_term_ins(ir_blk_t *blk)
 {
+	if(!blk->insts->next) {
+		/* insert NOP */
+		ir_inst_t *nop = ins_nop();
+		nop->next = blk->insts;
+		blk->insts = nop;
+	}
 	ir_inst_t *prev = blk->insts;
 	ir_inst_t *ret = prev->next;
 	for(; ret; ret = ret->next) {
@@ -711,8 +714,8 @@ void ir_ssa_enter(ir_func_t *fun)
  * visit(blk):
  *     if blk->visited return
  *     order = order U blk
- *     order = order U blk->right
- *     order = order U blk->left
+ *     order = order U blk->true
+ *     order = order U blk->false
  *     blk->visited = true
  *     visit order->true
  *     visit order->false
@@ -789,22 +792,35 @@ static void order_blocks(ir_func_t *fun)
 	qsort(fun->blocks, list_len(fun->blocks), sizeof(ir_blk_t *), blocks_cmp);
 }
 
-static void basic_block_placement(ir_func_t *fun)
+static void renumber_blocks(ir_func_t *fun, long base)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		fun->blocks[i]->num = i + base;
+	}
+	return;
+}
+
+void ir_basic_block_placement(ir_func_t *fun)
 {
 	ir_fix(fun);
+	long base = fun->blocks[0]->num;
 	order_blocks(fun);
 
 	/* remove all dead blocks */
 	for(size_t i = list_len(fun->blocks) - 1; i >= 0; i--) {
-		if(fun->blocks[i]->postnum == (INT64_MAX - 1)) {
-			list_hdr(fun->blocks)->size = i;
-			break;
-		}
-
 		if(i == 0) {
 			break;
 		}
+
+		if(fun->blocks[i]->postnum == (INT64_MAX - 1)) {
+			list_hdr(fun->blocks)->size = i;
+			continue;
+		}
+
+		break;
 	}
+
+	renumber_blocks(fun, base);
 
 	return;
 }
@@ -820,7 +836,7 @@ void ir_ssa_exit(ir_func_t *fun)
 	insert_parallel_moves(fun);
 	deparallelize_pmovs(fun);
 	ir_blk_flow(fun);
-	basic_block_placement(fun);
+	ir_basic_block_placement(fun);
 	ir_nopremover(fun);
 	ir_fix(fun);
 

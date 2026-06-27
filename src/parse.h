@@ -36,7 +36,7 @@ enum node_kind {
 	NODE_LE, /* less than or equal to <= */
 	NODE_EXPR_STMT, /* expression statement */
 	NODE_RET, /* return stmt */
-	NODE_BLOCK, /* block stmt */
+	NODE_BLOCK, /* block of stmts */
 	NODE_IF, /* if */
 	NODE_WHILE, /* while */
 	NODE_DOWHILE, /* do-while */
@@ -47,6 +47,9 @@ enum node_kind {
 	NODE_STMT_EXPR, /* statement expression */
 	NODE_BREAK, /* break */
 	NODE_CONTINUE, /* continue */
+	NODE_SWITCH, /* switch */
+	NODE_CASE, /* case */
+	NODE_DEFAULT, /* default */
 };
 
 /* a variable */
@@ -93,6 +96,9 @@ typedef struct node {
 	/* for */
 	struct node *init;
 	struct node *inc;
+
+	/* switch/case/default */
+	ir_blk_t *case_blk;
 
 	char *fname; /* function name, for NODE_FUNCALL */
 	struct node *fargs; /* function arguments, for NODE_FUNCALL */

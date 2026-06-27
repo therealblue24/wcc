@@ -1,9 +1,10 @@
 #include "codegen.h"
+#include "bird/ssa.h"
 #include "parse.h"
 #include "type.h"
 #include "zz/list.h"
 #include <stdlib.h>
-#include "bird/ir.h"
+#include "bird/bird.h"
 
 static ir_func_t *fun;
 static obj_t *fun_obj;
@@ -451,14 +452,76 @@ void codegen_stmt(node_t *node)
 		(void)codegen_expr(node->lhs);
 		break;
 
+	case NODE_CASE:
+	case NODE_DEFAULT:
+		emit_jmp(node->case_blk);
+		outblk = node->case_blk;
+		codegen_stmt(node->then);
+		break;
+
+	case NODE_SWITCH: {
+		ir_blk_t *top = emit_blk(); /* for continue */
+		ir_blk_t *resume = emit_blk();
+		list_append(break_stack,
+					((flow_t){ .break_to = resume, .continue_to = top }));
+		ir_blk_t *chain;
+		ir_blk_t *def_blk = NULL;
+		reg_t *ctrl = codegen_expr(node->cond);
+		for(node_t *b = node->then->body; b; b = b->next) {
+			/* default is exception */
+			if(b->kind == NODE_DEFAULT) {
+				def_blk = emit_blk();
+				b->case_blk = def_blk;
+				continue;
+			}
+
+			/* skip all non-cases, will deal with them later */
+			if(b->kind != NODE_CASE) {
+				continue;
+			}
+
+			b->case_blk = emit_blk();
+			chain = emit_blk();
+
+			/* chain1: %r = cmp.eq %ctrl, #case
+			 *         br %r, case_blk, chain2
+			 *         ; fallthrough
+			 * chain2: ...
+			 * basically what we are doing
+			 */
+
+			reg_t *casenum = reg_make();
+			emit_imm(casenum, b->cond->num); /* %casenum = imm #num */
+			reg_t *cmpres = reg_make();
+			emit_eq(cmpres, ctrl,
+					casenum); /* %cmpres = cmp.eq %ctrl, %casenum */
+			emit_br(cmpres, b->case_blk,
+					chain); /* br %cmpres, case_blk, chain */
+			outblk = chain;
+		}
+
+		/* if there is no default break out of the switch */
+		emit_jmp(def_blk ? def_blk : resume);
+
+		/* now handle all stmts in the switch */
+		for(node_t *b = node->then->body; b; b = b->next) {
+			codegen_stmt(b);
+		}
+
+		/* since we don't know where we are, make sure we are at `resume` */
+		emit_jmp(resume);
+		outblk = resume;
+
+		list_back(break_stack);
+	}; break;
+
 	case NODE_BREAK: {
 		if(list_len(break_stack) == 0) {
 			compile_err_node(node, "nothing to break to");
 		}
 		flow_t f = list_peek(break_stack);
 		emit_jmp(f.break_to);
-		break;
-	}
+	}; break;
 
 	case NODE_CONTINUE: {
 		if(list_len(break_stack) == 0) {
@@ -466,8 +529,7 @@ void codegen_stmt(node_t *node)
 		}
 		flow_t f = list_peek(break_stack);
 		emit_jmp(f.continue_to);
-		break;
-	}
+	}; break;
 
 	case NODE_RET: {
 		type_t *rettype = fun_obj->type->to;
@@ -485,14 +547,15 @@ void codegen_stmt(node_t *node)
 		} else if(!node->lhs && rettype->kind != TYPE_VOID) {
 			compile_err(node->tok->loc, "function has to return something");
 		}
-		break;
-	}
-	case NODE_BLOCK:
+	}; break;
+	case NODE_BLOCK: {
+		/* generate statements for each stmt in block/compound stmt */
 		for(node_t *nod = node->body; nod; nod = nod->next) {
 			codegen_stmt(nod);
 		}
-		break;
+	}; break;
 	case NODE_DOWHILE: {
+		/* a `while` but we check afterwards */
 		ir_blk_t *then = emit_blk();
 		ir_blk_t *resume = emit_blk();
 		ir_blk_t *condchk = emit_blk();
@@ -509,6 +572,7 @@ void codegen_stmt(node_t *node)
 		list_back(break_stack);
 	}; break;
 	case NODE_WHILE: {
+		/* a `do`/`while` but we check beforewards */
 		ir_blk_t *condchk = emit_blk();
 		ir_blk_t *loop = emit_blk();
 		ir_blk_t *resume = emit_blk();
