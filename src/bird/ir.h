@@ -49,14 +49,14 @@ enum ins_type {
 	/* compare-and-branches */
 	IR_INST_BREQ, /* br.eq %r1, %r2, true-blk, false-blk */
 	IR_INST_BRNE, /* br.ne %r1, %r2, true-blk, false-blk */
-	IR_INST_BRSLT, /* br.lt %r1, %r2, true-blk, false-blk */
-	IR_INST_BRSLE, /* br.le %r1, %r2, true-blk, false-blk */
-	IR_INST_BRSGT, /* br.gt %r1, %r2, true-blk, false-blk */
-	IR_INST_BRSGE, /* br.ge %r1, %r2, true-blk, false-blk */
-	IR_INST_BRULT, /* br.lt %r1, %r2, true-blk, false-blk */
-	IR_INST_BRULE, /* br.le %r1, %r2, true-blk, false-blk */
-	IR_INST_BRUGT, /* br.gt %r1, %r2, true-blk, false-blk */
-	IR_INST_BRUGE, /* br.ge %r1, %r2, true-blk, false-blk */
+	IR_INST_BRSLT, /* br.slt %r1, %r2, true-blk, false-blk */
+	IR_INST_BRSLE, /* br.sle %r1, %r2, true-blk, false-blk */
+	IR_INST_BRSGT, /* br.sgt %r1, %r2, true-blk, false-blk */
+	IR_INST_BRSGE, /* br.sge %r1, %r2, true-blk, false-blk */
+	IR_INST_BRULT, /* br.ult %r1, %r2, true-blk, false-blk */
+	IR_INST_BRULE, /* br.ule %r1, %r2, true-blk, false-blk */
+	IR_INST_BRUGT, /* br.ugt %r1, %r2, true-blk, false-blk */
+	IR_INST_BRUGE, /* br.uge %r1, %r2, true-blk, false-blk */
 
 	/* memory */
 	IR_INST_LOAD, /* %r0 = load %r1 */
@@ -75,7 +75,7 @@ enum ins_type {
 	IR_INST_SXT, /* %r0 = sxt %r1 */
 
 	/* basic block stuff */
-	IR_INST_BR, /* br %r1, false-blk, true-blk */
+	IR_INST_BR, /* br %r1, true-blk, false-blk */
 	IR_INST_JMP, /* jmp blk */
 	IR_INST_RET, /* ret (%r1) */
 	IR_INST_CALL, /* (%r0) = call Function, %a1, %a2, ... */
