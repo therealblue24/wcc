@@ -806,6 +806,7 @@ void ir_basic_block_placement(ir_func_t *fun)
 	long base = fun->blocks[0]->num;
 	order_blocks(fun);
 
+	size_t oldsize = list_len(fun->blocks);
 	/* remove all dead blocks */
 	for(size_t i = list_len(fun->blocks) - 1; i >= 0; i--) {
 		if(i == 0) {
@@ -818,6 +819,16 @@ void ir_basic_block_placement(ir_func_t *fun)
 		}
 
 		break;
+	}
+
+	for(size_t i = list_len(fun->blocks); i < oldsize; i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *nxt = NULL;
+		for(ir_inst_t *ins = blk->insts; ins; ins = nxt) {
+			nxt = ins->next;
+			ir_inst_delete(ins);
+		}
+		ir_blk_delete(blk);
 	}
 
 	renumber_blocks(fun, base);
