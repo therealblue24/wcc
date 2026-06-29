@@ -1,6 +1,7 @@
 /* Implementation of the "Simple and Efficient Construction of Static Single Assignment Form" algorithm, by Matthias Braun, Sebastian Buchwald, Sebastian Hack, Roland Leißa, Christoph Mallon, and Andreas Zwinkau. */
 
 #include "bird.h"
+#include "ir.h"
 #include <stdint.h>
 
 static void find_before_last_term_ins(ir_blk_t *blk)
@@ -71,6 +72,16 @@ static size_t find_blkreg(LIST(blkreg_t *) list, ir_blk_t *blk)
 {
 	for(size_t i = 0; i < list_len(list); i++) {
 		if(list[i]->blk == blk) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+static size_t find_blk(LIST(ir_blk_t *) list, ir_blk_t *blk)
+{
+	for(size_t i = 0; i < list_len(list); i++) {
+		if(list[i] == blk) {
 			return i;
 		}
 	}
@@ -179,7 +190,44 @@ static ir_inst_t *insert_phi(ir_blk_t *blk)
 	return phi;
 }
 
-static reg_t *read_reg_gvn(ir_blk_t *blk, reg_t *reg);
+static reg_t *read_reg(ir_blk_t *blk, reg_t *reg);
+
+static int ins_proves_live(enum ins_type t)
+{
+	return t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORESS ||
+		   t == IR_INST_CALL || ir_inst_is_term(t);
+}
+
+static int ins_has_imm(enum ins_type t)
+{
+	return t == IR_INST_IMM || t == IR_INST_LEAS || t == IR_INST_LOADS ||
+		   t == IR_INST_LOADSS || t == IR_INST_STORES || t == IR_INST_STORESS;
+}
+
+static int ins_is_same(ir_inst_t *a, ir_inst_t *b)
+{
+	/* general case */
+	if(a == b) {
+		return true;
+	}
+
+	/* trivial */
+	if(a->type != b->type) {
+		return false;
+	}
+
+	if(ins_proves_live(a->type) || a->type == IR_INST_PHI) {
+		return false;
+	}
+
+	if(a->type == IR_INST_LEA) {
+		return a->r0 == b->r0 && a->label == b->label;
+	}
+
+	bool ok = ins_has_imm(a->type) ? a->imm == b->imm : true;
+
+	return ok && a->r0 == b->r0 && a->r1 == b->r1 && a->r2 == b->r2;
+}
 
 static reg_t *try_remove_trivial_phi(ir_inst_t *phi)
 {
@@ -194,7 +242,7 @@ static reg_t *try_remove_trivial_phi(ir_inst_t *phi)
 	reg_t *same = NULL;
 	for(size_t i = 0; i < list_len(phi->phi_args); i++) {
 		reg_t *op = phi->phi_args[i];
-		if(op == same || op == phi->r0) {
+		if((same && ins_is_same(op->from, same->from)) || op == phi->r0) {
 			continue;
 		}
 
@@ -263,7 +311,7 @@ static reg_t *try_remove_trivial_phi(ir_inst_t *phi)
 static reg_t *add_phi_ops(ir_blk_t *blk, reg_t *var, ir_inst_t *phi)
 {
 	for(size_t i = 0; i < list_len(blk->pred); i++) {
-		list_append(phi->phi_args, read_reg_gvn(blk->pred[i], var));
+		list_append(phi->phi_args, read_reg(blk->pred[i], var));
 	}
 	return try_remove_trivial_phi(phi);
 }
@@ -275,20 +323,22 @@ static reg_t *read_var_rec(ir_blk_t *blk, reg_t *reg)
 	if(!has_blk(sealed_blks, blk)) {
 		phi = insert_phi(blk);
 		val = phi->r0 = ssa_tmp(reg);
+		phi->r0->from = phi;
 		list_append(blk->incomplete_phis, phi);
 	} else if(list_len(blk->pred) == 1) {
-		val = read_reg_gvn(blk->pred[0], reg);
+		val = read_reg(blk->pred[0], reg);
 	} else {
 		/* insert placeholder phi */
 		phi = insert_phi(blk);
 		phi->r0 = write_reg(blk, reg, ssa_tmp(reg));
+		phi->r0->from = phi;
 		val = add_phi_ops(blk, reg, phi);
 	}
 	write_reg(blk, reg, val);
 	return val;
 }
 
-static reg_t *read_reg_gvn(ir_blk_t *blk, reg_t *reg)
+static reg_t *read_reg(ir_blk_t *blk, reg_t *reg)
 {
 	reg_t *var = find_var(reg);
 
@@ -666,7 +716,6 @@ void ir_ssa_enter(ir_func_t *fun)
 
 	LIST(long) postorder = postorder_get(fun->blocks);
 
-	/* local value numbering */
 	for(size_t ip = 0; ip < list_len(postorder); ip++) {
 		size_t i = postorder[ip];
 		ir_blk_t *blk = fun->blocks[i];
@@ -675,15 +724,15 @@ void ir_ssa_enter(ir_func_t *fun)
 				inst->r0 = write_reg(blk, inst->r0, ssa_tmp(inst->r0));
 			}
 			if(inst->r1) {
-				inst->r1 = read_reg_gvn(blk, inst->r1);
+				inst->r1 = read_reg(blk, inst->r1);
 			}
 			if(inst->r2) {
-				inst->r2 = read_reg_gvn(blk, inst->r2);
+				inst->r2 = read_reg(blk, inst->r2);
 			}
 			if(inst->type == IR_INST_CALL) {
 				for(size_t i = 0; i < list_len(inst->call_args); i++) {
 					inst->call_args[i]->r =
-						read_reg_gvn(blk, inst->call_args[i]->r);
+						read_reg(blk, inst->call_args[i]->r);
 				}
 			}
 		}
@@ -850,6 +899,241 @@ void ir_ssa_exit(ir_func_t *fun)
 	ir_basic_block_placement(fun);
 	ir_nopremover(fun);
 	ir_fix(fun);
+
+	return;
+}
+
+static void unordered_remove_blk(LIST(ir_blk_t *) list, size_t indx)
+{
+	list_hdr(list)->size--;
+
+	if(list_len(list) == 0 || indx == list_len(list)) {
+		/* also nothing to do */
+		return;
+	}
+
+	ir_blk_t *tmp = list[indx];
+	list[indx] = list[list_len(list)];
+	list[list_len(list)] = tmp;
+
+	return;
+}
+
+static void unordered_remove_reg(LIST(reg_t *) list, size_t indx)
+{
+	list_hdr(list)->size--;
+
+	if(list_len(list) == 0 || indx == list_len(list)) {
+		/* also nothing to do */
+		return;
+	}
+
+	reg_t *tmp = list[indx];
+	list[indx] = list[list_len(list)];
+	list[list_len(list)] = tmp;
+
+	return;
+}
+
+static UNUSEDA void ordered_remove_blk(LIST(ir_blk_t *) list, size_t indx)
+{
+	list_hdr(list)->size--;
+	if(list_len(list) == 0 || indx == list_len(list)) {
+		/* nothing to do */
+		return;
+	}
+
+	for(size_t i = indx; i < list_len(list); i++) {
+		list[i] = list[i + 1];
+	}
+	return;
+}
+
+/* removes a predeccesor `pred` from the block `blk` */
+void ir_remove_pred(ir_blk_t *blk, ir_blk_t *pred)
+{
+	size_t indx = find_blk(blk->pred, pred);
+	if(indx == (size_t)-1) {
+		/* nothing to do.. */
+		return;
+	}
+
+	/* remove from predeccesors */
+	unordered_remove_blk(blk->pred, indx);
+
+	/* remove uses in phi nodes */
+	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+		if(ins->type != IR_INST_PHI) {
+			continue;
+		}
+
+		size_t indx = find_blk(ins->phi_preds, pred);
+		if(indx == (size_t)-1) {
+			continue;
+		}
+
+		unordered_remove_blk(ins->phi_preds, indx);
+		unordered_remove_reg(ins->phi_args, indx);
+
+		/* simplify 1-arg phis */
+		if(list_len(ins->phi_preds) == 1) {
+			ins->phi_args[0]->phi_related = false;
+			ins->type = IR_INST_MOV;
+			ins->r1 = ins->phi_args[0];
+			list_delete(ins->phi_args);
+			list_delete(ins->phi_preds);
+		}
+	}
+
+	return;
+}
+
+/* reroutes a predeccesor `orig` to the new predeccesor `new` for the block `blk` */
+void ir_reroute_pred(ir_blk_t *blk, ir_blk_t *orig, ir_blk_t *new)
+{
+	size_t indx = find_blk(blk->pred, orig);
+	if(indx == (size_t)-1) {
+		return;
+	}
+
+	blk->pred[indx] = new;
+
+	/* replace uses in phi nodes */
+	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+		if(ins->type != IR_INST_PHI) {
+			continue;
+		}
+
+		size_t indx = find_blk(ins->phi_preds, orig);
+		if(indx == (size_t)-1) {
+			continue;
+		}
+		ins->phi_preds[indx] = new;
+	}
+
+	return;
+}
+
+/* removes block from CFG entirely */
+void ir_remove_blk(ir_func_t *func, ir_blk_t *blk)
+{
+	size_t indx = find_blk(func->blocks, blk);
+	if(indx == (size_t)-1) {
+		return;
+	}
+
+	/* remove from successors's predeccesors */
+	for(size_t i = 0; i < list_len(blk->succ); i++) {
+		ir_remove_pred(blk->succ[i], blk);
+	}
+
+	ordered_remove_blk(func->blocks, indx);
+
+	return;
+}
+
+/* removes a useless `jmp` block from CFG entirely */
+void ir_remove_jmpblk(ir_func_t *func, ir_blk_t *blk)
+{
+	size_t indx = find_blk(func->blocks, blk);
+	if(indx == (size_t)-1) {
+		return;
+	}
+
+	ir_inst_t *first = blk->insts;
+	for(;;) {
+		if(first->type == IR_INST_NOP) {
+			first = first->next;
+		} else
+			break;
+	}
+
+	/* can't remove if it is not a jmpblk */
+	if(first->type != IR_INST_JMP) {
+		return;
+	}
+
+	/* halting blks are the exception */
+	if(first->true_blk == blk) {
+		return;
+	}
+
+	/* 0 pred case */
+	if(list_len(blk->pred) == 0) {
+		goto rem;
+	}
+
+	/* want only 1 pred */
+	if(list_len(blk->pred) != 1) {
+		return;
+	}
+
+	ir_blk_t *from = blk->pred[0];
+	ir_blk_t *to = first->true_blk;
+	ir_reroute_pred(to, blk, from);
+
+	/* change refs to `blk` from `from` to `to` */
+	find_before_last_term_ins(from);
+
+	if(from->tail->true_blk == blk) {
+		from->tail->true_blk = to;
+	}
+	if(from->tail->false_blk == blk) {
+		from->tail->false_blk = to;
+	}
+
+	/* remove the block */
+rem:
+	ordered_remove_blk(func->blocks, indx);
+	return;
+}
+
+static void fix_single_phi(ir_inst_t *phi, ir_blk_t *blk)
+{
+	LIST(ir_blk_t *) pred = blk->pred;
+	size_t len = list_len(pred);
+	for(size_t i = 0; i < len;) {
+		size_t indx = find_blk(pred, phi->phi_preds[i]);
+		if(indx != (size_t)-1) {
+			i++;
+			continue;
+		}
+
+		unordered_remove_blk(phi->phi_preds, i);
+		unordered_remove_reg(phi->phi_args, i);
+
+		/* simplify 1-arg phis */
+		if(list_len(phi->phi_preds) == 1) {
+			phi->phi_args[0]->phi_related = false;
+			phi->type = IR_INST_MOV;
+			phi->r1 = phi->phi_args[0];
+			list_delete(phi->phi_args);
+			list_delete(phi->phi_preds);
+			break;
+		}
+		len--;
+	}
+	return;
+}
+
+/* fixs phi nodes */
+void ir_fix_phis(ir_func_t *func)
+{
+	ir_blk_flow(func);
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_remove_jmpblk(func, func->blocks[i]);
+	}
+	ir_blk_flow(func);
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type != IR_INST_PHI) {
+				continue;
+			}
+
+			fix_single_phi(ins, blk);
+		}
+	}
 
 	return;
 }

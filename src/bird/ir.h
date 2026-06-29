@@ -85,6 +85,7 @@ enum ins_type {
 	IR_INST_PMOV, /* parallel move */
 };
 
+struct ir_inst;
 struct blkreg;
 /* a "register" */
 typedef struct reg {
@@ -108,8 +109,10 @@ typedef struct reg {
 	enum ins_type insty;
 	struct reg *lhs;
 	struct reg *rhs;
+	struct ir_inst *from; /* NOT meant to be used for any pass except phiopt! */
 	size_t size;
 	bool phi_related; /* argument/def to phi; do NOT eliminate */
+	bool alive; /* is this register not dead? */
 } reg_t;
 
 typedef struct reg_pmov {

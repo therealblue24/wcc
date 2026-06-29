@@ -13,4 +13,19 @@ void ir_ssa_exit(ir_func_t *fun);
 /* orders basic blocks in IR */
 void ir_basic_block_placement(ir_func_t *fun);
 
+/* removes a predeccesor `pred` from the block `blk` */
+void ir_remove_pred(ir_blk_t *blk, ir_blk_t *pred);
+
+/* reroutes a predeccesor `orig` to the new predeccesor `new` for the block `blk` */
+void ir_reroute_pred(ir_blk_t *blk, ir_blk_t *orig, ir_blk_t *new);
+
+/* removes block from CFG entirely */
+void ir_remove_blk(ir_func_t *func, ir_blk_t *blk);
+
+/* removes a useless `jmp` block from CFG entirely */
+void ir_remove_jmpblk(ir_func_t *func, ir_blk_t *blk);
+
+/* fixs phi nodes */
+void ir_fix_phis(ir_func_t *func);
+
 #endif /* IR_SSA_H_ */

@@ -1,43 +1,8 @@
 #include "bird.h"
+#include "ir.h"
+#include "ssa.h"
 
 extern int debug;
-
-static void fix_phis(ir_func_t *func)
-{
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->type != IR_INST_PHI) {
-				continue;
-			}
-
-			if(list_len(blk->pred) == 1 && list_len(inst->phi_preds) != 1) {
-				/* remove the odd one(s) out */
-				size_t ok_i;
-				bool set = false;
-
-				for(size_t i = 0; i < list_len(inst->phi_preds); i++) {
-					inst->phi_args[i]->phi_related = false;
-					if(inst->phi_preds[i] == blk->pred[0]) {
-						set = true;
-						ok_i = i;
-						break;
-					}
-				}
-
-				ASSERT(set, "how");
-
-				inst->type = IR_INST_MOV;
-				inst->r1 = inst->phi_args[ok_i];
-				inst->r1->phi_related = false;
-				inst->r0->phi_related = false;
-
-				list_delete(inst->phi_args);
-				list_delete(inst->phi_preds);
-			}
-		}
-	}
-}
 
 static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
 {
@@ -228,6 +193,7 @@ static void ir_placemarks(ir_func_t *func)
 				inst->r0->rhs = inst->r2;
 				inst->r0->imm = inst->imm;
 				inst->r0->size = inst->size;
+				inst->r0->from = inst;
 			}
 
 			if(inst->type == IR_INST_PHI) {
@@ -470,10 +436,19 @@ static UNUSEDA int ir_fold(ir_func_t *func)
 
 			if(ins->type == IR_INST_BR && ins->r1->insty == IR_INST_IMM) {
 				ins->type = IR_INST_JMP;
+
+				ir_blk_t *trueblk = ins->true_blk;
+				ir_blk_t *falseblk = ins->false_blk;
+				ir_blk_t *lostblk = falseblk;
+
 				if(!ins->r1->imm) {
-					ins->true_blk = ins->false_blk;
+					ins->true_blk = falseblk;
+					lostblk = trueblk;
 				}
 				ins->false_blk = NULL;
+
+				ir_remove_pred(lostblk, blk);
+
 				change = 1;
 			}
 
@@ -520,11 +495,19 @@ static UNUSEDA int ir_fold(ir_func_t *func)
 					break;
 				}
 
+				ir_blk_t *trueblk = ins->true_blk;
+				ir_blk_t *falseblk = ins->false_blk;
+				ir_blk_t *lostblk = falseblk;
+
 				ins->type = IR_INST_JMP;
 				if(!cond) {
 					ins->true_blk = ins->false_blk;
+					lostblk = trueblk;
 				}
 				ins->false_blk = NULL;
+
+				ir_remove_pred(lostblk, blk);
+
 				change = 1;
 			}
 
@@ -703,25 +686,26 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	}
 
 	/* simplify dead block jumps */
-	/*
 	if(ir_inst_is_br(ins->type) || ins->type == IR_INST_JMP) {
 		ir_inst_t *first = ins->true_blk->insts;
-		if(first->type == IR_INST_JMP) {
+		if(first->type == IR_INST_JMP && first->true_blk != ins->true_blk) {
 			ir_blk_t *blk = first->true_blk;
+			ir_reroute_pred(blk, ins->true_blk, thisblk);
 			ins->true_blk = blk;
+
 			change = 1;
 		}
 	}
 
 	if(ir_inst_is_br(ins->type)) {
 		ir_inst_t *first = ins->false_blk->insts;
-		if(first->type == IR_INST_JMP) {
+		if(first->type == IR_INST_JMP && first->true_blk != ins->false_blk) {
 			ir_blk_t *blk = first->true_blk;
+			ir_reroute_pred(blk, ins->false_blk, thisblk);
 			ins->false_blk = blk;
 			change = 1;
 		}
 	}
-	*/
 
 	/* simplify
 	 * br.cmp %r0, %r1, trueblk, falseblk (in front)
@@ -872,10 +856,193 @@ static int ir_mov_elim(ir_func_t *func)
 	return change;
 }
 
-static bool ins_is_mem(enum ins_type t)
+static int ins_proves_live(enum ins_type t)
 {
-	return t == IR_INST_LOAD || t == IR_INST_LOADS || t == IR_INST_LOADSS ||
-		   t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORESS;
+	return t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORESS ||
+		   t == IR_INST_CALL || ir_inst_is_term(t);
+}
+
+static int ins_has_imm(enum ins_type t)
+{
+	return t == IR_INST_IMM || t == IR_INST_LEAS || t == IR_INST_LOADS ||
+		   t == IR_INST_LOADSS || t == IR_INST_STORES || t == IR_INST_STORESS;
+}
+
+static int ins_is_same(ir_inst_t *a, ir_inst_t *b)
+{
+	/* general case */
+	if(a == b) {
+		return true;
+	}
+
+	/* trivial */
+	if(a->type != b->type) {
+		return false;
+	}
+
+	if(ins_proves_live(a->type) || a->type == IR_INST_PHI) {
+		return false;
+	}
+
+	if(a->type == IR_INST_LEA) {
+		return a->r0 == b->r0 && a->label == b->label;
+	}
+
+	bool ok = ins_has_imm(a->type) ? a->imm == b->imm : true;
+
+	return ok && a->r0 == b->r0 && a->r1 == b->r1 && a->r2 == b->r2;
+}
+
+/* optimizes phis with all same value
+ * also known as the "illusion of choice" optimization */
+static int ir_phiopt(ir_func_t *func)
+{
+	int change = 0;
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type != IR_INST_PHI) {
+				continue;
+			}
+
+			ASSERT(list_len(ins->phi_args) >= 1, "invalid IR");
+
+			ir_inst_t *first = ins->phi_args[0]->from;
+			bool same = true;
+			for(size_t j = 0; j < list_len(ins->phi_args); j++) {
+				if(!ins_is_same(first, ins->phi_args[j]->from)) {
+					same = false;
+					break;
+				}
+			}
+
+			if(!same) {
+				continue;
+			}
+
+			/* replace phi with move */
+			change = 1;
+			ins->type = IR_INST_MOV;
+			ins->r1 = first->r0;
+			list_delete(ins->phi_args);
+			list_delete(ins->phi_preds);
+		}
+	}
+
+	return change;
+}
+
+/* aggressive dead code elim */
+/* basically conditional constant prop but with liveness instead */
+static int ir_adce(ir_func_t *func)
+{
+	int change = 0;
+	/* set all registers to dead */
+	/* all instructions w/ side effects or terminates however set to alive */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->r0) {
+				ins->r0->alive = false;
+			}
+		}
+	}
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins_proves_live(ins->type)) {
+				if(ins->r0) {
+					ins->r0->alive = true;
+				}
+				if(ins->r1) {
+					ins->r1->alive = true;
+				}
+				if(ins->r2) {
+					ins->r2->alive = true;
+				}
+				if(ins->type == IR_INST_CALL) {
+					for(size_t j = 0; j < list_len(ins->call_args); j++) {
+						ins->call_args[j]->r->alive = true;
+					}
+				}
+			}
+			if(ir_inst_is_term(ins->type)) {
+				break;
+			}
+		}
+	}
+
+#define MKALIVE(x)                 \
+	do {                           \
+		if((x)) {                  \
+			if(!(x)->alive) {      \
+				lchange = 1;       \
+				(x)->alive = true; \
+			}                      \
+		}                          \
+	} while(0)
+
+	int lchange = 1;
+	/* now:
+	 * for any register that is alive, mark all registers in its def as alive.
+	 * repeat until no more marks made */
+
+	while(lchange) {
+		lchange = 0;
+
+		for(size_t i = 0; i < list_len(func->blocks); i++) {
+			ir_blk_t *blk = func->blocks[i];
+			for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+				if(!ins->r0) {
+					continue;
+				}
+				if(!ins->r0->alive) {
+					continue;
+				}
+
+				MKALIVE(ins->r1);
+				MKALIVE(ins->r2);
+
+				if(ins->type == IR_INST_PHI) {
+					for(size_t j = 0; j < list_len(ins->phi_args); j++) {
+						MKALIVE(ins->phi_args[j]);
+					}
+				}
+				if(ins->type == IR_INST_CALL) {
+					for(size_t j = 0; j < list_len(ins->call_args); j++) {
+						MKALIVE(ins->call_args[j]->r);
+					}
+				}
+			}
+		}
+		change |= lchange;
+	}
+
+	/* eliminate all dead instructions */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(!ins->r0) {
+				continue;
+			}
+			if(ins->r0->alive) {
+				continue;
+			}
+			if(ins->type == IR_INST_CALL) {
+				list_delete(ins->call_args);
+			}
+
+			if(ins->type == IR_INST_PHI) {
+				list_delete(ins->phi_args);
+				list_delete(ins->phi_preds);
+			}
+			ins->type = IR_INST_NOP;
+		}
+	}
+
+	return change;
 }
 
 static int ir_dce(ir_func_t *func)
@@ -894,7 +1061,7 @@ static int ir_dce(ir_func_t *func)
 			}
 
 			/* todo: this might break in some scenarios */
-			if(ins->r0->def == ins->r0->last_use && !ins_is_mem(ins->type)) {
+			if(ins->r0->def == ins->r0->last_use) {
 				change = 1;
 				if(ins->type == IR_INST_CALL) {
 					ins->r0 = NULL;
@@ -964,14 +1131,19 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 		/* dead code elim + extras */
 		{
+			ir_fix(func);
 			change |= ir_dce(func);
+			change |= ir_adce(func);
+			ir_blk_liveness(func);
 			change |= ir_imm_elim(func);
 			change |= ir_mov_elim(func);
 			change |= ir_simpleopt(func);
-			fix_phis(func);
-			change |= ir_fold(func);
-			fix_phis(func);
 
+			ir_fix_phis(func);
+			change |= ir_fold(func);
+			ir_fix_phis(func);
+			change |= ir_phiopt(func);
+			ir_fix_phis(func);
 			ir_nopremover(func);
 			ir_fix(func);
 		}
@@ -979,7 +1151,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		/* branch opts */
 		{
 			change |= ir_branchopt(func);
-			fix_phis(func);
+			// fix_phis(func);
 			ir_nopremover(func);
 			ir_fix(func);
 		}

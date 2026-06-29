@@ -22,12 +22,14 @@ int ir_inst_is_term(enum ins_type type)
 int ir_inst_is_foldable(enum ins_type type)
 {
 	return ir_inst_is_assoc(type) || ir_inst_is_cmp(type) ||
-		   type == IR_INST_UDIV || type == IR_INST_SDIV ||
-		   type == IR_INST_UMOD || type == IR_INST_SMOD ||
-		   type == IR_INST_SHL || type == IR_INST_SHR || type == IR_INST_ASHR ||
-		   type == IR_INST_MOV || type == IR_INST_NEG || type == IR_INST_NOT ||
-		   type == IR_INST_MKBOOL || type == IR_INST_NOTBOOL ||
-		   type == IR_INST_ZXT || type == IR_INST_SXT;
+		   type == IR_INST_SUB || type == IR_INST_UDIV ||
+		   type == IR_INST_SDIV || type == IR_INST_UMOD ||
+		   type == IR_INST_SMOD || type == IR_INST_SHL || type == IR_INST_SHR ||
+		   type == IR_INST_ASHR || type == IR_INST_MOV || type == IR_INST_NEG ||
+		   type == IR_INST_NOT || type == IR_INST_MKBOOL ||
+		   type == IR_INST_NOTBOOL || type == IR_INST_ZXT ||
+		   type == IR_INST_SXT || type == IR_INST_AND || type == IR_INST_EOR ||
+		   type == IR_INST_OR;
 }
 
 /* is this instruction a branch? */
