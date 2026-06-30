@@ -100,6 +100,10 @@ typedef struct node {
 	/* switch/case/default */
 	ir_blk_t *case_blk;
 
+	/* goto */
+	char *label;
+	ir_blk_t *label_blk;
+
 	char *fname; /* function name, for NODE_FUNCALL */
 	struct node *fargs; /* function arguments, for NODE_FUNCALL */
 	obj_t *var; /* for NODE_VAR */

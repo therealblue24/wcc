@@ -1,6 +1,7 @@
 #include "lex.h"
 #include "zz/base.h"
 #include "type.h"
+#include <stdint.h>
 
 /* makes a token */
 token_t *token_make(enum token_kind kind, char *start, char *end)
@@ -144,16 +145,84 @@ static int iskeyword(char *prog, size_t plen)
 	return 0;
 }
 
-static char read_hex(char *p, char **rest)
+static uint64_t zxt(uint64_t x, uint64_t size)
+{
+	uint64_t m = (1ULL << size) - 1;
+	return x & m;
+}
+
+static uint64_t sxt(uint64_t x, uint64_t size)
+{
+	/* thank you https://stackoverflow.com/a/17719010 */
+	uint64_t mask = 1ULL << (size - 1);
+	return (x ^ mask) - mask;
+}
+
+static bool is_dec(char c)
+{
+	return c >= '0' && c <= '9';
+}
+
+static bool is_oct(char c)
+{
+	return c >= '0' && c <= '7';
+}
+
+static bool is_bin(char c)
+{
+	return c == '0' || c == '1';
+}
+
+static bool is_doz_lower(char c)
+{
+	return c == 'a' || c == 'b';
+}
+
+static bool is_doz_upper(char c)
+{
+	return c == 'A' || c == 'B';
+}
+
+static bool is_hex_lower(char c)
+{
+	return c >= 'a' && c <= 'f';
+}
+
+static bool is_hex_upper(char c)
+{
+	return c >= 'A' && c <= 'F';
+}
+
+static bool is_hex(char c)
+{
+	return is_dec(c) || is_hex_lower(c) || is_hex_upper(c);
+}
+
+static bool is_doz(char c)
+{
+	return is_dec(c) || is_doz_lower(c) || is_doz_upper(c);
+}
+
+static bool is_long_suf(char c)
+{
+	return c == 'l' || c == 'L';
+}
+
+static bool is_unsignd_suf(char c)
+{
+	return c == 'u' || c == 'U';
+}
+
+static char read_hexchr(char *p, char **rest)
 {
 	char res = 0;
 	for(int i = 0; i < 2; i++) {
 		char digit = *p++;
-		if(digit >= '0' && digit <= '9') {
+		if(is_dec(digit)) {
 			res = (16 * res) + (digit - '0');
-		} else if(digit >= 'a' && digit <= 'f') {
+		} else if(is_hex_lower(digit)) {
 			res = (16 * res) + (10 + (digit - 'a'));
-		} else if(digit >= 'A' && digit <= 'F') {
+		} else if(is_hex_upper(digit)) {
 			res = (16 * res) + (10 + (digit - 'A'));
 		} else
 			break;
@@ -162,18 +231,197 @@ static char read_hex(char *p, char **rest)
 	return res;
 }
 
-static char read_octal(char *p, char **rest)
+static char read_octchr(char *p, char **rest)
 {
 	char res = 0;
 	for(int i = 0; i < 3; i++) {
 		char digit = *p++;
-		if(digit >= '0' && digit <= '7') {
+		if(is_oct(digit)) {
 			res = (8 * res) + (digit - '0');
 		} else
 			break;
 	}
 	*rest = p;
 	return res;
+}
+
+static uint64_t read_hex(char *p, char **rest)
+{
+	uint64_t res = 0;
+	while(is_hex(*p)) {
+		char digit = *p++;
+		if(is_dec(digit)) {
+			res = (16 * res) + (digit - '0');
+		} else if(is_hex_lower(digit)) {
+			res = (16 * res) + (10 + (digit - 'a'));
+		} else if(is_hex_upper(digit)) {
+			res = (16 * res) + (10 + (digit - 'A'));
+		}
+	}
+	*rest = p;
+	return res;
+}
+
+static uint64_t read_dec(char *p, char **rest)
+{
+	uint64_t res = 0;
+	while(is_dec(*p)) {
+		char digit = *p++;
+		res = (10 * res) + (digit - '0');
+	}
+	*rest = p;
+	return res;
+}
+
+static uint64_t read_doz(char *p, char **rest)
+{
+	uint64_t res = 0;
+	while(is_doz(*p)) {
+		char digit = *p++;
+		if(is_dec(digit)) {
+			res = (12 * res) + (digit - '0');
+		} else if(is_doz_lower(digit)) {
+			res = (12 * res) + (digit - 'a');
+		} else if(is_doz_upper(digit)) {
+			res = (12 * res) + (digit - 'A');
+		}
+	}
+	*rest = p;
+	return res;
+}
+
+static uint64_t read_oct(char *p, char **rest)
+{
+	uint64_t res = 0;
+	while(is_oct(*p)) {
+		char digit = *p++;
+		res = (8 * res) + (digit - '0');
+	}
+	*rest = p;
+	return res;
+}
+
+static uint64_t read_bin(char *p, char **rest)
+{
+	uint64_t res = 0;
+	while(is_bin(*p)) {
+		char digit = *p++;
+		res = (2 * res) + (digit - '0');
+	}
+	*rest = p;
+	return res;
+}
+
+static int read_prefix(char *p, char **rest)
+{
+	/* all prefixes start with '0' */
+	if(*p != '0') {
+		return 10;
+	}
+	p++; /* advance */
+
+	switch(*p) {
+	case 'b':
+		*rest = p + 1;
+		return 2; /* binary */
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+		*rest = p;
+		return 8; /* octal (implicit prefix) */
+	case 'o':
+		*rest = p + 1;
+		return 8; /* octal (explicit prefix) */
+	case 'z':
+		/* Yes, there is dozenal number support. This is completely
+		 * useless and of basically no value but it is funny.
+		 * This idea was taken straight from Odin. */
+		*rest = p + 1;
+		return 12;
+	case 'x':
+		*rest = p + 1;
+		return 16; /* hex */
+	case '8':
+	case '9': /* special error for invalid octal */
+		compile_err(p, "invalid octal digit '%c'", *p);
+	default:
+		return 10;
+	}
+
+	/* unreachable */
+	return 10;
+}
+
+static uint64_t read_number(int base, char *p, char **rest)
+{
+	switch(base) {
+	case 2:
+		return read_bin(p, rest);
+	case 8:
+		return read_oct(p, rest);
+	case 10:
+		return read_dec(p, rest);
+	case 12:
+		return read_doz(p, rest);
+	case 16:
+		return read_hex(p, rest);
+	/* unreachable */
+	default:
+		return -1;
+	}
+	/* unreachable */
+	return -1;
+}
+
+static type_t *read_suffix(char *p, char **rest)
+{
+	char *start = p;
+	int lcount = 0;
+	int unsignd = 0;
+	while(is_long_suf(*p) || is_unsignd_suf(*p)) {
+		char suf = *p++;
+		lcount += is_long_suf(suf);
+		unsignd += is_unsignd_suf(suf);
+	}
+
+	if(lcount > 2 || unsignd > 1) {
+		compile_err(start, "invalid suffix '%.*s'", p - start, p);
+	}
+
+	type_t *base = lcount ? TY_LONG : TY_INT;
+	type_t *ty = type_clone(base);
+	ty->unsignd = unsignd;
+
+	*rest = p;
+	return ty;
+}
+
+static void read_full_num(uint64_t *num_, type_t **ty_, char *p, char **rest)
+{
+	char *start = p;
+	int base = read_prefix(p, &p);
+	uint64_t num = read_number(base, p, &p);
+	type_t *ty = read_suffix(p, rest);
+	if(ty->size == 4) {
+		if(ty->unsignd) {
+			if(num > UINT32_MAX) {
+				compile_warn(start, "number is too big for target type");
+			}
+		} else {
+			int64_t n = num;
+			if(n < INT32_MIN || n > INT32_MAX) {
+				compile_warn(start, "number is too big for target type");
+			}
+		}
+		num = ty->unsignd ? zxt(num, 32) : sxt(num, 32);
+	}
+	*num_ = num;
+	*ty_ = ty;
+	return;
 }
 
 /* read a single (possibly escaped) character */
@@ -216,12 +464,12 @@ static char read_chr(char *prog, char **rest)
 	case '5':
 	case '6':
 	case '7':
-		res = read_octal(p, &p);
+		res = read_octchr(p, &p);
 		break;
 
 	/* hex byte */
 	case 'x':
-		res = read_hex(p + 1, &p);
+		res = read_hexchr(p + 1, &p);
 		break;
 
 	default:
@@ -289,9 +537,12 @@ token_t *lex_do(char *prog, token_t **end)
 		/* tokenize number */
 		if(isdigit(*prog)) {
 			char *num = prog;
-			uint64_t intlit = strtol(prog, &prog, 10);
+			uint64_t intlit;
+			type_t *ty;
+			read_full_num(&intlit, &ty, prog, &prog);
 			token_t *numb = token_make(TOK_NUM, num, prog);
 			numb->num = intlit;
+			numb->type = ty;
 			numb->start_line = start_line;
 			start_line = 0;
 			tok->next = numb;

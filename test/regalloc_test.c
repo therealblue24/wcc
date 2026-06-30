@@ -1,7 +1,10 @@
+#include "test/one.c"
+
 int main()
 {
-	int a = 1, b = 1, c = 1, d = 1, e = 1, f = 1, g = 1, h = 1, i = 1, j = 1,
-		k = 1, l = 1, m = 1, n = 1, o = 1, p = 1;
+	int a = one(), b = one(), c = one(), d = one(), e = one(), f = one(),
+		g = one(), h = one(), i = one(), j = one(), k = one(), l = one(),
+		m = one(), n = one(), o = one(), p = one();
 	a = a + b;
 	c = c + d;
 	e = e + f;

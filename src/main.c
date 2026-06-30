@@ -9,6 +9,8 @@
 #include "lex.h"
 #include "preproc.h"
 #include "parse.h"
+#include "type.h"
+#include "sema.h"
 #include "codegen.h"
 
 int debug = 0;
@@ -235,6 +237,13 @@ int main(int argc, char *argv[])
 
 	token_t *cur = head;
 	parse_res_t res = parse_do(cur);
+	for(size_t i = 0; i < list_len(res.globals); i++) {
+		obj_t *glob = res.globals[i];
+		if(glob->is_func) {
+			sema_do(glob->body);
+		}
+	}
+
 	LIST(obj_t *) globals = res.globals;
 	codegen_func(emit_to, globals, opt_level, arch);
 

@@ -46,6 +46,8 @@ stmt = "return" expr? ";"
 	  | "default" ":" stmt
 	  | "break" ";"
       | "continue" ";"
+	  | "goto" ident ";"
+	  | ident ":" stmt
 	  | compound-stmt
 	  | expr-stmt
 compound-stmt = "{" (declaration | stmt)* "}"

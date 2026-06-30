@@ -33,5 +33,5 @@ int main()
 		div_round(&div, &rem, &num, den);
 	}
 
-	return div == 1 && rem == 44667;
+	return div == 1u && rem == 44667u;
 }

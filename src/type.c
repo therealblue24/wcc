@@ -126,6 +126,12 @@ static type_t *type_deref(type_t *ty)
 	}
 }
 
+static type_t *infer_type(uint64_t num)
+{
+	/* TODO: actual type inference */
+	return TY_LONG;
+}
+
 void type_propagate(node_t *node)
 {
 	if(!node) {
@@ -150,7 +156,16 @@ void type_propagate(node_t *node)
 
 	switch(node->kind) {
 	case NODE_NUM:
+		if(node->type)
+			break;
+		node->type = infer_type(node->num);
+		break;
+
 	case NODE_FUNCALL:
+		/* temporary: promotion of ints->long in calls */
+		for(node_t *a = node->fargs; a; a = a->next) {
+			a->type->size = 8;
+		}
 		node->type = TY_LONG;
 		break;
 
@@ -160,8 +175,7 @@ void type_propagate(node_t *node)
 	case NODE_LT:
 	case NODE_GT:
 	case NODE_GE:
-		/* TODO: is this correct? */
-		node->type = node->lhs->type->unsignd ? TY_ULONG : TY_LONG;
+		node->type = node->lhs->type->unsignd ? TY_UINT : TY_INT;
 		break;
 
 	case NODE_VAR:

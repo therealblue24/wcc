@@ -93,6 +93,14 @@ node_t *node_num(uint64_t val, token_t *tok)
 	return node;
 }
 
+static node_t *node_num_tok(token_t *tok)
+{
+	node_t *node = node_make(NODE_NUM, tok);
+	node->num = tok->num;
+	node->type = tok->type;
+	return node;
+}
+
 /* make a variable node */
 node_t *node_var(obj_t *var, token_t *tok)
 {
@@ -504,16 +512,28 @@ static node_t *node_sub(node_t *lhs, node_t *rhs, token_t *tok)
 		return node_bin(NODE_SUB, lhs, rhs, tok);
 	}
 
-	/* ptr - ptr is invalid */
+	/* int - ptr is invalid */
+	if(type_is_int(lhs->type) && type_is_ptr(rhs->type)) {
+		compile_err(tok->loc, "cannot subtract pointer from number");
+	}
+
+	/* ptr - ptr */
+	/* = (ptr-ptr)/(sizeof(ptr[0])) */
 	if(type_is_ptr(lhs->type) && type_is_ptr(rhs->type)) {
-		compile_err(tok->loc, "cannot add two pointers");
-		return NULL;
+		node_t *sub = node_bin(NODE_SUB, lhs, rhs, tok);
+		node_t *div = lhs->type->to->size > 1 ?
+						  node_bin(NODE_DIV, sub,
+								   node_num(lhs->type->to->size, tok), tok) :
+						  sub;
+		return div;
 	}
 
 	/* must be ptr - int now */
 	/* pointer arithmetic is fun so the int is multiplied by pointer base size */
 	node_t *mul =
-		node_bin(NODE_MUL, node_num(lhs->type->to->size, NULL), rhs, tok);
+		lhs->type->to->size > 1 ?
+			node_bin(NODE_MUL, node_num(lhs->type->to->size, NULL), rhs, tok) :
+			rhs;
 	return node_bin(NODE_SUB, lhs, mul, tok);
 }
 
@@ -755,7 +775,7 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 	/* case num: */
 	if(token_eat(&tok, "case")) {
 		node_t *case_node = node_make(NODE_CASE, save);
-		case_node->cond = node_num(tok->num, tok);
+		case_node->cond = node_num_tok(tok);
 		tok = tok->next;
 		tok = token_skip(tok, ":");
 		case_node->then = parse_stmt(tok, &tok);
@@ -1087,7 +1107,7 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 
 	/* num case */
 	if(tok->kind == TOK_NUM) {
-		node_t *node = node_num(tok->num, tok);
+		node_t *node = node_num_tok(tok);
 		*rest = tok->next;
 		return node;
 	}
