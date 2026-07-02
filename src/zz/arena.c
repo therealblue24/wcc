@@ -162,7 +162,7 @@ static arena_t scratch;
 
 int scr_init(void)
 {
-	if(arena_make(&scratch, 16 * 1024)) {
+	if(arena_make(&scratch, ARENA_DEFAULT_SIZE)) {
 		return 1;
 	}
 	return 0;

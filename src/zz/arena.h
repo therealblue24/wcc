@@ -17,6 +17,7 @@ typedef struct arena {
 } arena_t;
 
 #define ARENA_DEFAULT_ALIGN (2 * sizeof(void *))
+#define ARENA_DEFAULT_SIZE (16 * 1024)
 
 /* makes a new region with size `size`. */
 region_t *region_make(size_t size);

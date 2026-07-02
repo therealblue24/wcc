@@ -227,6 +227,19 @@ static reg_t *calc_addr(node_t *node)
 	if(node->kind == NODE_DEREF) {
 		return codegen_expr(node->lhs);
 	}
+	if(node->kind == NODE_MEMBER) {
+		/* TODO: this presents a really easy algorithm for a SROA-like pass.
+		 * since the struct access is basically just chained adds, we can
+		 * collapse the adds into 1 instruction and then check if the value
+		 * is only used inside those adds/memory. If yes, we can split the variable
+		 * out. */
+		reg_t *base = calc_addr(node->lhs);
+		reg_t *off = reg_make();
+		emit_imm(off, node->memb->loc);
+		reg_t *add = reg_make();
+		emit_add(add, base, off);
+		return add;
+	}
 
 	compile_err_node(node, "cannot calculate address of non-variable");
 
@@ -296,7 +309,8 @@ reg_t *codegen_expr(node_t *node)
 		emit_notbool(logneg, val);
 		return logneg;
 	};
-	case NODE_VAR: {
+	case NODE_VAR:
+	case NODE_MEMBER: {
 		reg_t *addr = calc_addr(node);
 		reg_t *val = reg_make();
 		if(node->type->kind == TYPE_ARRAY) {

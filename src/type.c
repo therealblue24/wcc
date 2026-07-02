@@ -4,6 +4,8 @@
 #include "parse.h"
 #include <stdint.h>
 
+static arena_t type_arena;
+
 type_t *TY_INT = &(type_t){ .kind = TYPE_INT,
 							.size = 4,
 							.align = 4,
@@ -61,6 +63,20 @@ type_t *TY_BOOL =
 type_t *TY_PTR =
 	&(type_t){ .kind = TYPE_PTR, .size = 8, .align = 8, .to = NULL };
 
+/* makes type arenas */
+void type_make_arenas(void)
+{
+	ENSURE(arena_make(&type_arena, ARENA_DEFAULT_SIZE) == 0,
+		   "failed to create type arena");
+	return;
+}
+
+/* deletes type arenas */
+void type_delete_arenas(void)
+{
+	arena_delete(&type_arena);
+}
+
 bool type_is_int(type_t *ty)
 {
 	return ty && (ty->kind == TYPE_INT || ty->kind == TYPE_LONG ||
@@ -80,14 +96,14 @@ bool type_is_signed(type_t *ty)
 
 type_t *type_clone(type_t *ty)
 {
-	type_t *typtr = scr_alloc(sizeof(type_t));
+	type_t *typtr = arena_alloc(&type_arena, sizeof(type_t));
 	*typtr = *ty;
 	return typtr;
 }
 
 type_t *type_ptr_to(type_t *ty)
 {
-	type_t *typtr = scr_alloc(sizeof(type_t));
+	type_t *typtr = arena_alloc(&type_arena, sizeof(type_t));
 	memcpy(typtr, TY_PTR, sizeof(type_t));
 	typtr->to = ty;
 	typtr->ident = ty->ident;
@@ -97,7 +113,7 @@ type_t *type_ptr_to(type_t *ty)
 
 type_t *type_arr_to(type_t *type, size_t alen)
 {
-	type_t *typtr = scr_alloc(sizeof(type_t));
+	type_t *typtr = arena_alloc(&type_arena, sizeof(type_t));
 	typtr->align = type->align;
 	typtr->size = type->size * alen;
 	typtr->kind = TYPE_ARRAY;
@@ -110,7 +126,7 @@ type_t *type_arr_to(type_t *type, size_t alen)
 
 type_t *type_func_to(type_t *ret_ty)
 {
-	type_t *typtr = scr_alloc(sizeof(type_t));
+	type_t *typtr = arena_alloc(&type_arena, sizeof(type_t));
 	typtr->size = typtr->align = 0;
 	typtr->kind = TYPE_FUNC;
 	typtr->to = ret_ty;
@@ -214,6 +230,12 @@ void type_propagate(node_t *node)
 	case NODE_VAR:
 		node->type = node->var->type;
 		if(node->var->type->kind == TYPE_VOID) {
+			compile_err(node->lhs->type->ident->loc, "invalid void decltype");
+		}
+		break;
+	case NODE_MEMBER:
+		node->type = node->memb->type;
+		if(node->type->kind == TYPE_VOID) {
 			compile_err(node->lhs->type->ident->loc, "invalid void decltype");
 		}
 		break;

@@ -53,12 +53,11 @@ enum node_kind {
 	NODE_GOTO, /* goto */
 	NODE_LABEL, /* label: */
 	NODE_CAST, /* (type) */
+	NODE_MEMBER, /* struct.member */
 };
 
 /* a variable */
-
 struct node;
-
 typedef struct obj {
 	struct obj *next; /* linked list */
 	long off; /* place on stack frame */
@@ -81,6 +80,13 @@ typedef struct obj {
 	long order; /* order of object */
 } obj_t;
 
+/* a struct member */
+typedef struct member {
+	type_t *type; /* member's type */
+	token_t *ident; /* identifier */
+	size_t loc; /* location relative to struct */
+} member_t;
+
 /* an AST node */
 typedef struct node {
 	enum node_kind kind;
@@ -91,6 +97,9 @@ typedef struct node {
 	type_t *type; /* type of this node */
 
 	token_t *tok; /* first token of this node */
+
+	/* accessing struct member */
+	member_t *memb;
 
 	/* if condition */
 	struct node *cond;
@@ -116,6 +125,12 @@ typedef struct node {
 } node_t;
 
 extern STRMAP(obj_t *) known_funcs;
+
+/* makes parsing arenas */
+void parse_make_arenas(void);
+
+/* deletes parsing arenas */
+void parse_delete_arenas(void);
 
 /* makes a node */
 node_t *node_make(enum node_kind kind, token_t *tok);
@@ -150,6 +165,11 @@ void obj_delete(obj_t *obj);
 
 /* deletes all objects in list */
 void obj_delete_all(LIST(obj_t *) objs);
+
+/* -- struct member -- */
+
+/* makes a member */
+member_t *member_make(type_t *type, token_t *ident, size_t loc);
 
 typedef struct parse_res {
 	LIST(obj_t *) globals;

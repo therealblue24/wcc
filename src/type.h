@@ -2,6 +2,7 @@
 #define TYPE_H_
 
 #include "zz/base.h"
+#include "zz/strmap.h"
 #include "lex.h"
 
 enum type_kind {
@@ -12,15 +13,18 @@ enum type_kind {
 	TYPE_INT, /* int */
 	TYPE_LONG, /* long */
 	TYPE_PTR, /* a pointer */
+	TYPE_STRUCT, /* a struct {} */
 	TYPE_FUNC, /* a function */
 	TYPE_ARRAY, /* an array */
 };
 
+struct member;
 typedef struct type {
 	enum type_kind kind;
 	size_t size; /* size, alignment */
 	size_t align;
 	struct type *to; /* a pointer to? */
+	LIST(struct member *) membs; /* members in struct */
 	token_t *ident; /* identifier of type */
 	size_t alen; /* array length */
 	bool unsignd; /* is this type unsigned? */
@@ -37,6 +41,12 @@ extern type_t *TY_USHORT;
 extern type_t *TY_UINT;
 extern type_t *TY_ULONG;
 extern type_t *TY_PTR;
+
+/* makes type arenas */
+void type_make_arenas(void);
+
+/* deletes type arenas */
+void type_delete_arenas(void);
 
 bool type_is_int(type_t *ty);
 bool type_is_ptr(type_t *ty);

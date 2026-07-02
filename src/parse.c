@@ -1,8 +1,34 @@
 #include "parse.h"
 #include "zz/base.h"
 #include "zz/strmap.h"
+#include "zz/arena.h"
 #include "lex.h"
 #include "type.h"
+
+static arena_t obj_arena;
+static arena_t node_arena;
+static arena_t memb_arena;
+
+/* makes parsing arenas */
+void parse_make_arenas(void)
+{
+	ENSURE(arena_make(&obj_arena, ARENA_DEFAULT_SIZE) == 0,
+		   "failed to create object arena");
+	ENSURE(arena_make(&node_arena, ARENA_DEFAULT_SIZE) == 0,
+		   "failed to create AST node arena");
+	ENSURE(arena_make(&memb_arena, ARENA_DEFAULT_SIZE) == 0,
+		   "failed to create struct member arena");
+	return;
+}
+
+/* deletes parsing arenas */
+void parse_delete_arenas(void)
+{
+	arena_delete(&obj_arena);
+	arena_delete(&node_arena);
+	arena_delete(&memb_arena);
+	return;
+}
 
 STRMAP(obj_t *) locals = NULL;
 STRMAP(obj_t *) globals = NULL;
@@ -24,7 +50,7 @@ static long runk(int reset)
 /* makes a node */
 node_t *node_make(enum node_kind kind, token_t *tok)
 {
-	node_t *node = scr_alloc(sizeof(node_t));
+	node_t *node = arena_alloc(&node_arena, sizeof(node_t));
 	node->kind = kind;
 	node->tok = tok;
 	return node;
@@ -68,6 +94,16 @@ void node_delete_all(node_t *root)
 #undef del
 	node_delete(root);
 	return;
+}
+
+/* makes a member */
+member_t *member_make(type_t *type, token_t *ident, size_t loc)
+{
+	member_t *memb = arena_alloc(&memb_arena, sizeof(member_t));
+	memb->type = type;
+	memb->ident = ident;
+	memb->loc = loc;
+	return memb;
 }
 
 /* -- node types -- */
@@ -118,7 +154,7 @@ node_t *node_var(obj_t *var, token_t *tok)
 
 static obj_t *obj_make_noadd(char *name, type_t *type, bool is_func)
 {
-	obj_t *obj = scr_alloc(sizeof(obj_t));
+	obj_t *obj = arena_alloc(&obj_arena, sizeof(obj_t));
 	obj->is_func = is_func;
 	obj->name = name;
 	obj->off = 0;
@@ -258,10 +294,47 @@ static bool is_declspec(token_t *tok)
 	   token_eq(tok, "char") || token_eq(tok, "short") ||
 	   token_eq(tok, "long") || token_eq(tok, "int") ||
 	   token_eq(tok, "signed") || token_eq(tok, "unsigned") ||
-	   token_eq(tok, "_Alignas")) {
+	   token_eq(tok, "_Alignas") || token_eq(tok, "struct")) {
 		return true;
 	}
 	return false;
+}
+
+static type_t *parse_struct(token_t *tok, token_t **rest)
+{
+	tok = token_skip(tok, "{");
+	type_t *struc = type_clone(TY_VOID);
+	struc->kind = TYPE_STRUCT;
+	struc->membs = list_make(member_t *);
+
+	while(!token_eq(tok, "}")) {
+		type_t *declspec = parse_declspec(tok, &tok);
+		type_t *complete = parse_declarator(declspec, tok, &tok);
+		tok = token_skip(tok, ";");
+		member_t *m = member_make(complete, complete->ident, 0);
+		list_append(struc->membs, m);
+	}
+	tok = token_skip(tok, "}");
+
+	/* assign offsets, find max align */
+
+	size_t align = 0;
+	size_t pos = 0;
+	for(size_t i = 0; i < list_len(struc->membs); i++) {
+		member_t *mem = struc->membs[i];
+		pos = align_to(pos, mem->type->align);
+		mem->loc = pos;
+		pos += mem->type->size;
+		if(mem->type->align > align) {
+			align = mem->type->align;
+		}
+	}
+
+	struc->size = align_to(pos, align);
+	struc->align = align;
+	*rest = tok;
+
+	return struc;
 }
 
 static type_t *parse_declspec(token_t *tok, token_t **rest)
@@ -269,6 +342,10 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 	uint64_t align = 0;
 	type_t *res = NULL;
 	bool unsign = false;
+
+	if(token_eq(tok, "struct")) {
+		return parse_struct(tok->next, rest);
+	}
 
 	while(is_declspec(tok)) {
 		if(token_eq(tok, "long")) {
@@ -1159,9 +1236,9 @@ static node_t *parse_postfix(token_t *tok, token_t **rest)
 {
 	node_t *prim = parse_prim(tok, &tok);
 
-parse:
+parse:;
+	token_t *marker = tok;
 	if(token_eq(tok, "[")) {
-		token_t *marker = tok;
 		tok = token_skip(tok, "[");
 		token_t *marker_add = tok;
 		node_t *indx = parse_expr(tok, &tok);
@@ -1169,6 +1246,50 @@ parse:
 
 		prim = node_unary(NODE_DEREF, node_add(prim, indx, marker_add), marker);
 		goto parse;
+	}
+
+	if(token_eq(tok, ".")) {
+		tok = token_skip(tok, ".");
+memb_parse:;
+		node_t *v = prim;
+		type_propagate(v);
+		prim = node_unary(NODE_MEMBER, prim, marker);
+		if(tok->kind != TOK_IDENT) {
+			compile_err(tok->loc, "expected an identifer");
+		}
+
+		if(v->type->kind != TYPE_STRUCT) {
+			compile_err(tok->loc, "expected a struct");
+		}
+
+		/* find the member */
+		/* TODO: use stringmaps for this, but there is a challenge in that
+		 * stringmaps are currently unordered. so I guess we will use
+		 * the lists in the meanwhile while i find up a solution for this */
+		size_t i = 0;
+		bool found = false;
+		for(; i < list_len(v->type->membs); i++) {
+			if(strncmp(v->type->membs[i]->ident->loc, tok->loc, tok->len) ==
+			   0) {
+				found = true;
+				break;
+			}
+		}
+
+		if(!found) {
+			compile_err(tok->loc, "'%.*s' is not a member of struct", tok->len,
+						tok->loc);
+		}
+
+		prim->memb = v->type->membs[i];
+		tok = tok->next;
+		goto parse;
+	}
+
+	if(token_eq(tok, "->")) {
+		tok = token_skip(tok, "->");
+		prim = node_unary(NODE_DEREF, prim, marker);
+		goto memb_parse;
 	}
 
 	/* i++  = ({ T i2 = i; i = i + 1; i2; })

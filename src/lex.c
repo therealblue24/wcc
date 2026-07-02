@@ -91,7 +91,7 @@ static int punct_len(char *p)
 {
 	const char *puncts[] = { "<=", ">=", "==", "!=", "&&", "||",  ">>",
 							 "<<", "*=", "/=", "+=", "-=", "<<=", ">>=",
-							 "&=", "^=", "|=", "++", "--" };
+							 "&=", "^=", "|=", "++", "--", "->" };
 	size_t puncts_len = sizeof(puncts) / sizeof(puncts[0]);
 
 	for(size_t i = 0; i < puncts_len; i++) {

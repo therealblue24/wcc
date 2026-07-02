@@ -148,6 +148,9 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
+	parse_make_arenas();
+	type_make_arenas();
+
 	if(argc == 1) {
 		help(argv[0]);
 		return 1;
@@ -269,6 +272,8 @@ int main(int argc, char *argv[])
 	list_delete(globals);
 	strmap_delete(known_funcs);
 
+	type_delete_arenas();
+	parse_delete_arenas();
 	scr_cleanup();
 	return 0;
 }
