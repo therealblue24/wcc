@@ -516,24 +516,29 @@ static long ir_eval_strat_cost(ir_func_t *fun, int amount, int callee_cost,
 			if(ins->r0) {
 				used[ins->r0->rr] = 1;
 			}
-
 			if(ins->r1) {
 				used[ins->r1->rr] = 1;
 			}
-
 			if(ins->r2) {
 				used[ins->r2->rr] = 1;
 			}
 
+			if(ins->type == IR_INST_CALL) {
+				size_t args = list_len(ins->call_args);
+				for(size_t i = 0; i < args; i++) {
+					if(ins->call_args[i]) {
+						used[ins->call_args[i]->r->rr] = 1;
+					}
+				}
+			}
+		}
+	}
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			if(ins->type != IR_INST_CALL) {
 				continue;
-			}
-
-			size_t args = list_len(ins->call_args);
-			for(size_t i = 0; i < args; i++) {
-				if(ins->call_args[i]) {
-					used[ins->call_args[i]->r->rr] = 1;
-				}
 			}
 
 			/* count # of registers used */
@@ -766,11 +771,11 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 	switch(arch) {
 	case IR_ARCH_AARCH64_APPLE:
 		callee_cost = 9; /* r19 .. r28 */
-		caller_cost = 7; /* r9 .. r15 */
+		caller_cost = 14; /* r1 .. r9, r11 .. r15 */
 		break;
 	case IR_ARCH_X64_SYSV:
 		callee_cost = 5; /* rbx, r12 .. r15 */
-		caller_cost = 6; /* rsi, rdx, rcx, r8, r9, r11 */
+		caller_cost = 6; /* rdi, rsi, r8, r9, r10, r11 */
 		break;
 
 	default:

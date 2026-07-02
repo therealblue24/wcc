@@ -44,7 +44,7 @@ void print_num_helper_unsignd(unsigned long num)
 {
 	/* https://stackoverflow.com/a/59389473 */
 
-	if(num >= 10) {
+	if(num >= 10u) {
 		print_num_helper(num / 10);
 	}
 

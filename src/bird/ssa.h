@@ -22,9 +22,6 @@ void ir_reroute_pred(ir_blk_t *blk, ir_blk_t *orig, ir_blk_t *new);
 /* removes block from CFG entirely */
 void ir_remove_blk(ir_func_t *func, ir_blk_t *blk);
 
-/* removes a useless `jmp` block from CFG entirely */
-void ir_remove_jmpblk(ir_func_t *func, ir_blk_t *blk);
-
 /* fixs phi nodes */
 void ir_fix_phis(ir_func_t *func);
 

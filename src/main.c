@@ -267,6 +267,7 @@ int main(int argc, char *argv[])
 	}
 
 	list_delete(globals);
+	strmap_delete(known_funcs);
 
 	scr_cleanup();
 	return 0;

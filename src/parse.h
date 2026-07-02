@@ -50,6 +50,9 @@ enum node_kind {
 	NODE_SWITCH, /* switch */
 	NODE_CASE, /* case */
 	NODE_DEFAULT, /* default */
+	NODE_GOTO, /* goto */
+	NODE_LABEL, /* label: */
+	NODE_CAST, /* (type) */
 };
 
 /* a variable */
@@ -61,6 +64,7 @@ typedef struct obj {
 	long off; /* place on stack frame */
 	char *name; /* name of variable */
 	bool is_global; /* is this variable global? */
+	bool is_anon; /* is this variable anonymous? */
 	ir_global_t *glob; /* the global assoc with it */
 	uint8_t *data; /* data for this global */
 	size_t data_size; /* data size for this global */
@@ -102,13 +106,16 @@ typedef struct node {
 
 	/* goto */
 	char *label;
-	ir_blk_t *label_blk;
+	struct node *label_node;
+	bool visited;
 
 	char *fname; /* function name, for NODE_FUNCALL */
 	struct node *fargs; /* function arguments, for NODE_FUNCALL */
 	obj_t *var; /* for NODE_VAR */
 	uint64_t num; /* for NODE_NUM */
 } node_t;
+
+extern STRMAP(obj_t *) known_funcs;
 
 /* makes a node */
 node_t *node_make(enum node_kind kind, token_t *tok);

@@ -91,6 +91,58 @@ void ir_prog_end_x64_sysv(FILE *f, ir_prog_t *prog)
 	return;
 }
 
+static void print_escaped_chr(FILE *f, char c)
+{
+	switch(c) {
+	case '\a':
+		fprintf(f, "\\a");
+		return;
+	case '\b':
+		fprintf(f, "\\b");
+		return;
+	case '\f':
+		fprintf(f, "\\f");
+		return;
+	case '\n':
+		fprintf(f, "\\n");
+		return;
+	case '\r':
+		fprintf(f, "\\n");
+		return;
+	case '\t':
+		fprintf(f, "\\t");
+		return;
+	case '\v':
+		fprintf(f, "\\v");
+		return;
+	case '\\':
+		fprintf(f, "\\");
+		return;
+	case '\'':
+		fprintf(f, "\\'");
+		return;
+	case '\"':
+		fprintf(f, "\\\"");
+		return;
+	case '\?':
+		fprintf(f, "\\?");
+		return;
+	case 0:
+		fprintf(f, "\\0");
+		return;
+	default:
+		fprintf(f, "\\x%02x", c);
+		return;
+	}
+
+	return;
+}
+
+static bool is_escapeprintable(int c)
+{
+	return c == '\\' || c == '\'' || c == '\"';
+}
+
 static void emit_str(FILE *f, const char *str, size_t len)
 {
 	if(str[len - 1]) {
@@ -101,10 +153,10 @@ static void emit_str(FILE *f, const char *str, size_t len)
 	}
 
 	for(size_t i = 0; i < len; i++) {
-		if(isprint(str[i])) {
+		if(isprint(str[i]) && !is_escapeprintable(str[i])) {
 			fputc(str[i], f);
 		} else {
-			fprintf(f, "\\x%02x", str[i]);
+			print_escaped_chr(f, str[i]);
 		}
 	}
 
@@ -113,7 +165,9 @@ static void emit_str(FILE *f, const char *str, size_t len)
 
 void ir_glob_emit_x64_sysv(FILE *f, ir_global_t *glob)
 {
-	fprintf(f, "\t.global %s\n", glob->name);
+	if(!glob->is_anon) {
+		fprintf(f, "\t.global %s\n", glob->name);
+	}
 	fprintf(f, glob->has_data ? "\t.data\n" : "\t.bss\n");
 	fprintf(f, "%s:\n", glob->name);
 	if(glob->has_data) {

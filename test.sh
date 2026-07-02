@@ -2,8 +2,9 @@
 
 passing=1
 
-# ./bin/wcc test/one.c -o test/one.s -O3
-cc -c -o one.o test/one_impl.c
+./bin/wcc test/one_impl.c -o test/one.s -O3
+clang -c test/one.s -o one.o
+# cc -c -o one.o test/one_impl.c
 
 ./bin/wcc --internal-test-strmap
 
@@ -44,6 +45,7 @@ assert 108 "crazy.c"
 assert 108 "whitespace.c"
 assert 1 "parse.c"
 assert 41 "unary.c"
+assert 1 "cast.c"
 assert 1 "comparisons.c"
 assert 5 "prog_stmts.c"
 assert 1 "vars.c"
@@ -59,6 +61,7 @@ assert 42 "break.c"
 assert 0 "continue.c"
 assert 1 "switch.c"
 assert 1 "switch2.c"
+assert 24 "goto.c"
 assert 7 "ref_deref.c"
 assert 1 "call.c"
 assert 156 "call_many.c"

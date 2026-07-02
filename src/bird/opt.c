@@ -96,6 +96,11 @@ static int ir_stackopt(ir_func_t *func)
 	return changed;
 }
 
+static bool ins_produces_bool(enum ins_type t)
+{
+	return t == IR_INST_MKBOOL || t == IR_INST_NOTBOOL || ir_inst_is_cmp(t);
+}
+
 static int cmp_to_br(enum ins_type ins)
 {
 	if(!ir_inst_is_cmp(ins)) {
@@ -213,11 +218,15 @@ static uint64_t zxt(uint64_t x, uint64_t size)
 	return x & m;
 }
 
-static uint64_t sxt(uint64_t x, uint64_t size)
+static uint64_t sxt(uint64_t x_, uint64_t size)
 {
-	/* thank you https://stackoverflow.com/a/17719010 */
-	uint64_t mask = 1ULL << (size - 1);
-	return (x ^ mask) - mask;
+	/* thank you https://graphics.stanford.edu/~seander/bithacks.html#FixedSignExtend */
+	int64_t x = x_;
+	int64_t r;
+	int64_t mask = 1ULL << (size - 1);
+	x = x & ((1ULL << size) - 1);
+	r = (x ^ mask) - mask;
+	return r;
 }
 
 static void ir_fold_ins_unaryop(ir_inst_t *ins)
@@ -413,7 +422,7 @@ static void ir_zeroopt(ir_inst_t *inst)
 	return;
 }
 
-static UNUSEDA int ir_fold(ir_func_t *func)
+static int ir_fold(ir_func_t *func)
 {
 	int change = 0;
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
@@ -570,41 +579,18 @@ static UNUSEDA int ir_fold(ir_func_t *func)
 	return change;
 }
 
-static int ir_extelim(ir_inst_t *ins)
-{
-	int change = 0;
-
-	/* nothing to do */
-	if(ins->r1->insty != IR_INST_ZXT && ins->r1->insty != IR_INST_SXT) {
-		return 0;
-	}
-
-chk_large:
-	/* larger extension after shorter extension is a mov */
-	if(ins->size >= ins->r1->size) {
-		ins->type = IR_INST_MOV;
-		ins->size = 8;
-		return 1;
-	}
-
-	/* shorter zero extension after larger zero extension: use the shorter */
-	if(ins->size <= ins->r1->size) {
-		ins->r1 = ins->r1->lhs;
-		change = 1;
-	}
-
-	goto chk_large;
-
-	return change;
-}
-
 static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 {
 	int change = 0;
 
-	/* extension elimination */
-	if(ins->type == IR_INST_ZXT || ins->type == IR_INST_SXT) {
-		change |= ir_extelim(ins);
+	/* %r0 = sign_ext.i64/zero_ext.i64 %r1
+	 * ->
+	 * %r0 = %r1
+	 */
+	if((ins->type == IR_INST_SXT || ins->type == IR_INST_ZXT) &&
+	   ins->size == 8) {
+		ins->type = IR_INST_MOV;
+		change = 1;
 	}
 
 	/* %r0 = eor/sub/sdiv/udiv/smod/umod %r1, %r1
@@ -629,13 +615,60 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 		change = 1;
 	}
 
-	/* %r0 = sign_ext.i64/zero_ext.i64 %r1
+	/* %r1 = ins_produces_bool ...
+	 * %r2 = mkbool %r1
 	 * ->
-	 * %r0 = %r1
+	 * %r1 = ins_produces_bool ...
+	 * %r2 = %r1
 	 */
-	if((ins->type == IR_INST_SXT || ins->type == IR_INST_ZXT) &&
-	   ins->size == 8) {
+
+	if(ins->type == IR_INST_MKBOOL && ins_produces_bool(ins->r1->insty)) {
 		ins->type = IR_INST_MOV;
+		change = 1;
+	}
+
+	/* %r1 = mkbool %r0
+	 * %r2 = mkbool %r1
+	 * ->
+	 * %r1 = mkbool %r0
+	 * %r2 = %r1
+	 */
+	if(ins->type == IR_INST_MKBOOL && ins->r1->insty == IR_INST_MKBOOL) {
+		ins->type = IR_INST_MOV;
+		change = 1;
+	}
+
+	/* %r1 = mkbool %r0
+	 * %r2 = notbool %r1
+	 * ->
+	 * %r1 = mkbool %r0
+	 * %r2 = notbool %r0
+	 */
+	if(ins->type == IR_INST_NOTBOOL && ins->r1->insty == IR_INST_MKBOOL) {
+		ins->r1 = ins->r1->lhs;
+		change = 1;
+	}
+
+	/* %r1 = notbool %r0
+	 * %r2 = mkbool %r1
+	 * ->
+	 * %r1 = notbool %r0
+	 * %r2 = %r1
+	 */
+	if(ins->type == IR_INST_MKBOOL && ins->r1->insty == IR_INST_NOTBOOL) {
+		ins->type = IR_INST_MOV;
+		change = 1;
+	}
+
+	/* %r1 = notbool %r0
+	 * %r2 = notbool %r1
+	 * ->
+	 * %r1 = notbool %r0
+	 * %r2 = mkbool %r0
+	 */
+	if(ins->type == IR_INST_NOTBOOL && ins->r1->insty == IR_INST_NOTBOOL) {
+		ins->type = IR_INST_MKBOOL;
+		ins->r1 = ins->r1->lhs;
 		change = 1;
 	}
 
@@ -860,6 +893,13 @@ static int ins_proves_live(enum ins_type t)
 {
 	return t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORESS ||
 		   t == IR_INST_CALL || ir_inst_is_term(t);
+}
+
+static int ins_side_effect(enum ins_type t)
+{
+	return t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORESS ||
+		   t == IR_INST_CALL || ir_inst_is_term(t) || t == IR_INST_LOAD ||
+		   t == IR_INST_LOADS || t == IR_INST_LOADSS;
 }
 
 static int ins_has_imm(enum ins_type t)
@@ -1114,6 +1154,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 	ir_ssa_enter(func);
 	ir_blk_flow(func);
+	ir_mov_elim(func);
+	ir_simpleopt(func);
 
 	if(debug) {
 		printf("After SSA constr.:\n");

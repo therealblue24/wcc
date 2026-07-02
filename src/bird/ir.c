@@ -357,6 +357,18 @@ void ir_blk_delete(ir_blk_t *blk)
 	return;
 }
 
+/* delete an IR block and instructions */
+void ir_blk_delete_all(ir_blk_t *blk)
+{
+	ir_inst_t *nxt = NULL;
+	for(ir_inst_t *head = blk->insts; head; head = nxt) {
+		nxt = head->next;
+		ir_inst_delete(head);
+	}
+	ir_blk_delete(blk);
+	return;
+}
+
 /* make a global variable */
 ir_global_t *ir_glob_make(char *name, size_t size, size_t align, uint8_t *data)
 {
@@ -395,12 +407,7 @@ void ir_func_delete(ir_func_t *fun)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
-		ir_inst_t *nxt = NULL;
-		for(ir_inst_t *head = blk->insts; head; head = nxt) {
-			nxt = head->next;
-			ir_inst_delete(head);
-		}
-		ir_blk_delete(blk);
+		ir_blk_delete_all(blk);
 	}
 	list_delete(fun->blocks);
 	list_delete(fun->args);

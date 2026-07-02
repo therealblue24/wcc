@@ -22,7 +22,7 @@ typedef struct strmap_hdr {
 } strmap_hdr_t;
 
 // clang-format off
-#define STRMAP(V) struct { zz_hashstr_t **keys; V* vals; }*
+#define STRMAP(V) V*
 // clang-format on
 
 void strmap_donotuse_put(void *map, zz_hashstr_t *str, size_t size, void *obj);
@@ -36,18 +36,17 @@ zz_hashstr_t *strmap_donotuse_tozzstr(char *str);
 strmap_hdr_t *strmap_hdr(void *map);
 void *strmap_data(strmap_hdr_t *hdr);
 
-#define strmap_put(m, s, i)                                            \
-	do {                                                               \
-		typeof((i)) the_item_do_not_use_this_name = (i);               \
-		strmap_donotuse_put((void *)(m), strmap_donotuse_tozzstr((s)), \
-							sizeof((m)->vals[0]),                      \
-							&the_item_do_not_use_this_name);           \
+#define strmap_put(m, s, i)                                                  \
+	do {                                                                     \
+		typeof((i)) the_item_do_not_use_this_name = (i);                     \
+		strmap_donotuse_put((void *)(m), strmap_donotuse_tozzstr((s)),       \
+							sizeof((m)[0]), &the_item_do_not_use_this_name); \
 	} while(0)
 
-#define strmap_get(m, s)                                                      \
-	({                                                                        \
-		(typeof(((m)->vals)))strmap_donotuse_get(                             \
-			(void *)(m), strmap_donotuse_tozzstr((s)), sizeof((m)->vals[0])); \
+#define strmap_get(m, s)                                                \
+	({                                                                  \
+		(typeof(((m))))strmap_donotuse_get(                             \
+			(void *)(m), strmap_donotuse_tozzstr((s)), sizeof((m)[0])); \
 	})
 
 #define strmap_del(m, s)                                                \

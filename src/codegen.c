@@ -235,6 +235,34 @@ static reg_t *calc_addr(node_t *node)
 
 void codegen_stmt(node_t *node);
 
+static reg_t *codegen_cast(node_t *node, reg_t *r)
+{
+	type_t *from_ty = node->lhs->type;
+	type_t *to_ty = node->type;
+	size_t from = from_ty->size;
+	size_t to = to_ty->size;
+	bool from_unsignd = from_ty->unsignd;
+	bool to_unsignd = to_ty->unsignd;
+
+	if(to_unsignd == from_unsignd && to == from) {
+		return r;
+	}
+
+	if(to >= from) {
+		return r;
+	}
+
+	reg_t *res = reg_make();
+
+	ir_inst_t *ext =
+		ir_inst_make(to_unsignd ? IR_INST_ZXT : IR_INST_SXT, res, r, NULL, 0);
+	ext->size = to;
+
+	ir_blk_add(outblk, ext);
+
+	return res;
+}
+
 /* generates code given AST tree */
 reg_t *codegen_expr(node_t *node)
 {
@@ -292,6 +320,10 @@ reg_t *codegen_expr(node_t *node)
 		}
 		return val;
 	}
+	case NODE_CAST: {
+		reg_t *val = codegen_expr(node->lhs);
+		return codegen_cast(node, val);
+	}
 	case NODE_ASSIGN: {
 		reg_t *lval = calc_addr(node->lhs);
 		reg_t *rval = codegen_expr(node->rhs);
@@ -303,8 +335,14 @@ reg_t *codegen_expr(node_t *node)
 		node_t *arg = node->fargs;
 		for(; arg; arg = arg->next) {
 			reg_t *argres = codegen_expr(arg);
+			reg_t *argres2 = reg_make();
+			ir_inst_t *ext =
+				ir_inst_make(arg->type->unsignd ? IR_INST_ZXT : IR_INST_SXT,
+							 argres2, argres, NULL, 0);
+			ext->size = arg->type->size;
+			ir_blk_add(outblk, ext);
 			callreg_t *callreg =
-				callreg_make(argres, ARG_CLASS_INTEGER, arg->type->size);
+				callreg_make(argres2, ARG_CLASS_INTEGER, arg->type->size);
 			list_append(callargs, callreg);
 		}
 		reg_t *res = reg_make();
@@ -450,6 +488,23 @@ void codegen_stmt(node_t *node)
 	switch(node->kind) {
 	case NODE_EXPR_STMT:
 		(void)codegen_expr(node->lhs);
+		break;
+
+	/* reuse case_blk for gotos, because why not? */
+	case NODE_GOTO:
+		if(!node->label_node->case_blk) {
+			node->label_node->case_blk = emit_blk();
+		}
+		emit_jmp(node->label_node->case_blk);
+		break;
+
+	case NODE_LABEL:
+		if(!node->case_blk) {
+			node->case_blk = emit_blk();
+		}
+		emit_jmp(node->case_blk);
+		outblk = node->case_blk;
+		codegen_stmt(node->then);
 		break;
 
 	case NODE_CASE:
@@ -683,6 +738,8 @@ static UNUSEDA void assign_globals(LIST(obj_t *) globals)
 		   glob->type->to->kind == TYPE_CHAR) {
 			glob->glob->is_str = true;
 		}
+
+		glob->glob->is_anon = glob->is_anon;
 	}
 	return;
 }
@@ -807,6 +864,9 @@ static void varopt(ir_func_t *func)
 				size_t sz = obj->type->size;
 				ins->type = ext ? IR_INST_SXT : IR_INST_ZXT;
 				ins->size = sz;
+				if(ins->size == 8) {
+					ins->type = IR_INST_MOV;
+				}
 				ins->r1 = replacement;
 				continue;
 			}

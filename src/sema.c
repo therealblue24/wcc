@@ -1,12 +1,15 @@
 #include "sema.h"
 #include "type.h"
 
+STRMAP(node_t *) goto_labels;
+
 static void sema_visit_core(node_t *node);
 static void sema_visit(node_t *node)
 {
 	if(!node) {
 		return;
 	}
+	node->visited = false;
 
 	sema_visit(node->lhs);
 	sema_visit(node->rhs);
@@ -22,6 +25,39 @@ static void sema_visit(node_t *node)
 	}
 
 	sema_visit_core(node);
+	return;
+}
+
+static void map_labels(node_t *node)
+{
+	if(!node) {
+		return;
+	}
+
+	map_labels(node->lhs);
+	map_labels(node->rhs);
+	map_labels(node->next);
+	map_labels(node->cond);
+	map_labels(node->then);
+	map_labels(node->elze);
+	map_labels(node->init);
+	map_labels(node->inc);
+
+	for(node_t *b = node->body; b; b = b->next) {
+		map_labels(b);
+	}
+
+	if(node->kind != NODE_LABEL || node->visited) {
+		return;
+	}
+
+	if(strmap_has(goto_labels, node->label)) {
+		compile_err_node(node, "duplicate label '%s'", node->label);
+	}
+
+	node->visited = true;
+	strmap_put(goto_labels, node->label, node);
+
 	return;
 }
 
@@ -41,6 +77,18 @@ static void sema_visit_core(node_t *node)
 			node->type->unsignd = true;
 		}
 		break;
+	case NODE_GOTO: {
+		node_t **to = strmap_get(goto_labels, node->label);
+		if(!to) {
+			compile_err_node(node, "label '%s' doesn't exist", node->label);
+		}
+
+		if(!(*to)) {
+			compile_err_node(node, "internal compiler error: '%s' is NULL",
+							 node->label);
+		}
+		node->label_node = *to;
+	}; break;
 	default:
 		break;
 	}
@@ -50,7 +98,10 @@ static void sema_visit_core(node_t *node)
 /* does the whole semantics thing */
 void sema_do(node_t *prog)
 {
+	goto_labels = strmap_make(node_t *);
+	map_labels(prog);
 	sema_visit(prog);
 	type_propagate(prog);
+	strmap_delete(goto_labels);
 	return;
 }

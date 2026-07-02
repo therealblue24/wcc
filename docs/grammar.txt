@@ -8,7 +8,9 @@ unary = ("+" | "-" | "*" | "&" | "~" | "!") unary
 		| "--" unary
 		| "sizeof" unary
 		| "_Alignof" unary         # extension
-mul = unary ("*" unary | "/" unary)*
+cast = unary
+		| "(" type-name ")" cast
+mul = cast ("*" cast | "/" cast | "%" cast)*
 add = mul ("+" mul | "-" mul)*
 shift = add ("<<" add | ">>" add)*
 relational = shift ("<" shift | "<=" shift | ">" shift | ">=" shift)*

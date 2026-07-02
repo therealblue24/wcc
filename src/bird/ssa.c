@@ -1027,64 +1027,9 @@ void ir_remove_blk(ir_func_t *func, ir_blk_t *blk)
 		ir_remove_pred(blk->succ[i], blk);
 	}
 
+	ir_blk_delete(func->blocks[indx]);
 	ordered_remove_blk(func->blocks, indx);
 
-	return;
-}
-
-/* removes a useless `jmp` block from CFG entirely */
-void ir_remove_jmpblk(ir_func_t *func, ir_blk_t *blk)
-{
-	size_t indx = find_blk(func->blocks, blk);
-	if(indx == (size_t)-1) {
-		return;
-	}
-
-	ir_inst_t *first = blk->insts;
-	for(;;) {
-		if(first->type == IR_INST_NOP) {
-			first = first->next;
-		} else
-			break;
-	}
-
-	/* can't remove if it is not a jmpblk */
-	if(first->type != IR_INST_JMP) {
-		return;
-	}
-
-	/* halting blks are the exception */
-	if(first->true_blk == blk) {
-		return;
-	}
-
-	/* 0 pred case */
-	if(list_len(blk->pred) == 0) {
-		goto rem;
-	}
-
-	/* want only 1 pred */
-	if(list_len(blk->pred) != 1) {
-		return;
-	}
-
-	ir_blk_t *from = blk->pred[0];
-	ir_blk_t *to = first->true_blk;
-	ir_reroute_pred(to, blk, from);
-
-	/* change refs to `blk` from `from` to `to` */
-	find_before_last_term_ins(from);
-
-	if(from->tail->true_blk == blk) {
-		from->tail->true_blk = to;
-	}
-	if(from->tail->false_blk == blk) {
-		from->tail->false_blk = to;
-	}
-
-	/* remove the block */
-rem:
-	ordered_remove_blk(func->blocks, indx);
 	return;
 }
 
@@ -1119,10 +1064,6 @@ static void fix_single_phi(ir_inst_t *phi, ir_blk_t *blk)
 /* fixs phi nodes */
 void ir_fix_phis(ir_func_t *func)
 {
-	ir_blk_flow(func);
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_remove_jmpblk(func, func->blocks[i]);
-	}
 	ir_blk_flow(func);
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];

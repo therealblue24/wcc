@@ -2,6 +2,7 @@
 #include "zz/arena.h"
 #include "zz/strmap.h"
 #include "parse.h"
+#include <stdint.h>
 
 type_t *TY_INT = &(type_t){ .kind = TYPE_INT,
 							.size = 4,
@@ -128,8 +129,32 @@ static type_t *type_deref(type_t *ty)
 
 static type_t *infer_type(uint64_t num)
 {
-	/* TODO: actual type inference */
-	return TY_LONG;
+	int64_t nums = (int64_t)num;
+	/* int */
+	if(INT32_MIN >= nums && nums <= INT32_MAX) {
+		return TY_INT;
+	}
+
+	/* unsigned int */
+	if(num <= UINT32_MAX) {
+		return TY_UINT;
+	}
+
+	/* long */
+	if(INT64_MIN >= nums && nums <= INT64_MAX) {
+		return TY_LONG;
+	}
+
+	return TY_ULONG;
+}
+
+/* can't miss the naming opportunity */
+static void fastcast(node_t **node, type_t *to)
+{
+	node_t *cast = node_unary(NODE_CAST, *node, (*node)->tok);
+	cast->type = to;
+	*node = cast;
+	return;
 }
 
 void type_propagate(node_t *node)
@@ -161,12 +186,20 @@ void type_propagate(node_t *node)
 		node->type = infer_type(node->num);
 		break;
 
-	case NODE_FUNCALL:
+	case NODE_FUNCALL:;
 		/* temporary: promotion of ints->long in calls */
 		for(node_t *a = node->fargs; a; a = a->next) {
-			a->type->size = 8;
+			if(type_is_int(a->type)) {
+				a->type = type_clone(a->type);
+				a->type->size = 8;
+			}
 		}
-		node->type = TY_LONG;
+		obj_t **fn = strmap_get(known_funcs, node->fname);
+		if(!fn) {
+			compile_err_node(node, "unknown function '%s'", node->fname);
+		} else {
+			node->type = (*fn)->type->to;
+		}
 		break;
 
 	case NODE_EQ:
@@ -202,6 +235,7 @@ void type_propagate(node_t *node)
 		break;
 	case NODE_ASSIGN:
 		node->type = node->lhs->type;
+		fastcast(&node, node->lhs->type);
 		if(node->lhs->type->kind == TYPE_VOID) {
 			compile_err(node->lhs->type->ident->loc, "invalid void decltype");
 		}

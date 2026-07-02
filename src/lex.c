@@ -151,11 +151,15 @@ static uint64_t zxt(uint64_t x, uint64_t size)
 	return x & m;
 }
 
-static uint64_t sxt(uint64_t x, uint64_t size)
+static uint64_t sxt(uint64_t x_, uint64_t size)
 {
-	/* thank you https://stackoverflow.com/a/17719010 */
-	uint64_t mask = 1ULL << (size - 1);
-	return (x ^ mask) - mask;
+	/* thank you https://graphics.stanford.edu/~seander/bithacks.html#FixedSignExtend */
+	int64_t x = x_;
+	int64_t r;
+	int64_t mask = 1ULL << (size - 1);
+	x = x & ((1ULL << size) - 1);
+	r = (x ^ mask) - mask;
+	return r;
 }
 
 static bool is_dec(char c)

@@ -9,11 +9,12 @@ void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
 }
 
 static void load_imm_lane(FILE *f, int reg, uint16_t i, uint16_t shift,
-						  int *keep)
+						  int *keep, int sz)
 {
 	char *kt = "zk";
+	char *ss = "xw";
 	if(i) {
-		fprintf(f, "\tmov%c x%d, #%hu", kt[*keep], reg, i);
+		fprintf(f, "\tmov%c %c%d, #%hu", kt[*keep], ss[sz], reg, i);
 		if(shift) {
 			fprintf(f, ", lsl #%hu", shift);
 		}
@@ -23,7 +24,24 @@ static void load_imm_lane(FILE *f, int reg, uint16_t i, uint16_t shift,
 	return;
 }
 
-/* loads an immediate into register `reg` */
+static void load_imm_w(FILE *f, int reg, uint32_t imm_)
+{
+	uint32_t imm = imm_;
+	int32_t imms = (int32_t)imm;
+
+	if(imms <= 4095 && imms >= -4095) {
+		fprintf(f, "\tmov w%d, #%d\n", reg, imms);
+		return;
+	}
+
+	int keep = 0;
+
+	load_imm_lane(f, reg, (imm >> 0) & 0xffff, 0, &keep, 1);
+	load_imm_lane(f, reg, (imm >> 16) & 0xffff, 16, &keep, 1);
+	return;
+}
+
+/* loads an immediate into `reg` */
 static void load_imm(FILE *f, int reg, uint64_t imm_)
 {
 	uint64_t imm = imm_;
@@ -34,12 +52,18 @@ static void load_imm(FILE *f, int reg, uint64_t imm_)
 		return;
 	}
 
+	/* load into w reg instead */
+	if((imm & 0xffffffff) == imm) {
+		load_imm_w(f, reg, imm);
+		return;
+	}
+
 	int keep = 0;
 
-	load_imm_lane(f, reg, (imm >> 0) & 0xffff, 0, &keep);
-	load_imm_lane(f, reg, (imm >> 16) & 0xffff, 16, &keep);
-	load_imm_lane(f, reg, (imm >> 32) & 0xffff, 32, &keep);
-	load_imm_lane(f, reg, (imm >> 48) & 0xffff, 48, &keep);
+	load_imm_lane(f, reg, (imm >> 0) & 0xffff, 0, &keep, 0);
+	load_imm_lane(f, reg, (imm >> 16) & 0xffff, 16, &keep, 0);
+	load_imm_lane(f, reg, (imm >> 32) & 0xffff, 32, &keep, 0);
+	load_imm_lane(f, reg, (imm >> 48) & 0xffff, 48, &keep, 0);
 
 	return;
 }
@@ -77,6 +101,58 @@ void ir_prog_end_aarch64_apple(FILE *f, ir_prog_t *prog)
 	return;
 }
 
+static void print_escaped_chr(FILE *f, char c)
+{
+	switch(c) {
+	case '\a':
+		fprintf(f, "\\a");
+		return;
+	case '\b':
+		fprintf(f, "\\b");
+		return;
+	case '\f':
+		fprintf(f, "\\f");
+		return;
+	case '\n':
+		fprintf(f, "\\n");
+		return;
+	case '\r':
+		fprintf(f, "\\n");
+		return;
+	case '\t':
+		fprintf(f, "\\t");
+		return;
+	case '\v':
+		fprintf(f, "\\v");
+		return;
+	case '\\':
+		fprintf(f, "\\");
+		return;
+	case '\'':
+		fprintf(f, "\\'");
+		return;
+	case '\"':
+		fprintf(f, "\\\"");
+		return;
+	case '\?':
+		fprintf(f, "\\?");
+		return;
+	case 0:
+		fprintf(f, "\\0");
+		return;
+	default:
+		fprintf(f, "\\x%02x", c);
+		return;
+	}
+
+	return;
+}
+
+static bool is_escapeprintable(int c)
+{
+	return c == '\\' || c == '\'' || c == '\"';
+}
+
 static void emit_str(FILE *f, const char *str, size_t len)
 {
 	if(str[len - 1]) {
@@ -87,10 +163,10 @@ static void emit_str(FILE *f, const char *str, size_t len)
 	}
 
 	for(size_t i = 0; i < len; i++) {
-		if(isprint(str[i])) {
+		if(isprint(str[i]) && !is_escapeprintable(str[i])) {
 			fputc(str[i], f);
 		} else {
-			fprintf(f, "\\x%02x", str[i]);
+			print_escaped_chr(f, str[i]);
 		}
 	}
 
@@ -99,7 +175,9 @@ static void emit_str(FILE *f, const char *str, size_t len)
 
 void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
 {
-	fprintf(f, "\t.globl _%s\n", glob->name);
+	if(!glob->is_anon) {
+		fprintf(f, "\t.globl _%s\n", glob->name);
+	}
 	fprintf(f, "\t.data\n");
 	if(!glob->has_data) {
 		fprintf(f, "\t.zerofill __DATA, __common, _%s, %zu, %zu\n", glob->name,
@@ -204,6 +282,7 @@ static void ir_ins_abi_call_aarch64(FILE *f, ir_func_t *func, ir_blk_t *blk,
 	UNUSED(blk);
 	UNUSED(r1);
 	UNUSED(r2);
+
 	size_t alen = list_len(args);
 	size_t stack_indx = 0;
 	size_t space_needed = 0;
@@ -559,7 +638,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 	return;
 }
 
-static int ir_func_save_regs(FILE *f, ir_func_t *fun)
+static int ir_func_save_regs_callee(FILE *f, ir_func_t *fun)
 {
 	bool *used_copy = zcalloc(arm_reg_count, sizeof(bool));
 	memcpy(used_copy, fun->alloc_used, arm_reg_count * sizeof(bool));
@@ -597,7 +676,7 @@ static int ir_func_save_regs(FILE *f, ir_func_t *fun)
 	return ret;
 }
 
-static void ir_func_restore_regs(FILE *f, ir_func_t *fun, int save)
+static void ir_func_restore_regs_callee(FILE *f, ir_func_t *fun, int save)
 {
 	if(save != -1) {
 		fprintf(f, "\tldr x%d, [sp], #16\n", arm_reg[save]);
@@ -636,12 +715,7 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 	/* enter stack frame */
 	size_t alignd = align_to(fun->stack_needed, 16);
 	fprintf(f, "\tstp fp, lr, [sp, #-16]!\n");
-	int save = ir_func_save_regs(f, fun);
-
-	if(fun->align_needed > 16) {
-		fprintf(f, "\tmov x28, sp\n");
-		fprintf(f, "\tand sp, x28, #-%zu\n", fun->align_needed);
-	}
+	int save = ir_func_save_regs_callee(f, fun);
 
 	fprintf(f, "\tmov fp, sp\n");
 
@@ -702,12 +776,8 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 
 	/* leave stack frame */
 	fprintf(f, ".L%s_ret:\n", fun->name);
-	if(fun->align_needed <= 16) {
-		fprintf(f, "\tmov sp, fp\n");
-	} else {
-		fprintf(f, "\tmov sp, x28\n");
-	}
-	ir_func_restore_regs(f, fun, save);
+	fprintf(f, "\tmov sp, fp\n");
+	ir_func_restore_regs_callee(f, fun, save);
 	fprintf(f, "\tldp fp, lr, [sp], #16\n");
 	fprintf(f, "\tret\n");
 	fprintf(f, "\n");

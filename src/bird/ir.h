@@ -205,6 +205,7 @@ typedef struct ir_global {
 	size_t align; /* alignment of this global variable */
 	bool has_data; /* is this global variable initalized with data? */
 	bool is_str; /* is this global a string? */
+	bool is_anon; /* is this global meant to be global? */
 	uint8_t *data; /* if so, the data */
 } ir_global_t;
 
@@ -333,6 +334,9 @@ ir_blk_t *ir_blk_make(ir_inst_t *insts);
 
 /* delete an IR block */
 void ir_blk_delete(ir_blk_t *blk);
+
+/* delete an IR block and instructions */
+void ir_blk_delete_all(ir_blk_t *blk);
 
 /* make an IR function */
 ir_func_t *ir_func_make(char *name);

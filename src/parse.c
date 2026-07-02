@@ -61,6 +61,10 @@ void node_delete_all(node_t *root)
 		free(root->fname);
 	}
 
+	if(root->label) {
+		free(root->label);
+	}
+
 #undef del
 	node_delete(root);
 	return;
@@ -149,8 +153,9 @@ obj_t *obj_make_str(token_t *str)
 	char *name;
 	asprintf(&name, ".str%ld", runk(0));
 	obj_t *obj = obj_make_global(name, str->type, false);
+	obj->is_anon = true;
 	obj->data = (void *)str->str;
-	obj->data_size = strlen(str->str);
+	obj->data_size = str->len;
 	return obj;
 }
 
@@ -159,6 +164,7 @@ obj_t *obj_make_anon(type_t *type)
 	char *name;
 	asprintf(&name, ".anon%ld", runk(0));
 	obj_t *obj = obj_make_noadd(name, type, false);
+	obj->is_anon = true;
 	return obj;
 }
 
@@ -220,6 +226,7 @@ static node_t *parse_expr(token_t *tok, token_t **rest);
 static node_t *parse_prim(token_t *tok, token_t **rest);
 static node_t *parse_postfix(token_t *tok, token_t **rest);
 static node_t *parse_unary(token_t *tok, token_t **rest);
+static node_t *parse_cast(token_t *tok, token_t **rest);
 static node_t *parse_relational(token_t *tok, token_t **rest);
 static node_t *parse_equality(token_t *tok, token_t **rest);
 static node_t *parse_add(token_t *tok, token_t **rest);
@@ -792,6 +799,28 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 		return def_node;
 	}
 
+	/* goto */
+	if(token_eat(&tok, "goto")) {
+		node_t *goto_node = node_make(NODE_GOTO, save);
+		if(tok->kind != TOK_IDENT) {
+			compile_err(tok->loc, "expected an identifier");
+		}
+		goto_node->label = mystrndup(tok->loc, tok->len);
+		tok = token_skip(tok->next, ";");
+		*rest = tok;
+		return goto_node;
+	}
+
+	/* label: */
+	if(tok->kind == TOK_IDENT && tok->next && token_eq(tok->next, ":")) {
+		node_t *lbl = node_make(NODE_LABEL, tok);
+		lbl->label = mystrndup(tok->loc, tok->len);
+		tok = tok->next->next;
+		lbl->then = parse_stmt(tok, &tok);
+		*rest = tok;
+		return lbl;
+	}
+
 	/* compound-stmt */
 	if(token_eq(tok, "{")) {
 		node_t *compound_stmt = parse_compound_stmt(tok, &tok);
@@ -1006,22 +1035,22 @@ parse:
 
 static node_t *parse_mul(token_t *tok, token_t **rest)
 {
-	node_t *node = parse_unary(tok, rest);
+	node_t *node = parse_cast(tok, rest);
 	tok = *rest;
 
 parse:
 	if(token_eq(tok, "*")) {
-		node = node_bin(NODE_MUL, node, parse_unary(tok->next, &tok), tok);
+		node = node_bin(NODE_MUL, node, parse_cast(tok->next, &tok), tok);
 		goto parse;
 	}
 
 	if(token_eq(tok, "/")) {
-		node = node_bin(NODE_DIV, node, parse_unary(tok->next, &tok), tok);
+		node = node_bin(NODE_DIV, node, parse_cast(tok->next, &tok), tok);
 		goto parse;
 	}
 
 	if(token_eq(tok, "%")) {
-		node = node_bin(NODE_MOD, node, parse_unary(tok->next, &tok), tok);
+		node = node_bin(NODE_MOD, node, parse_cast(tok->next, &tok), tok);
 		goto parse;
 	}
 
@@ -1270,6 +1299,32 @@ static node_t *parse_unary(token_t *tok, token_t **rest)
 	return parse_postfix(tok, rest);
 }
 
+static node_t *parse_cast(token_t *tok, token_t **rest)
+{
+	token_t *save = tok;
+	node_t *node;
+	if(token_eq(tok, "(")) {
+		/* TODO: hack */
+		node = node_unary(NODE_CAST, NULL, tok);
+		tok = tok->next;
+		if(!is_declspec(tok)) {
+			goto unary;
+		}
+		node->type = parse_declspec(tok, &tok);
+		if(node->type->size != node->type->align) {
+			compile_err_node(node, "invalid cast type");
+		}
+		tok = token_skip(tok, ")");
+		node->lhs = parse_cast(tok, &tok);
+		*rest = tok;
+		return node;
+	}
+unary:;
+	node = parse_unary(save, &tok);
+	*rest = tok;
+	return node;
+}
+
 static type_t *parse_parameter_declaration(token_t *tok, token_t **rest)
 {
 	type_t *base = parse_declspec(tok, &tok);
@@ -1379,8 +1434,6 @@ end:
 		return NULL;
 	}
 
-	strmap_put(known_funcs, func->name, func);
-
 	func->body = parse_compound_stmt(tok, &tok);
 	*rest = tok;
 	return func;
@@ -1442,7 +1495,6 @@ out:
 	strmap_iter(globals, key, val, { list_append(globals_list, val); });
 	qsort(globals_list, list_len(globals_list), sizeof(obj_t *), cmp_order);
 	strmap_delete(globals);
-	strmap_delete(known_funcs);
 
 	return (parse_res_t){ .globals = globals_list };
 }
