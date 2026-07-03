@@ -1,4 +1,4 @@
-#include "bird/ir.h"
+#include "bird.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include "zz/base.h"

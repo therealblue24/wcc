@@ -1,10 +1,9 @@
 #include "codegen.h"
-#include "bird/ssa.h"
+#include "bird.h"
 #include "parse.h"
 #include "type.h"
 #include "zz/list.h"
 #include <stdlib.h>
-#include "bird/bird.h"
 
 static ir_func_t *fun;
 static obj_t *fun_obj;

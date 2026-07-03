@@ -7,10 +7,10 @@ BINDIR = bin
 APP = wcc
 
 # default compiler flags
-CFLAGS = -std=c11 -Wall -Wextra -Isrc -Isrc/bird -g3
+CFLAGS = -std=c11 -Wall -Wextra -Isrc -Ibird/src -g3
 CFLAGS += -MMD -MP
 # default linker flags
-LDFLAGS = 
+LDFLAGS = -Lbin
 
 # Optimize code (-Os, etc)
 RELEASE ?= no
@@ -98,7 +98,6 @@ dirs:
 	@# Create bin dir
 	@mkdir -p $(BINDIR)
 	@mkdir -p $(BINDIR)/zz
-	@mkdir -p $(BINDIR)/bird
 
 # compile each single file
 $(BINDIR)/%.o: src/%.c
@@ -111,21 +110,27 @@ $(BINDIR)/%.o: src/%.c
 # build target
 build: dirs $(OBJ)
 
+# build `bIRd`
+build-bird:
+	make -C bird RELEASE=$(RELEASE) CODE_REVIEW=$(CODE_REVIEW) SANITIZERS=$(SANITIZERS) FORTIFY=$(FORTIFY)
+
 # compile target
 $(BINDIR)/$(APP): link
 
 compile: build link
 
 # link target
-link: build
+link: build build-bird
+	@cp bird/bin/libbird.a $(BINDIR)/libbird.a
 	@echo "linking $(APP)"
-	@$(CC) -o $(BINDIR)/$(APP) $(LDFLAGS) $(OBJ)
+	@$(CC) -o $(BINDIR)/$(APP) $(LDFLAGS) $(OBJ) -lbird
 	@echo "made $(APP)"
 
 # remove bins
 clean:
 	@echo "cleaning"
 	rm -rf $(BINDIR)
+	@make -C bird clean
 	@echo "cleaned"
 
 # test app

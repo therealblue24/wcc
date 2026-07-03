@@ -895,13 +895,6 @@ static int ins_proves_live(enum ins_type t)
 		   t == IR_INST_CALL || ir_inst_is_term(t);
 }
 
-static int ins_side_effect(enum ins_type t)
-{
-	return t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORESS ||
-		   t == IR_INST_CALL || ir_inst_is_term(t) || t == IR_INST_LOAD ||
-		   t == IR_INST_LOADS || t == IR_INST_LOADSS;
-}
-
 static int ins_has_imm(enum ins_type t)
 {
 	return t == IR_INST_IMM || t == IR_INST_LEAS || t == IR_INST_LOADS ||
