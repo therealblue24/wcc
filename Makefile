@@ -91,8 +91,10 @@ help:
 	@echo "FORTIFY\t\tyes/no to fortify code"
 	@echo "TESTARGS\targs to pass to 'make test'"
 
+SRC_PLUS_BIRD = $(SRC) $(shell find src -name "*.h") $(shell find bird/src/ -name "*.c") $(shell find bird/src/ -name "*.h")
+
 count:
-	@cloc $(SRC) $(shell find src -name "*.h")
+	@cloc $(SRC_PLUS_BIRD)
 
 dirs:
 	@# Create bin dir
