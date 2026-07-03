@@ -429,7 +429,7 @@ static void read_full_num(uint64_t *num_, type_t **ty_, char *p, char **rest)
 }
 
 /* read a single (possibly escaped) character */
-static char read_chr(char *prog, char **rest)
+static uint8_t read_chr(char *prog, char **rest)
 {
 	char *p = prog;
 	if(*p != '\\') {
@@ -438,7 +438,7 @@ static char read_chr(char *prog, char **rest)
 	}
 
 	p++;
-	char res = 0;
+	uint8_t res = 0;
 	switch(*p) {
 #define CASE(c, v) \
 	case c:        \
@@ -598,16 +598,14 @@ token_t *lex_do(char *prog, token_t **end)
 		if(*prog == '\'') {
 			char *chr = prog + 1;
 
-			char content = read_chr(chr, &chr);
-			char *str = zalloc(2);
-			str[0] = content;
+			uint8_t content = read_chr(chr, &chr);
 			if(*chr != '\'') {
 				compile_err(prog, "unclosed character literal");
 			}
 
-			token_t *chrlit = token_make(TOK_STR, chr, chr);
-			chrlit->str = str;
-			chrlit->type = TY_CHAR;
+			token_t *chrlit = token_make(TOK_NUM, prog, chr);
+			chrlit->num = content;
+			chrlit->type = TY_INT;
 			chrlit->start_line = start_line;
 			start_line = 0;
 			prog = chr + 1;
