@@ -112,7 +112,7 @@ build: dirs $(OBJ)
 
 # build `bIRd`
 build-bird:
-	make -C bird RELEASE=$(RELEASE) CODE_REVIEW=$(CODE_REVIEW) SANITIZERS=$(SANITIZERS) FORTIFY=$(FORTIFY)
+	@make -C bird RELEASE=$(RELEASE) CODE_REVIEW=$(CODE_REVIEW) SANITIZERS=$(SANITIZERS) FORTIFY=$(FORTIFY)
 
 # compile target
 $(BINDIR)/$(APP): link
