@@ -63,7 +63,6 @@ static void map_labels(node_t *node)
 
 static void sema_visit_core(node_t *node)
 {
-	type_propagate(node);
 	switch(node->kind) {
 	case NODE_LT:
 	case NODE_LE:
@@ -101,7 +100,6 @@ void sema_do(node_t *prog)
 	goto_labels = strmap_make(node_t *);
 	map_labels(prog);
 	sema_visit(prog);
-	type_propagate(prog);
 	strmap_delete(goto_labels);
 	return;
 }

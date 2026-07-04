@@ -282,6 +282,11 @@ static type_t *parse_declspec(token_t *tok, token_t **rest);
 static node_t *parse_initializer(token_t *tok, token_t **rest);
 static type_t *parse_direct_declarator(type_t *root, token_t *tok,
 									   token_t **rest);
+static type_t *parse_abstract_declarator(type_t *root, token_t *tok,
+										 token_t **rest);
+static type_t *parse_direct_abstract_declarator(type_t *root, token_t *tok,
+												token_t **rest);
+static type_t *parse_type_name(token_t *tok, token_t **rest);
 static type_t *parse_declarator(type_t *root, token_t *tok, token_t **rest);
 static node_t *parse_init_declarator(type_t *root, token_t *tok,
 									 token_t **rest);
@@ -465,6 +470,60 @@ static type_t *parse_direct_declarator(type_t *root, token_t *tok,
 
 	*rest = tok;
 	return type;
+}
+
+static type_t *parse_abstract_declarator(type_t *root, token_t *tok,
+										 token_t **rest)
+{
+	type_t *ty = root;
+parse:
+	if(token_eq(tok, "*")) {
+		tok = token_skip(tok, "*");
+		ty = type_ptr_to(ty);
+		goto parse;
+	}
+
+	if(token_eq(tok, "(") || token_eq(tok, "[")) {
+		ty = parse_direct_abstract_declarator(ty, tok, &tok);
+		goto parse;
+	}
+
+	*rest = tok;
+	return ty;
+}
+
+static type_t *parse_direct_abstract_declarator(type_t *root, token_t *tok,
+												token_t **rest)
+{
+	type_t *ty = root;
+parse:
+	if(token_eq(tok, "(")) {
+		tok = token_skip(tok, "(");
+		ty = parse_abstract_declarator(ty, tok, &tok);
+		tok = token_skip(tok, ")");
+		goto parse;
+	}
+
+	if(token_eq(tok, "[")) {
+		tok = token_skip(tok, "[");
+		if(tok->kind != TOK_NUM) {
+			compile_err(tok->loc, "invalid array length");
+		}
+		ty = type_arr_to(ty, tok->num);
+		tok = token_skip(tok->next, "]");
+		goto parse;
+	}
+
+	*rest = tok;
+	return ty;
+}
+
+static type_t *parse_type_name(token_t *tok, token_t **rest)
+{
+	type_t *declspec = parse_declspec(tok, &tok);
+	type_t *complete = parse_abstract_declarator(declspec, tok, &tok);
+	*rest = tok;
+	return complete;
 }
 
 static type_t *parse_declarator(type_t *root, token_t *tok, token_t **rest)
@@ -1384,16 +1443,30 @@ static node_t *parse_unary(token_t *tok, token_t **rest)
 
 	if(token_eq(tok, "sizeof")) {
 		tok = token_skip(tok, "sizeof");
-		node_t *expr = parse_unary(tok, &tok);
+		type_t *ty;
+		if(token_eq(tok, "(") && tok->next && is_declspec(tok->next)) {
+			ty = parse_type_name(tok->next, &tok);
+			tok = token_skip(tok, ")");
+		} else {
+			node_t *expr = parse_unary(tok, &tok);
+			ty = expr->type;
+		}
 		*rest = tok;
-		return node_num(expr->type->size, tok);
+		return node_num(ty->size, tok);
 	}
 
 	if(token_eq(tok, "_Alignof")) {
 		tok = token_skip(tok, "_Alignof");
-		node_t *expr = parse_unary(tok, &tok);
+		type_t *ty;
+		if(token_eq(tok, "(") && tok->next && is_declspec(tok->next)) {
+			ty = parse_type_name(tok->next, &tok);
+			tok = token_skip(tok, ")");
+		} else {
+			node_t *expr = parse_unary(tok, &tok);
+			ty = expr->type;
+		}
 		*rest = tok;
-		return node_num(expr->type->align, tok);
+		return node_num(ty->align, tok);
 	}
 
 	/* pre increment/decrement */
@@ -1425,16 +1498,12 @@ static node_t *parse_cast(token_t *tok, token_t **rest)
 	token_t *save = tok;
 	node_t *node;
 	if(token_eq(tok, "(")) {
-		/* TODO: hack */
 		node = node_unary(NODE_CAST, NULL, tok);
 		tok = tok->next;
 		if(!is_declspec(tok)) {
 			goto unary;
 		}
-		node->type = parse_declspec(tok, &tok);
-		if(node->type->size != node->type->align) {
-			compile_err_node(node, "invalid cast type");
-		}
+		node->type = parse_type_name(tok, &tok);
 		tok = token_skip(tok, ")");
 		node->lhs = parse_cast(tok, &tok);
 		*rest = tok;

@@ -173,6 +173,56 @@ static void fastcast(node_t **node, type_t *to)
 	return;
 }
 
+/* 6.3.1.8 usual arithmetic conversions */
+static type_t *usual_arith_conv_type(type_t *lt, type_t *rt)
+{
+	type_t *promote_to;
+
+	/* if pointers are involved, decay the left pointer and use that */
+	if(type_is_ptr(lt) || type_is_ptr(rt)) {
+		promote_to = type_ptr_to(lt->to);
+		goto promote;
+	} else {
+		/* promote both sides to "natural" integer if it's shorter */
+		if(lt->size < 4) {
+			lt = lt->unsignd ? TY_UINT : TY_INT;
+		}
+		if(rt->size < 4) {
+			rt = rt->unsignd ? TY_UINT : TY_INT;
+		}
+
+		/* if sizes are incompatible, select greater one */
+		if(lt->size != rt->size) {
+			promote_to = lt->size >= rt->size ? lt : rt;
+			goto promote;
+		}
+
+		/* unsigned takes precedence */
+		if(lt->unsignd) {
+			promote_to = lt;
+			goto promote;
+		}
+		if(rt->unsignd) {
+			promote_to = rt;
+			goto promote;
+		}
+
+		/* both are same */
+		promote_to = lt;
+		goto promote;
+	}
+promote:
+	return promote_to;
+}
+
+static void usual_arith_conv(node_t **lhs, node_t **rhs)
+{
+	type_t *promote_to = usual_arith_conv_type((*lhs)->type, (*rhs)->type);
+	fastcast(lhs, promote_to);
+	fastcast(rhs, promote_to);
+	return;
+}
+
 void type_propagate(node_t *node)
 {
 	if(!node) {
@@ -248,16 +298,20 @@ void type_propagate(node_t *node)
 	case NODE_MOD:
 	case NODE_LOGAND:
 	case NODE_LOGOR:
-	case NODE_LOGNEG:
 	case NODE_EOR:
 	case NODE_MUL:
 	case NODE_DIV:
-	case NODE_NEG:
+		usual_arith_conv(&node->lhs, &node->rhs);
 		node->type = node->lhs->type;
 		break;
+	case NODE_LOGNEG:
+	case NODE_NEG:
+		node->type = usual_arith_conv_type(TY_INT, node->lhs->type);
+		fastcast(&node->lhs, node->type);
+		break;
 	case NODE_ASSIGN:
+		fastcast(&node->rhs, node->lhs->type);
 		node->type = node->lhs->type;
-		fastcast(&node, node->lhs->type);
 		if(node->lhs->type->kind == TYPE_VOID) {
 			compile_err(node->lhs->type->ident->loc, "invalid void decltype");
 		}

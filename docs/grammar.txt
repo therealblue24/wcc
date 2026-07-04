@@ -27,8 +27,14 @@ expr = assign
 expr-stmt = expr? ";"
 type-specifier = "_Bool" | "void" | "char" | "short" | "int" | "long" | "signed" | "unsigned"
 alignment-specifier = "_Alignas" "(" num ")"
+# Struct declarations not included here because the parsing is technically wrong.
 declspec = (type-specifier | alignment-specififer)*
 direct-declarator = ident ("[" num "]")*
+abstract-declarator = pointer
+					 | pointer? direct-abstract-declarator
+direct-abstract-declarator = "(" abstract-declarator ")"
+							| direct-abstract-declarator? "[" num "]"
+type-name = declspec abstract-declarator?
 declarator = "*"* direct-declarator
 initalizer = expr
 init-declarator = declarator

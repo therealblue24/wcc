@@ -33,5 +33,7 @@ int main()
 		div_round(&div, &rem, &num, den);
 	}
 
+	print_num_unsignd(div);
+	print_num_unsignd(rem);
 	return div == 1u && rem == 44667u;
 }

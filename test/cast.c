@@ -9,5 +9,11 @@ int main()
 	long d = (unsigned long)truncate;
 	_Bool ok2 = d == 255;
 
-	return (int)ok1 == (short)ok2 && (char)ok1 == 1;
+	long negative_one = ({
+		long very_real_variable;
+		very_real_variable = -1;
+		very_real_variable;
+	});
+
+	return (int)ok1 == (short)ok2 && (char)ok1 == 1 && negative_one == (long)-1;
 }

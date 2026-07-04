@@ -1164,19 +1164,36 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		ir_blk_liveness(func);
 		ir_placemarks(func);
 
-		/* dead code elim + extras */
+		/* dead code elim */
 		{
 			ir_fix(func);
-			change |= ir_dce(func);
+
 			change |= ir_adce(func);
 			ir_blk_liveness(func);
+			change |= ir_dce(func);
+		}
+
+		/* move elimination */
+		{
 			change |= ir_imm_elim(func);
 			change |= ir_mov_elim(func);
-			change |= ir_simpleopt(func);
+		}
 
+		/* peephole opts */
+		{
+			change |= ir_simpleopt(func);
 			ir_fix_phis(func);
+		}
+
+		/* folding */
+
+		{
 			change |= ir_fold(func);
 			ir_fix_phis(func);
+		}
+
+		/* SSA-related opts */
+		{
 			change |= ir_phiopt(func);
 			ir_fix_phis(func);
 			ir_nopremover(func);
@@ -1186,7 +1203,6 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		/* branch opts */
 		{
 			change |= ir_branchopt(func);
-			// fix_phis(func);
 			ir_nopremover(func);
 			ir_fix(func);
 		}
@@ -1199,8 +1215,6 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			ir_nopremover(func);
 			ir_fix(func);
 		}
-
-		/* todo: simpleopts */
 
 		if(!change) {
 			break;
