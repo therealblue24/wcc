@@ -96,6 +96,7 @@ typedef struct reg {
 	long def; /* when this reg was defined */
 	long last_use; /* when this reg was last used */
 	bool spilld; /* is this reg spilled? */
+	int64_t spill_cost; /* cost of spilling this reg */
 	uint64_t imm; /* immediate associated with this reg */
 	long off; /* stack offset of register */
 
@@ -173,6 +174,7 @@ typedef struct ir_blk {
 
 	/* register allocation stuff */
 	bool visited;
+	uint64_t loop_order; /* how much times this block is reached when visited */
 	LIST(struct ir_blk *) succ; /* block's successors */
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */

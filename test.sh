@@ -24,7 +24,7 @@ assert() {
     return
   fi
 
-  # cp prog.s asm/$actual
+  cp prog.s asm/$actual
   cc -o prog prog.s one.o && ./prog
   status="$?"
   rm prog prog.s

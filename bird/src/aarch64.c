@@ -85,8 +85,8 @@ static int load_fp_imm_x10(FILE *f, long off, bool save)
 	return 1;
 }
 
-static int arm_reg[9] = { 19, 20, 21, 22, 23, 24, 25, 26, 27 };
-static const int arm_reg_count = 9;
+static int arm_reg[10] = { 19, 20, 21, 22, 23, 24, 25, 26, 27, 28 };
+static const int arm_reg_count = 10;
 
 void ir_prog_begin_aarch64_apple(FILE *f, ir_prog_t *prog)
 {

@@ -49,7 +49,8 @@ static void fill_succ_pred(ir_blk_t *blk)
 	blk->visited = true;
 
 	/* find the last inst. */
-	ir_inst_t *flow = find_last_or_flow_ins(blk->insts);
+	blk->tail = find_last_or_flow_ins(blk->insts);
+	ir_inst_t *flow = blk->tail;
 	if(flow->type == IR_INST_RET) {
 		blk->returns = true;
 		return;
@@ -127,6 +128,7 @@ static void reset_blk(ir_blk_t *blk)
 	list_hdr(blk->regs_def)->size = 0;
 	list_hdr(blk->regs_in)->size = 0;
 	list_hdr(blk->regs_out)->size = 0;
+	blk->loop_order = 0;
 }
 
 static void reset_fun(ir_func_t *fun)
@@ -135,6 +137,29 @@ static void reset_fun(ir_func_t *fun)
 		reset_blk(fun->blocks[i]);
 		fun->blocks[i]->visited = false;
 	}
+}
+
+static void loop_visit(ir_blk_t *blk)
+{
+	blk->loop_order++;
+	if(blk->visited) {
+		return;
+	} else {
+		blk->loop_order = 0;
+		blk->visited = true;
+	}
+
+	ir_inst_t *flow = blk->tail;
+
+	if(flow->true_blk) {
+		loop_visit(flow->true_blk);
+	}
+
+	if(flow->false_blk) {
+		loop_visit(flow->false_blk);
+	}
+
+	return;
 }
 
 void ir_blk_reguse(ir_func_t *fun)
@@ -148,6 +173,7 @@ void ir_blk_reguse(ir_func_t *fun)
 	for(size_t i = 0; i < block_amount; i++) {
 		fill_ins_outs(fun->blocks[i]);
 	}
+	loop_visit(fun->blocks[0]);
 	return;
 }
 
@@ -296,12 +322,53 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 	return allocated;
 }
 
+#define ACC(reg, cost)                   \
+	do {                                 \
+		if((reg)) {                      \
+			(reg)->spill_cost += (cost); \
+		}                                \
+	} while(0)
+
+/* calculates spill costs for each register */
+static void calculate_spill_costs(LIST(reg_t *) allocated, ir_func_t *fun)
+{
+	/* reset costs */
+	for(size_t i = 0; i < list_len(allocated); i++) {
+		reg_t *r = allocated[i];
+		int64_t range = r->last_use - r->def;
+		r->spill_cost = -range;
+	}
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		/* first, make sure registers in loops are extra costly to spill */
+		if(blk->loop_order) {
+			/* they better shoot into the goal */
+			int64_t penalty = blk->loop_order * 250;
+			for(size_t i = 0; i < list_len(blk->regs_def); i++) {
+				blk->regs_def[i]->spill_cost += penalty;
+			}
+		}
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			ACC(inst->r0, 1);
+			ACC(inst->r1, 1);
+			ACC(inst->r2, 1);
+
+			if(inst->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(inst->call_args); j++) {
+					ACC(inst->call_args[j]->r, 1);
+				}
+			}
+		}
+	}
+}
+
 static int spill_register(reg_t **regs, int amount)
 {
-	/* choose the one with the last last use */
+	/* choose the one with least cost */
 	int reg = 0;
 	for(size_t i = 0; i < (size_t)amount; i++) {
-		if(regs[reg]->last_use < regs[i]->last_use) {
+		if(regs[i]->spill_cost < regs[reg]->spill_cost) {
 			reg = i;
 		}
 	}
@@ -605,16 +672,38 @@ static bool ir_choose_alloc_strat(ir_func_t *fun, int amount, int callee_cost,
 	return true; /* how did you get here? */
 }
 
+static bool ins_has_side_effects(enum ins_type t)
+{
+	return t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORESS ||
+		   t == IR_INST_CALL;
+}
+
+static bool ins_has_reg(ir_inst_t *inst, reg_t *r)
+{
+	if(inst->r0 && inst->r0->rr == r->rr) {
+		return true;
+	}
+	if(inst->r1 && inst->r1->rr == r->rr) {
+		return true;
+	}
+	if(inst->r2 && inst->r2->rr == r->rr) {
+		return true;
+	}
+	if(inst->type == IR_INST_CALL) {
+		for(size_t i = 0; i < list_len(inst->call_args); i++) {
+			if(inst->call_args[i]->r->rr == r->rr) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 static int ir_simplify(ir_func_t *fun, int amount, enum ir_arch arch)
 {
+	UNUSED(amount);
 	int change = 0;
-	long *imm = zcalloc(amount, sizeof(long));
-	bool *are_imm = zcalloc(amount, sizeof(bool));
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		for(size_t i = 0; i < (size_t)amount; i++) {
-			are_imm[i] = false;
-			imm[i] = 0;
-		}
 		ir_blk_t *blk = fun->blocks[i];
 
 		ir_inst_t *nxt = blk->insts;
@@ -715,33 +804,36 @@ static int ir_simplify(ir_func_t *fun, int amount, enum ir_arch arch)
 				change = 1;
 			}
 
-			/* seed immediate values */
-
-			if(ins->type == IR_INST_IMM) {
-				/* remove useless immediate loads */
-				if(are_imm[ins->r0->rr] &&
-				   ins->imm == (uint64_t)imm[ins->r0->rr]) {
-					change = 1;
-					ins->type = IR_INST_NOP;
-				}
-				are_imm[ins->r0->rr] = 1;
-				imm[ins->r0->rr] = ins->imm;
-			} else if(ins->r0) {
-				are_imm[ins->r0->rr] = 0;
+			/* rewrite
+			 * %r0 = imm #x
+			 * %r0 = op
+			 * to just
+			 * nop (useless imm load)
+			 * %r0 = op
+			 */
+			if(nxt && ins->r0 && nxt->r0 && ins->type == IR_INST_IMM &&
+			   nxt->r0->rr == ins->r0->rr && !ins_has_reg(nxt, ins->r0)) {
+				ins->type = IR_INST_NOP;
+				change = 1;
 			}
 
-			if(ins->type == IR_INST_MOV && are_imm[ins->r1->rr]) {
+			/* rewrite
+			 * %r0 = pure_op
+			 * %r0 = other_op
+			 * to just
+			 * nop
+			 * %r0 = other_op
+			 */
+			if(nxt && ins->r0 && nxt->r0 && !ins_has_side_effects(ins->type) &&
+			   !ins_has_reg(nxt, ins->r0) && ins->r0->rr == nxt->r0->rr) {
+				ins->type = IR_INST_NOP;
 				change = 1;
-				ins->type = IR_INST_IMM;
-				ins->imm = imm[ins->r1->rr];
 			}
 		}
 
 		ir_nopremover(fun);
 	}
 
-	free(imm);
-	free(are_imm);
 	return change;
 }
 
@@ -753,6 +845,7 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 	ir_blk_reguse(fun);
 	ir_blk_fixup_entry(fun);
 	LIST(reg_t *) allocated = ir_blk_reglive(fun);
+	calculate_spill_costs(allocated, fun);
 	ir_regalloc(allocated, amount);
 	ir_fix(fun);
 	ir_regalloc_spill(fun, allocated);

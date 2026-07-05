@@ -16,6 +16,38 @@ static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
 	return NULL;
 }
 
+static int ins_proves_live(enum ins_type t)
+{
+	return t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORESS ||
+		   t == IR_INST_CALL || ir_inst_is_term(t);
+}
+
+static int ins_has_imm(enum ins_type t)
+{
+	return t == IR_INST_IMM || t == IR_INST_LEAS || t == IR_INST_LOADS ||
+		   t == IR_INST_LOADSS || t == IR_INST_STORES || t == IR_INST_STORESS;
+}
+
+static bool regs_same(reg_t *a, reg_t *b)
+{
+	if(a == b) {
+		return true;
+	}
+	if(a->insty == IR_INST_LEA) {
+		return false;
+	}
+	if(a->insty != b->insty) {
+		return false;
+	}
+	if(ins_proves_live(a->insty) || a->insty == IR_INST_PHI) {
+		return false;
+	}
+
+	bool ok = ins_has_imm(a->insty) ? a->imm == b->imm : true;
+
+	return ok && a->lhs == b->lhs && a->rhs == b->rhs;
+}
+
 /* optimize
  * %reg = leas #off
  * ...
@@ -422,6 +454,104 @@ static void ir_zeroopt(ir_inst_t *inst)
 	return;
 }
 
+static int ir_memopt_ins(ir_inst_t *ins)
+{
+	int change = 0;
+	ir_inst_t *nxt = ins->next;
+
+	/* rewrite
+	 * %r0 = load %adr
+	 * store %adr, %r0
+	 * ->
+	 * nop
+	 * nop
+	 */
+	if(nxt && ins->type == IR_INST_LOAD && nxt->type == IR_INST_STORE &&
+	   ins->r0 == nxt->r2 && ins->r1 == nxt->r1 && ins->size == nxt->size) {
+		ins->type = IR_INST_NOP;
+		nxt->type = IR_INST_NOP;
+		change = 1;
+	}
+
+	/* rewrite
+	 * store %adr, %r0
+	 * %r1 = load %adr
+	 * ->
+	 * store %adr, %r0
+	 * %r1 = %r0
+	 */
+	if(nxt && ins->type == IR_INST_STORE && nxt->type == IR_INST_LOAD &&
+	   ins->r1 == nxt->r1 && ins->size == nxt->size) {
+		nxt->type = IR_INST_MOV;
+		nxt->r1 = ins->r2;
+		change = 1;
+	}
+
+	return change;
+}
+
+static int ir_memopt(ir_func_t *func)
+{
+	int change = 0;
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			change |= ir_memopt_ins(ins);
+		}
+	}
+	return change;
+}
+
+static int ir_leas_addsub_opt(ir_func_t *func)
+{
+	int change = 0;
+
+	/* reorder assoc ops such that immediate ops are r2 */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(!ir_inst_is_assoc(ins->type)) {
+				continue;
+			}
+
+			if(ins->r1->insty == IR_INST_IMM) {
+				reg_t *tmp = ins->r2;
+				ins->r2 = ins->r1;
+				ins->r1 = tmp;
+			}
+		}
+	}
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type != IR_INST_ADD && ins->type != IR_INST_SUB) {
+				continue;
+			}
+
+			if(ins->r1->insty != IR_INST_LEAS) {
+				continue;
+			}
+
+			if(ins->r2->insty != IR_INST_IMM) {
+				continue;
+			}
+
+			change = 1;
+			ins->type = IR_INST_LEAS;
+			ins->imm = ins->r1->imm;
+			if(ins->type == IR_INST_ADD) {
+				ins->imm += ins->r2->imm;
+			} else {
+				ins->imm -= ins->r2->imm;
+			}
+		}
+	}
+
+	return change;
+}
+
 static int ir_fold(ir_func_t *func)
 {
 	int change = 0;
@@ -583,6 +713,14 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 {
 	int change = 0;
 
+	/* extension elim */
+
+	if((ins->type == IR_INST_ZXT || ins->type == IR_INST_SXT) &&
+	   ins->r1->insty == ins->type && ins->size <= ins->r1->size) {
+		ins->type = IR_INST_MOV;
+		change = 1;
+	}
+
 	/* %r0 = sign_ext.i64/zero_ext.i64 %r1
 	 * ->
 	 * %r0 = %r1
@@ -684,7 +822,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	/* %r0 = cmp.* %r1, %r1
 	 * ->
 	 * %r0 = imm #res */
-	if(ir_inst_is_cmp(ins->type) && ins->r1->vr == ins->r2->vr) {
+	if(ir_inst_is_cmp(ins->type) && ins->r1 == ins->r2) {
 		long imm = 0;
 #define CASE(v, x) \
 	case v:        \
@@ -757,6 +895,44 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	return change;
 }
 
+static int ir_simpleopt_ins_alg(ir_inst_t *ins)
+{
+	int change = 0;
+	UNUSEDA ir_inst_t *nxt = ins->next;
+
+	/* %r2 = sub %r0, %r1
+	 * %r3 = add %r2, %r1
+	 * ->
+	 * %r2 = sub %r0, %r1
+	 * %r3 = %r0
+	 */
+	if(ins->type == IR_INST_ADD && ins->r1->insty == IR_INST_SUB &&
+	   regs_same(ins->r1->rhs, ins->r2)) {
+		nxt->type = IR_INST_MOV;
+		nxt->r2 = NULL;
+		nxt->r1 = ins->r1->lhs;
+		change = 1;
+	}
+
+	/* %r2 = add %r0, %r1
+	 * %r3 = sub %r2, %r1
+	 * ->
+	 * %r2 = add %r0, %r1
+	 * %r3 = %r0
+	 */
+	if(ins->type == IR_INST_SUB && ins->r1->insty == IR_INST_ADD &&
+	   regs_same(ins->r1->rhs, ins->r2)) {
+		nxt->type = IR_INST_MOV;
+		nxt->r2 = NULL;
+		nxt->r1 = ins->r1->lhs;
+		change = 1;
+	}
+
+	/* TODO: think of more rewritings */
+
+	return change;
+}
+
 /* trivial/simple optimizations */
 static int ir_simpleopt(ir_func_t *func)
 {
@@ -767,8 +943,12 @@ static int ir_simpleopt(ir_func_t *func)
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			changed |= ir_simpleopt_ins(blk, ins);
+			changed |= ir_simpleopt_ins_alg(ins);
 		}
 	}
+
+	ir_nopremover(func);
+	ir_placemarks(func);
 
 	return changed;
 }
@@ -887,18 +1067,6 @@ static int ir_mov_elim(ir_func_t *func)
 	}
 
 	return change;
-}
-
-static int ins_proves_live(enum ins_type t)
-{
-	return t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORESS ||
-		   t == IR_INST_CALL || ir_inst_is_term(t);
-}
-
-static int ins_has_imm(enum ins_type t)
-{
-	return t == IR_INST_IMM || t == IR_INST_LEAS || t == IR_INST_LOADS ||
-		   t == IR_INST_LOADSS || t == IR_INST_STORES || t == IR_INST_STORESS;
 }
 
 static int ins_is_same(ir_inst_t *a, ir_inst_t *b)
@@ -1171,6 +1339,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			change |= ir_adce(func);
 			ir_blk_liveness(func);
 			change |= ir_dce(func);
+			ir_nopremover(func);
 		}
 
 		/* move elimination */
@@ -1185,10 +1354,18 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			ir_fix_phis(func);
 		}
 
-		/* folding */
+		/* memory optimization */
+		{
+			change |= ir_memopt(func);
+			ir_nopremover(func);
+		}
 
+		/* folding */
 		{
 			change |= ir_fold(func);
+			ir_placemarks(func);
+			change |= ir_leas_addsub_opt(func);
+			ir_placemarks(func);
 			ir_fix_phis(func);
 		}
 
