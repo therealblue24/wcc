@@ -209,7 +209,7 @@ void ir_blk_fixup_entry(ir_func_t *fun)
 	ir_inst_delete(nop);
 
 	/* recompute defs */
-	fill_defs(entry);
+	ir_blk_reguse(fun);
 
 	return;
 }
@@ -350,7 +350,7 @@ static void calculate_spill_costs(LIST(reg_t *) allocated, ir_func_t *fun)
 			}
 		}
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			ACC(inst->r0, 1);
+			ACC(inst->r0, 3);
 			ACC(inst->r1, 1);
 			ACC(inst->r2, 1);
 
@@ -361,18 +361,6 @@ static void calculate_spill_costs(LIST(reg_t *) allocated, ir_func_t *fun)
 			}
 		}
 	}
-}
-
-static int spill_register(reg_t **regs, int amount)
-{
-	/* choose the one with least cost */
-	int reg = 0;
-	for(size_t i = 0; i < (size_t)amount; i++) {
-		if(regs[i]->spill_cost < regs[reg]->spill_cost) {
-			reg = i;
-		}
-	}
-	return reg;
 }
 
 /* spill a register read `reg` before `ins` */
@@ -525,50 +513,121 @@ void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
 	}
 }
 
-/* do the register allocation on `fun` */
+/* 1:1 copy of Poletto 1999 linear scan algorithm */
+
+static long get_use(reg_t *r)
+{
+	return r ? r->last_use : LONG_MAX;
+}
+
+static int reg_cmp(const void *a, const void *b)
+{
+	reg_t *rega = *(reg_t **)a;
+	reg_t *regb = *(reg_t **)b;
+	long cmp = get_use(rega) - get_use(regb);
+	if(cmp > +0) {
+		return +1;
+	}
+	if(cmp < +0) {
+		return -1;
+	}
+	return 0;
+}
+
+static size_t find_free_active(reg_t **regs, size_t amount)
+{
+	size_t i = 0;
+	for(; i < amount; i++) {
+		if(!regs[i]) {
+			break;
+		}
+	}
+	return i;
+}
+
+static void add_active(reg_t **regs, size_t amount, reg_t *r)
+{
+	regs[find_free_active(regs, amount)] = r;
+
+	/* sort */
+	qsort(regs, amount, sizeof(reg_t *), reg_cmp);
+}
+
+static void expire_intervals(reg_t **regs, size_t amount, reg_t *cur_reg,
+							 int *free, int *free_count)
+{
+	for(size_t i = 0; i < amount; i++) {
+		if(!regs[i]) {
+			continue;
+		}
+		if(regs[i]->last_use > cur_reg->def) {
+			return;
+		}
+
+		free[regs[i]->rr] = 1;
+		(*free_count)++;
+		regs[i] = NULL;
+	}
+	return;
+}
+
+static void spill_interval(reg_t **regs, size_t amount, reg_t *r)
+{
+	reg_t *spill = regs[amount - 1];
+	if(spill->last_use > r->last_use) {
+		r->rr = spill->rr;
+		spill->spilld = true;
+		spill->rr = amount;
+		regs[amount - 1] = NULL;
+		add_active(regs, amount, r);
+	} else {
+		r->spilld = true;
+		r->rr = amount;
+	}
+	return;
+}
+
+size_t find_first_free(int *free_regs, int *free_reg_count, size_t amount)
+{
+	size_t i = 0;
+	for(; i < amount; i++) {
+		if(free_regs[i]) {
+			free_regs[i] = 0;
+			(*free_reg_count)--;
+			return i;
+		}
+	}
+
+	ASSERT(2 + 2 == 3, "impossible");
+	return -1;
+}
+
 void ir_regalloc(LIST(reg_t *) allocated, int amount_)
 {
-	size_t amount = amount_ - 1; /* reserve 1 register for spilling */
-
-	/* register allocation: simple linear scan */
+	size_t amount = amount_ - 1;
 
 	/* real registers */
-	reg_t **regs = zcalloc((size_t)amount_, sizeof(reg_t *));
+	reg_t **regs = zcalloc((size_t)amount, sizeof(reg_t *));
+	int *free_regs = zcalloc((size_t)amount, sizeof(int));
+	for(size_t i = 0; i < amount; i++) {
+		free_regs[i] = 1;
+	}
+	int free_reg_count = amount;
 
 	for(size_t i = 0; i < list_len(allocated); i++) {
 		reg_t *r = allocated[i];
-		if(!r) {
-			/* can't really spill a NULL */
-			continue;
+		expire_intervals(regs, amount, r, free_regs, &free_reg_count);
+		if(free_reg_count) {
+			r->rr = find_first_free(free_regs, &free_reg_count, amount);
+			add_active(regs, amount, r);
+		} else {
+			spill_interval(regs, amount, r);
 		}
-
-		bool need_spill = true;
-		/* find a register */
-		for(size_t j = 0; j < amount; j++) {
-			if(regs[j] && regs[j]->last_use > r->def) {
-				continue;
-			}
-
-			need_spill = false;
-			r->rr = j;
-			r->spilld = false;
-			regs[j] = r;
-			break;
-		}
-
-		if(!need_spill)
-			continue;
-
-		/* spill a register */
-		regs[amount] = r;
-		int spill = spill_register(regs, amount + 1);
-		r->rr = spill;
-		regs[spill]->spilld = true;
-		regs[spill]->rr = amount;
-		regs[spill] = r;
 	}
 
 	free(regs);
+	free(free_regs);
+
 	return;
 }
 
@@ -863,7 +922,7 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 
 	switch(arch) {
 	case IR_ARCH_AARCH64_APPLE:
-		callee_cost = 9; /* r19 .. r28 */
+		callee_cost = 10; /* r19 .. r28 */
 		caller_cost = 14; /* r1 .. r9, r11 .. r15 */
 		break;
 	case IR_ARCH_X64_SYSV:
