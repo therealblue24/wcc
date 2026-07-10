@@ -96,6 +96,8 @@ typedef struct reg {
 	long def; /* when this reg was defined */
 	long last_use; /* when this reg was last used */
 	bool spilld; /* is this reg spilled? */
+	bool nospill; /* do not spill this reg */
+	bool spilld2; /* is this reg spilled (only meant to be used for codegen) */
 	int64_t spill_cost; /* cost of spilling this reg */
 	uint64_t imm; /* immediate associated with this reg */
 	long off; /* stack offset of register */

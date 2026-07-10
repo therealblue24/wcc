@@ -387,10 +387,11 @@ static void calculate_spill_costs(LIST(reg_t *) allocated, ir_func_t *fun)
 	}
 }
 
+#undef ACC
+
 /* spill a register read `reg` before `ins` */
 static void rewrite_load_spill(ir_inst_t *ins_prev, ir_inst_t *ins, reg_t *reg)
 {
-	ASSERT(reg->spilld, "tried to spill a non-spilled register");
 	ir_inst_t *inst = ir_inst_make(IR_INST_LOADSS, reg, NULL, NULL, reg->off);
 	inst->size = 8;
 	ins_prev->next = inst;
@@ -401,7 +402,6 @@ static void rewrite_load_spill(ir_inst_t *ins_prev, ir_inst_t *ins, reg_t *reg)
 /* insert a spilled store after `ins` */
 static void rewrite_store_spill(ir_inst_t *ins)
 {
-	ASSERT(ins->r0->spilld, "tried to spill a non-spilled register");
 	ir_inst_t *inst =
 		ir_inst_make(IR_INST_STORESS, NULL, ins->r0, NULL, ins->r0->off);
 	inst->size = 8;
@@ -411,44 +411,12 @@ static void rewrite_store_spill(ir_inst_t *ins)
 	return;
 }
 
-/* turns A = F(B, C) where they are all spilled into A = B; A = F(A, C) */
-static void rewrite_make_2op(ir_inst_t *ins_prev, ir_inst_t *ins)
+static reg_t *mk_spill_reg(reg_t *reg)
 {
-	ir_inst_t *mov = ins_mov(ins->r0, ins->r1);
-	ins->r1 = ins->r0;
-	mov->noopt = true;
-	mov->next = ins;
-	ins_prev->next = mov;
-	return;
-}
-
-static int rewrite_mov(ir_inst_t *ins)
-{
-	/* opt
-	 * %r0 = %r1(spill)
-	 * ->
-	 * %r0 = spill_load %r1
-	 */
-	if(!ins->r0->spilld && ins->r1->spilld) {
-		ins->size = ins->type == IR_INST_MOV ? 8 : ins->size;
-		ins->type = IR_INST_LOADSS;
-		ins->imm = ins->r1->off;
-		return 1;
-	}
-
-	/* opt
-	 * %r0(spill) = %r1
-	 * ->
-	 * spill_store %r0, %r1 */
-	if(ins->r0->spilld && !ins->r1->spilld) {
-		ins->size = ins->type == IR_INST_MOV ? 8 : ins->size;
-		ins->type = IR_INST_STORESS;
-		ins->size = 8;
-		ins->imm = ins->r0->off;
-		return 1;
-	}
-
-	return 0;
+	reg_t *r = reg_make();
+	r->off = reg->off;
+	r->nospill = true;
+	return r;
 }
 
 /* spill registers used in `ins` if needed */
@@ -458,92 +426,30 @@ static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
 		return;
 	}
 
-	/* special case */
-	if(ins->type == IR_INST_MOV || ins->type == IR_INST_ZXT ||
-	   ins->type == IR_INST_SXT) {
-		if(rewrite_mov(ins))
-			return;
-	}
-
-	int noedge = 0;
-
 	if(ins->r0 && ins->r0->spilld) {
+		ins->r0 = mk_spill_reg(ins->r0);
 		rewrite_store_spill(ins);
 	}
 
 	if(ins->r1 && ins->r1->spilld) {
+		ins->r1 = mk_spill_reg(ins->r1);
 		rewrite_load_spill(ins_prev, ins, ins->r1);
 		ins_prev = ins_prev->next;
 	}
 
-	/* edge case */
-	if(ins->r0 && ins->r1 && ins->r2 && ins->r0->spilld && ins->r1->spilld &&
-	   ins->r2->spilld) {
-		rewrite_make_2op(ins_prev, ins);
-		ins_prev = ins_prev->next;
-		noedge = 1;
-	}
-
-	/* edge case 2 */
-	if(!noedge && ins->r0 && ins->r1 && ins->r2 && ins->r2->spilld &&
-	   ins->r1->spilld) {
-		rewrite_make_2op(ins_prev, ins);
-		ins_prev = ins_prev->next;
-	}
-
 	if(ins->r2 && ins->r2->spilld) {
+		ins->r2 = mk_spill_reg(ins->r2);
 		rewrite_load_spill(ins_prev, ins, ins->r2);
 		ins_prev = ins_prev->next;
 	}
+
 	return;
 }
 
 /* spill the needed registers to spill */
-void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
+void ir_regalloc_spill(ir_func_t *fun)
 {
-	/* now, calculate the spill offsets */
-	long off = -(long)(fun->stack_needed);
-	long base = off - 8;
-
-	LIST(reg_t *) spill_free = list_make(reg_t *);
-	size_t spill_free_slot;
-
-	for(size_t i = 0; i < list_len(allocated); i++) {
-		if(!allocated[i]->spilld) {
-			continue;
-		}
-
-		spill_free_slot = -1;
-
-		reg_t *r = allocated[i];
-
-		/* expire spilled slots */
-		for(size_t i = 0; i < list_len(spill_free); i++) {
-			if(spill_free[i] && r->def >= spill_free[i]->last_use) {
-				spill_free[i] = NULL;
-			}
-
-			/* fast free slot finding */
-			if(!spill_free[i] && spill_free_slot != (size_t)-1) {
-				spill_free_slot = i;
-			}
-		}
-
-		if(spill_free_slot == (size_t)-1) {
-			/* allocate new slot */
-			list_append(spill_free, r);
-			spill_free_slot = list_len(spill_free) - 1;
-
-			fun->stack_needed += 8;
-		}
-
-		spill_free[spill_free_slot] = r;
-
-		r->off = base - (8 * spill_free_slot);
-	}
-
 	/* rewriting */
-
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		ir_inst_t *nop = ir_inst_make(IR_INST_NOP, NULL, NULL, NULL, 0);
@@ -564,8 +470,6 @@ void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
 		blk->insts = blk->insts->next;
 		ir_inst_delete(nop);
 	}
-
-	list_delete(spill_free);
 }
 
 /* Register move coalescing */
@@ -677,34 +581,15 @@ void ir_coalesce(ir_func_t *fun)
 	}
 }
 
-/* 1:1 copy of Poletto 1999 linear scan algorithm */
+/* 1:1 copy of Poletto 1999 linear scan algorithm + improvments from https://llvm.org/ProjectsWithLLVM/2004-Fall-CS426-LS.pdf (aka "iterative" register allocation)  */
 
 static long get_cost(reg_t *r)
 {
 	return r ? r->spill_cost : -1;
 }
 
-static void spill_interval(reg_t **regs, size_t amount, reg_t *r,
-						   size_t spill_indx)
+static reg_t *regalloc_try(LIST(reg_t *) allocated, size_t amount)
 {
-	reg_t *spill = regs[spill_indx];
-	if(spill->last_use > r->last_use) {
-		r->rr = spill->rr;
-		spill->spilld = true;
-		spill->rr = amount;
-		regs[spill_indx] = r;
-	} else {
-		r->spilld = true;
-		r->rr = amount;
-	}
-	return;
-}
-
-/* TODO: model lifetime holes */
-void ir_regalloc(LIST(reg_t *) allocated, int amount_)
-{
-	size_t amount = amount_ - 1;
-
 	/* real registers */
 	reg_t **regs = zcalloc((size_t)amount, sizeof(reg_t *));
 	int free_reg;
@@ -726,7 +611,8 @@ void ir_regalloc(LIST(reg_t *) allocated, int amount_)
 			}
 
 			/* select register to spill, just in case */
-			if(get_cost(regs[i]) > get_cost(regs[tospill])) {
+			if(regs[i] && !regs[i]->nospill &&
+			   get_cost(regs[tospill]) > get_cost(regs[i])) {
 				tospill = i;
 			}
 		}
@@ -737,12 +623,50 @@ void ir_regalloc(LIST(reg_t *) allocated, int amount_)
 			r->rr = free_reg;
 			regs[free_reg] = r;
 		} else {
-			spill_interval(regs, amount, r, tospill);
+			/* oops */
+			reg_t *r = regs[tospill];
+			free(regs);
+			return r;
 		}
 	}
 
 	free(regs);
 
+	return NULL;
+}
+
+/* TODO: model lifetime holes */
+void ir_regalloc(ir_func_t *fun, int amount_)
+{
+	LIST(reg_t *) allocd;
+	size_t amount = amount_;
+
+	for(;;) {
+		allocd = ir_blk_reglive(fun);
+		ir_dce(fun);
+		reg_t *spill = regalloc_try(allocd, amount);
+		if(!spill) {
+			/* we achieved an allocation */
+			list_delete(allocd);
+			break;
+		}
+
+		/* we didnt, spill the candidate and retry allocation */
+
+		spill->spilld = true;
+		spill->spilld2 = true;
+		spill->nospill = true;
+
+		long off = -(long)(fun->stack_needed);
+		long base = off - 8;
+		fun->stack_needed += 8;
+		spill->off = base;
+
+		ir_regalloc_spill(fun);
+		spill->spilld = false;
+
+		list_delete(allocd);
+	}
 	return;
 }
 
@@ -1018,7 +942,6 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 {
 	ir_blk_reguse(fun);
 	ir_blk_fixup_entry(fun);
-
 	ir_coalesce(fun);
 
 	if(debug) {
@@ -1028,9 +951,9 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 
 	LIST(reg_t *) allocated = ir_blk_reglive(fun);
 	calculate_spill_costs(allocated, fun);
-	ir_regalloc(allocated, amount);
+	list_delete(allocated);
+	ir_regalloc(fun, amount);
 	ir_fix(fun);
-	ir_regalloc_spill(fun, allocated);
 	int tolerance = (opt_level * 8) + 1;
 	int change = 1;
 	ir_fix(fun);
@@ -1060,13 +983,5 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 
 	(void)ir_choose_alloc_strat(fun, amount, callee_cost, caller_cost);
 
-	/* free objects */
-	for(size_t i = 0; i < list_len(allocated); i++) {
-		if(!allocated[i]->spilld) {
-			continue;
-		}
-	}
-
-	list_delete(allocated);
 	return;
 }

@@ -24,10 +24,10 @@ void ir_blk_liveness(ir_func_t *fun);
 void ir_blk_fixup_entry(ir_func_t *fun);
 
 /* do the register allocation for `amount` of registers */
-void ir_regalloc(LIST(reg_t *) allocated, int amount);
+void ir_regalloc(ir_func_t *fun, int amount);
 
 /* do the spilling */
-void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated);
+void ir_regalloc_spill(ir_func_t *fun);
 
 /* do register allocation all in one */
 void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch);

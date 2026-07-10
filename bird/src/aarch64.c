@@ -297,7 +297,8 @@ static void ir_ins_abi_call_aarch64(FILE *f, ir_func_t *func, ir_blk_t *blk,
 	for(size_t i = 0; i < alen; i++) {
 		reg_t *reg = args[i]->r;
 		int arg = arm_reg[reg->rr];
-		if(reg->spilld) {
+		if(reg->spilld2) {
+			arg = 10;
 			if(load_fp_imm_x10(f, reg->off, false)) {
 				fprintf(f, "\tldr x%d, [fp, x10]\n", arg);
 			} else {
@@ -306,10 +307,10 @@ static void ir_ins_abi_call_aarch64(FILE *f, ir_func_t *func, ir_blk_t *blk,
 		}
 
 		if(i <= 7) {
-			fprintf(f, "\tmov x%zu, x%d\n", i, arm_reg[reg->rr]);
+			fprintf(f, "\tmov x%zu, x%d\n", i, arg);
 		} else {
 			ENSURE(stack_indx >= 0, "negative stack index, somehow");
-			fprintf(f, "\tstr x%d, [sp, #%zu]\n", arm_reg[reg->rr], stack_indx);
+			fprintf(f, "\tstr x%d, [sp, #%zu]\n", arg, stack_indx);
 			stack_indx -= args[i]->size;
 		}
 	}

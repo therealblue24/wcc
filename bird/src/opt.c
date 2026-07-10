@@ -1246,7 +1246,7 @@ static int ir_adce(ir_func_t *func)
 	return change;
 }
 
-static int ir_dce(ir_func_t *func)
+static int ir_dce_opt(ir_func_t *func)
 {
 	int change = 0;
 
@@ -1278,6 +1278,13 @@ static int ir_dce(ir_func_t *func)
 	}
 
 	return change;
+}
+
+/* dead code elim */
+void ir_dce(ir_func_t *fun)
+{
+	(void)ir_dce_opt(fun);
+	return;
 }
 
 /* optimizes an IR function */
@@ -1338,7 +1345,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 			change |= ir_adce(func);
 			ir_blk_liveness(func);
-			change |= ir_dce(func);
+			change |= ir_dce_opt(func);
 			ir_nopremover(func);
 		}
 
