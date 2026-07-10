@@ -491,7 +491,7 @@ static int ir_simplify(ir_func_t *fun, int amount, enum ir_arch arch)
 			/* simplify useless moves where the source
 			 * and destination have same real register */
 			if(ins->type == IR_INST_MOV && ins->r0->rr != -1 &&
-			   ins->r0->rr == ins->r1->rr && !ins->noopt) {
+			   ins->r0->rr == ins->r1->rr) {
 				ins->type = IR_INST_NOP;
 				change = 1;
 			}
@@ -534,8 +534,7 @@ static int ir_simplify(ir_func_t *fun, int amount, enum ir_arch arch)
 			 * %r0 = %r1
 			 * nop */
 			if(nxt && ins->type == IR_INST_MOV && nxt->type == IR_INST_MOV &&
-			   ins->r0->rr == nxt->r1->rr && ins->r1->rr == nxt->r0->rr &&
-			   !ins->noopt && !nxt->noopt) {
+			   ins->r0->rr == nxt->r1->rr && ins->r1->rr == nxt->r0->rr) {
 				nxt->type = IR_INST_NOP;
 				change = 1;
 			}
@@ -569,7 +568,7 @@ static int ir_simplify(ir_func_t *fun, int amount, enum ir_arch arch)
 			/* remove useless insts where thing stored is never used
 			 * beyond this inst */
 			if(ins->r0 && ins->r0->def == ins->r0->last_use &&
-			   ins->type != IR_INST_CALL && !ins->noopt) {
+			   ins->type != IR_INST_CALL) {
 				ins->type = IR_INST_NOP;
 				change = 1;
 			}
@@ -607,6 +606,30 @@ static int ir_simplify(ir_func_t *fun, int amount, enum ir_arch arch)
 				ins->type = IR_INST_NOP;
 				change = 1;
 			}
+
+			/* remove consecutive loads to same reg */
+			if(nxt && ins_is_load(ins->type) && ins_is_load(nxt->type) &&
+			   ins->r0->rr == nxt->r0->rr) {
+				if(!(nxt->type == IR_INST_LOAD && nxt->r1->rr == ins->r0->rr)) {
+					ins->type = IR_INST_NOP;
+					change = 1;
+				}
+			}
+
+			/* remove consecutive stores to same addr */
+			if(nxt && ins->type == IR_INST_STORE &&
+			   nxt->type == IR_INST_STORE && ins->r1->rr == nxt->r1->rr) {
+				ins->type = IR_INST_NOP;
+				change = 1;
+			}
+
+			if(nxt &&
+			   (ins->type == IR_INST_STORES || ins->type == IR_INST_STORESS) &&
+			   (nxt->type == IR_INST_STORESS || nxt->type == IR_INST_STORESS) &&
+			   ins->imm == nxt->imm) {
+				ins->type = IR_INST_NOP;
+				change = 1;
+			}
 		}
 
 		ir_nopremover(fun);
@@ -622,7 +645,10 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 {
 	ir_blk_reguse(fun);
 	ir_blk_fixup_entry(fun);
-	ir_coalesce(fun);
+	/* We handle coalescing for x64 in the x64 opt stage. */
+	if(arch == IR_ARCH_AARCH64_APPLE) {
+		ir_coalesce(fun);
+	}
 
 	if(debug) {
 		printf("After register coalescing\n");
