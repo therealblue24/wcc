@@ -1,11 +1,12 @@
+#include "test/one.c"
 int main()
 {
-	int b = 4;
+	int b = 3 + one();
 	int a;
 	if(b == 4) {
-		a = 3;
+		a = 2 + one();
 	} else {
-		a = 2;
+		a = 1 + one();
 	}
 	return a;
 }

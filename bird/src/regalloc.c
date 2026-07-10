@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "ir.h"
 #include <limits.h>
 #include <stdlib.h>
 
@@ -329,6 +330,16 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 		}                                \
 	} while(0)
 
+static int ins_is_load(enum ins_type t)
+{
+	return t == IR_INST_LOAD || t == IR_INST_LOADS || t == IR_INST_LOADSS;
+}
+
+static int ins_is_store(enum ins_type t)
+{
+	return t == IR_INST_STORE || t == IR_INST_STORES || t == IR_INST_STORES;
+}
+
 /* calculates spill costs for each register */
 static void calculate_spill_costs(LIST(reg_t *) allocated, ir_func_t *fun)
 {
@@ -344,19 +355,32 @@ static void calculate_spill_costs(LIST(reg_t *) allocated, ir_func_t *fun)
 		/* first, make sure registers in loops are extra costly to spill */
 		if(blk->loop_order) {
 			/* they better shoot into the goal */
-			int64_t penalty = blk->loop_order * 250;
+			int64_t penalty = blk->loop_order * 2500;
 			for(size_t i = 0; i < list_len(blk->regs_def); i++) {
 				blk->regs_def[i]->spill_cost += penalty;
 			}
 		}
+
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			ACC(inst->r0, 3);
+			/* stores should be slower than loads, so account for that */
+			ACC(inst->r0, 2);
 			ACC(inst->r1, 1);
 			ACC(inst->r2, 1);
 
+			if(ins_is_load(inst->type)) {
+				/* we have to do a store afterwards */
+				ACC(inst->r0, 4);
+			}
+
+			if(ins_is_store(inst->type)) {
+				/* we have to do a load beforewards */
+				ACC(inst->r1, 1);
+				ACC(inst->r2, 1);
+			}
+
 			if(inst->type == IR_INST_CALL) {
 				for(size_t j = 0; j < list_len(inst->call_args); j++) {
-					ACC(inst->call_args[j]->r, 1);
+					ACC(inst->call_args[j]->r, 2);
 				}
 			}
 		}
@@ -479,14 +503,43 @@ void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
 {
 	/* now, calculate the spill offsets */
 	long off = -(long)(fun->stack_needed);
+	long base = off - 8;
+
+	LIST(reg_t *) spill_free = list_make(reg_t *);
+	size_t spill_free_slot;
+
 	for(size_t i = 0; i < list_len(allocated); i++) {
 		if(!allocated[i]->spilld) {
 			continue;
 		}
+
+		spill_free_slot = -1;
+
 		reg_t *r = allocated[i];
-		off -= 8;
-		fun->stack_needed += 8;
-		r->off = off;
+
+		/* expire spilled slots */
+		for(size_t i = 0; i < list_len(spill_free); i++) {
+			if(spill_free[i] && r->def >= spill_free[i]->last_use) {
+				spill_free[i] = NULL;
+			}
+
+			/* fast free slot finding */
+			if(!spill_free[i] && spill_free_slot != (size_t)-1) {
+				spill_free_slot = i;
+			}
+		}
+
+		if(spill_free_slot == (size_t)-1) {
+			/* allocate new slot */
+			list_append(spill_free, r);
+			spill_free_slot = list_len(spill_free) - 1;
+
+			fun->stack_needed += 8;
+		}
+
+		spill_free[spill_free_slot] = r;
+
+		r->off = base - (8 * spill_free_slot);
 	}
 
 	/* rewriting */
@@ -511,75 +564,135 @@ void ir_regalloc_spill(ir_func_t *fun, LIST(reg_t *) allocated)
 		blk->insts = blk->insts->next;
 		ir_inst_delete(nop);
 	}
+
+	list_delete(spill_free);
 }
 
-/* 1:1 copy of Poletto 1999 linear scan algorithm */
+/* Register move coalescing */
+/* https://llvm.org/ProjectsWithLLVM/2004-Fall-CS426-LS.pdf  JOIN-INTERVALS */
+/* We don't have lifetime holes yet so we use a simple intersection function. */
 
-static long get_use(reg_t *r)
-{
-	return r ? r->last_use : LONG_MAX;
-}
+#define REPLACE(x, fr, to) \
+	do {                   \
+		if((x) == (fr)) {  \
+			(x) = (to);    \
+		}                  \
+	} while(0)
 
-static int reg_cmp(const void *a, const void *b)
+static void replace_reg(ir_func_t *fun, reg_t *from, reg_t *to)
 {
-	reg_t *rega = *(reg_t **)a;
-	reg_t *regb = *(reg_t **)b;
-	long cmp = get_use(rega) - get_use(regb);
-	if(cmp > +0) {
-		return +1;
-	}
-	if(cmp < +0) {
-		return -1;
-	}
-	return 0;
-}
-
-static size_t find_free_active(reg_t **regs, size_t amount)
-{
-	size_t i = 0;
-	for(; i < amount; i++) {
-		if(!regs[i]) {
-			break;
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			REPLACE(ins->r0, from, to);
+			REPLACE(ins->r1, from, to);
+			REPLACE(ins->r2, from, to);
+			if(ins->type == IR_INST_CALL) {
+				for(size_t i = 0; i < list_len(ins->call_args); i++) {
+					REPLACE(ins->call_args[i]->r, from, to);
+				}
+			}
 		}
 	}
-	return i;
 }
 
-static void add_active(reg_t **regs, size_t amount, reg_t *r)
-{
-	regs[find_free_active(regs, amount)] = r;
+#undef REPLACE
 
-	/* sort */
-	qsort(regs, amount, sizeof(reg_t *), reg_cmp);
+static bool intersect(reg_t *a, reg_t *b)
+{
+	/* thx https://stackoverflow.com/a/1558990 */
+	return !((a->last_use < b->def) || (b->last_use < a->def));
 }
 
-static void expire_intervals(reg_t **regs, size_t amount, reg_t *cur_reg,
-							 int *free, int *free_count)
+static long long_min(long a, long b)
 {
-	for(size_t i = 0; i < amount; i++) {
-		if(!regs[i]) {
+	return a < b ? a : b;
+}
+
+static long long_max(long a, long b)
+{
+	return a > b ? a : b;
+}
+
+static void join_intervals(reg_t *reg, reg_t *join_with)
+{
+	long def = long_min(reg->def, join_with->def);
+	long use = long_max(reg->last_use, join_with->last_use);
+	reg->def = def;
+	reg->last_use = use;
+	return;
+}
+
+static void coalesce_block(ir_func_t *fun, ir_blk_t *blk)
+{
+	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+		if(ins->noopt) {
 			continue;
 		}
-		if(regs[i]->last_use > cur_reg->def) {
-			return;
+
+		if(ins->type != IR_INST_MOV) {
+			continue;
 		}
 
-		free[regs[i]->rr] = 1;
-		(*free_count)++;
-		regs[i] = NULL;
+		if(intersect(ins->r0, ins->r1)) {
+			continue;
+		}
+
+		/* replace r0 with r1, join intervals */
+		join_intervals(ins->r1, ins->r0);
+
+		replace_reg(fun, ins->r0, ins->r1);
+		ins->type = IR_INST_NOP;
 	}
 	return;
 }
 
-static void spill_interval(reg_t **regs, size_t amount, reg_t *r)
+static void dfs_visit(ir_func_t *fun, ir_blk_t *blk)
 {
-	reg_t *spill = regs[amount - 1];
+	if(blk->visited) {
+		return;
+	}
+	blk->visited = true;
+	ir_inst_t *flow = blk->tail;
+	coalesce_block(fun, blk);
+	if(flow->true_blk) {
+		dfs_visit(fun, flow->true_blk);
+	}
+	if(flow->false_blk) {
+		dfs_visit(fun, flow->false_blk);
+	}
+	return;
+}
+
+static void coalesce_register_moves(ir_func_t *fun)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		fun->blocks[i]->visited = false;
+	}
+
+	dfs_visit(fun, fun->blocks[0]);
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		fun->blocks[i]->visited = false;
+	}
+}
+
+/* 1:1 copy of Poletto 1999 linear scan algorithm */
+
+static long get_cost(reg_t *r)
+{
+	return r ? r->spill_cost : -1;
+}
+
+static void spill_interval(reg_t **regs, size_t amount, reg_t *r,
+						   size_t spill_indx)
+{
+	reg_t *spill = regs[spill_indx];
 	if(spill->last_use > r->last_use) {
 		r->rr = spill->rr;
 		spill->spilld = true;
 		spill->rr = amount;
-		regs[amount - 1] = NULL;
-		add_active(regs, amount, r);
+		regs[spill_indx] = r;
 	} else {
 		r->spilld = true;
 		r->rr = amount;
@@ -587,46 +700,48 @@ static void spill_interval(reg_t **regs, size_t amount, reg_t *r)
 	return;
 }
 
-size_t find_first_free(int *free_regs, int *free_reg_count, size_t amount)
-{
-	size_t i = 0;
-	for(; i < amount; i++) {
-		if(free_regs[i]) {
-			free_regs[i] = 0;
-			(*free_reg_count)--;
-			return i;
-		}
-	}
-
-	ASSERT(2 + 2 == 3, "impossible");
-	return -1;
-}
-
+/* TODO: model lifetime holes */
 void ir_regalloc(LIST(reg_t *) allocated, int amount_)
 {
 	size_t amount = amount_ - 1;
 
 	/* real registers */
 	reg_t **regs = zcalloc((size_t)amount, sizeof(reg_t *));
-	int *free_regs = zcalloc((size_t)amount, sizeof(int));
-	for(size_t i = 0; i < amount; i++) {
-		free_regs[i] = 1;
-	}
-	int free_reg_count = amount;
+	int free_reg;
 
 	for(size_t i = 0; i < list_len(allocated); i++) {
+		free_reg = -1;
 		reg_t *r = allocated[i];
-		expire_intervals(regs, amount, r, free_regs, &free_reg_count);
-		if(free_reg_count) {
-			r->rr = find_first_free(free_regs, &free_reg_count, amount);
-			add_active(regs, amount, r);
+		int tospill = 0;
+
+		/* expire intervals */
+		for(size_t i = 0; i < amount; i++) {
+			if(regs[i] && r->def >= regs[i]->last_use) {
+				regs[i] = NULL;
+			}
+
+			/* fast way to select free register */
+			if(!regs[i] && free_reg == -1) {
+				free_reg = i;
+			}
+
+			/* select register to spill, just in case */
+			if(get_cost(regs[i]) > get_cost(regs[tospill])) {
+				tospill = i;
+			}
+		}
+
+		/* if we have a free register, allocate it.
+		 * else, spill */
+		if(free_reg != -1) {
+			r->rr = free_reg;
+			regs[free_reg] = r;
 		} else {
-			spill_interval(regs, amount, r);
+			spill_interval(regs, amount, r, tospill);
 		}
 	}
 
 	free(regs);
-	free(free_regs);
 
 	return;
 }
@@ -903,6 +1018,14 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 {
 	ir_blk_reguse(fun);
 	ir_blk_fixup_entry(fun);
+
+	coalesce_register_moves(fun);
+
+	if(debug) {
+		printf("After register coalescing\n");
+		ir_dump(fun, 'v');
+	}
+
 	LIST(reg_t *) allocated = ir_blk_reglive(fun);
 	calculate_spill_costs(allocated, fun);
 	ir_regalloc(allocated, amount);

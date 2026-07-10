@@ -41,8 +41,8 @@ void token_delete_all(token_t *root)
 /* checks if a `tok`'s content is equal to `content` */
 int token_eq(token_t *tok, char *content)
 {
-	return tok && content && strncmp(tok->loc, content, tok->len) == 0 &&
-		   content[tok->len] == 0;
+	return tok && content && tok->len == strlen(content) &&
+		   strncmp(tok->loc, content, tok->len) == 0 && content[tok->len] == 0;
 }
 
 /* skips `tok` and returns next token if `tok`'s content is equal to `content` */
@@ -89,9 +89,9 @@ int isidentfirst(int c)
 /* returns the length of a possible punctuator */
 static int punct_len(char *p)
 {
-	const char *puncts[] = { "<=", ">=", "==", "!=", "&&", "||",  ">>",
-							 "<<", "*=", "/=", "+=", "-=", "<<=", ">>=",
-							 "&=", "^=", "|=", "++", "--", "->" };
+	const char *puncts[] = { "<=", ">=", "==", "!=",  "&&",	 "||", "*=",
+							 "/=", "+=", "-=", "<<=", ">>=", "<<", ">>",
+							 "&=", "^=", "|=", "++",  "--",	 "->" };
 	size_t puncts_len = sizeof(puncts) / sizeof(puncts[0]);
 
 	for(size_t i = 0; i < puncts_len; i++) {

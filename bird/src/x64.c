@@ -25,6 +25,7 @@ static void turn_into_x64_ins(ir_inst_t *prev, ir_inst_t *cur)
 	if(ins_is_3source(cur->type)) {
 		/* rewrite A = F(B, C) into A = B; A = F(A, C) */
 		ir_inst_t *mov = ins_mov(cur->r0, cur->r1);
+		mov->noopt = true;
 		cur->r1 = cur->r0;
 		mov->next = cur;
 		prev->next = mov;
@@ -34,6 +35,7 @@ static void turn_into_x64_ins(ir_inst_t *prev, ir_inst_t *cur)
 	if(ins_is_2source(cur->type)) {
 		/* rewrite A = F(B) into A = B; A = F(A) */
 		ir_inst_t *mov = ins_mov(cur->r0, cur->r1);
+		mov->noopt = true;
 		cur->r1 = cur->r0;
 		mov->next = cur;
 		prev->next = mov;

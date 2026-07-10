@@ -839,6 +839,14 @@ static void varopt(ir_func_t *func)
 			   ins->type != IR_INST_STORE) {
 				ins->r2->stack_loc = false;
 			}
+
+			if(ins->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(ins->call_args); j++) {
+					if(ins->call_args[j]->r->stack_loc) {
+						ins->call_args[j]->r->stack_loc = false;
+					}
+				}
+			}
 		}
 	}
 

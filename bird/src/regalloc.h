@@ -3,6 +3,7 @@
 #define IR_REGALLOC_H_
 
 #include "ir.h"
+#include <stdbool.h>
 
 /* calculates register use for all blocks in `fun` */
 void ir_blk_reguse(ir_func_t *fun);
