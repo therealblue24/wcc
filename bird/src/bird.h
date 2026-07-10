@@ -2,6 +2,7 @@
 #define BIRD_H_
 
 #include "ir.h"
+#include "liveness.h"
 #include "opt.h"
 #include "regalloc.h"
 #include "aarch64.h"
