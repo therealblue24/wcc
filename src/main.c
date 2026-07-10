@@ -213,6 +213,8 @@ int main(int argc, char *argv[])
 			char *num = (char *)arg + 2;
 			if(num && *num >= '0' && *num <= '3') {
 				opt_level = *num - '0';
+			} else if(num && (*num == 's' || *num == 'z')) {
+				opt_level = 2;
 			} else {
 				WARN("unknown optimization level '%s', defaulting to 0", arg);
 				opt_level = 0;
