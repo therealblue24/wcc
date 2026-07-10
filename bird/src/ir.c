@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "regalloc.h"
 #include "zz/arena.h"
 
 extern int debug;
@@ -910,7 +911,8 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 		}
 
 		ir_basic_block_placement(func);
-
+		ir_blk_liveness(func);
+		ir_coalesce(func);
 		ir_opt(func, opt, arch);
 		for(size_t j = 0; j < list_len(func->blocks); j++) {
 			ir_blk_t *blk = func->blocks[j];

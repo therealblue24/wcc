@@ -664,7 +664,7 @@ static void dfs_visit(ir_func_t *fun, ir_blk_t *blk)
 	return;
 }
 
-static void coalesce_register_moves(ir_func_t *fun)
+void ir_coalesce(ir_func_t *fun)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		fun->blocks[i]->visited = false;
@@ -1019,7 +1019,7 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 	ir_blk_reguse(fun);
 	ir_blk_fixup_entry(fun);
 
-	coalesce_register_moves(fun);
+	ir_coalesce(fun);
 
 	if(debug) {
 		printf("After register coalescing\n");
