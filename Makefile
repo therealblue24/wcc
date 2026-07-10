@@ -114,6 +114,7 @@ build: dirs $(OBJ)
 
 # build `bIRd`
 build-bird:
+	@echo "building bird"
 	@make -C bird RELEASE=$(RELEASE) CODE_REVIEW=$(CODE_REVIEW) SANITIZERS=$(SANITIZERS) FORTIFY=$(FORTIFY)
 
 # compile target
