@@ -3,6 +3,11 @@ long one(void)
 	return 1;
 }
 
+long blackbox(long x)
+{
+	return x;
+}
+
 long two(long x)
 {
 	return 2 * x;

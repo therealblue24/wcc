@@ -1,4 +1,5 @@
 long one();
+long blackbox(long x);
 long two(long x);
 long argument_waster(long a, long b, long c, long d, long e, long f, long g,
 					 long h, long i, long j, long k, long l);
