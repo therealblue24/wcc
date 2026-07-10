@@ -1006,18 +1006,6 @@ static int ir_imm_elim(ir_func_t *func)
 	return change;
 }
 
-static bool leads_to_phi(reg_t *r)
-{
-	reg_t *found = r;
-	while(found->insty == IR_INST_MOV) {
-		if(found->lhs->insty == IR_INST_PHI) {
-			return true;
-		}
-		found = found->lhs;
-	}
-	return false;
-}
-
 #define REPLACE(x)                                         \
 	do {                                                   \
 		if((x) && (x)->insty == IR_INST_MOV && (x)->lhs) { \
@@ -1036,13 +1024,6 @@ static int ir_mov_elim(ir_func_t *func)
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
 			if(inst->type != IR_INST_MOV) {
 				continue;
-			}
-
-			/* do we need this? */
-			if(0 && (leads_to_phi(inst->r1) || inst->r1->phi_related)) {
-				inst->r1->insty = IR_INST_NOP;
-				/* do we need this? */
-				inst->r0->phi_related = true;
 			}
 
 			if(inst->r0->phi_related) {
