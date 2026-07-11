@@ -570,7 +570,7 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 		break;
 	case IR_ARCH_X64_SYSV:
 		callee_cost = 5; /* rbx, r12 .. r15 */
-		caller_cost = 6; /* rdi, rsi, r8, r9, r10, r11 */
+		caller_cost = 4; /* rdi, rsi, r10, r11 */
 		break;
 
 	default:

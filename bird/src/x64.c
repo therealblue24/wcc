@@ -191,17 +191,19 @@ void ir_glob_emit_x64_sysv(FILE *f, ir_global_t *glob)
 	return;
 }
 
-static const char *x64_reg[6] = { "rbx", "r12", "r13", "r14", "r15", "r10" };
-static const char *x64_reg8[6] = {
-	"bl", "r12b", "r13b", "r14b", "r15b", "r10b"
-};
-static const char *x64_reg16[6] = {
-	"bx", "r12w", "r13w", "r14w", "r15w", "r10w"
-};
-static const char *x64_reg32[6] = { "ebx",	"r12d", "r13d",
-									"r14d", "r15d", "r10d" };
+/* for caller-save: we use rsi, rdi, r10, r11 */
 
-static const int x64_reg_count = 5;
+static const char *x64_reg[9] = {
+	"rbx", "r12", "r13", "r14", "r15", "rsi", "rdi", "r10", "r11",
+};
+static const char *x64_reg8[9] = { "bl",  "r12b", "r13b", "r14b", "r15b",
+								   "sil", "dil",  "r10b", "r11b" };
+static const char *x64_reg16[9] = { "bx", "r12w", "r13w", "r14w", "r15w",
+									"si", "di",	  "r10w", "r11w" };
+static const char *x64_reg32[9] = { "ebx", "r12d", "r13d", "r14d", "r15d",
+									"esi", "edi",  "r10d", "r11d" };
+
+static const int x64_reg_count = 9;
 
 static int64_t i64abs(int64_t v)
 {
@@ -382,6 +384,11 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		}; break;
 		case IR_INST_CALL: {
 			size_t stack_used = 0;
+			for(size_t i = 5; i < x64_reg_count; i++) {
+				if(fn->alloc_used[i]) {
+					fprintf(f, "\tpush %s\n", x64_reg[i]);
+				}
+			}
 			for(size_t i = 0; i < list_len(ins->call_args); i++) {
 				int arg = ins->call_args[i]->r->rr;
 				if(ins->call_args[i]->r->spilld2) {
@@ -409,6 +416,11 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			}
 			if(stack_used) {
 				fprintf(f, "\tsub rsp, %zu\n", stack_used);
+			}
+			for(size_t i = x64_reg_count - 1; i >= 5; i--) {
+				if(fn->alloc_used[i]) {
+					fprintf(f, "\tpop %s\n", x64_reg[i]);
+				}
 			}
 		} break;
 
@@ -694,8 +706,8 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 static void ir_func_save_regs(FILE *f, ir_func_t *fun)
 {
 	/* luckily x86_64 is CISC, ez */
-	for(size_t i = 0; i < x64_reg_count; i++) {
-		if(fun->alloc_used[i] && i != 5 && i != 6) {
+	for(size_t i = 0; i < 5; i++) {
+		if(fun->alloc_used[i]) {
 			fprintf(f, "\tpush %s\n", x64_reg[i]);
 		}
 	}
@@ -704,8 +716,8 @@ static void ir_func_save_regs(FILE *f, ir_func_t *fun)
 
 static void ir_func_restore_regs(FILE *f, ir_func_t *fun)
 {
-	for(size_t i = x64_reg_count - 1; i >= 0; i--) {
-		if(fun->alloc_used[i] && i != 5 && i != 6) {
+	for(size_t i = 4; i >= 0; i--) {
+		if(fun->alloc_used[i]) {
 			fprintf(f, "\tpop %s\n", x64_reg[i]);
 		}
 
