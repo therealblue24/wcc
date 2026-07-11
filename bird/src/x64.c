@@ -389,19 +389,28 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 					fprintf(f, "\tpush %s\n", x64_reg[i]);
 				}
 			}
+
+			for(size_t i = 6; i < list_len(ins->call_args); i++) {
+				int arg = ins->call_args[i]->r->rr;
+				if(ins->call_args[i]->r->spilld2) {
+					arg = 7;
+					fprintf(f, "\tmov %s, [rbp - %lld]\n", x64_reg[arg],
+							i64abs(ins->call_args[i]->r->off));
+				}
+
+				fprintf(f, "\tpush %s\n", x64_reg[arg]);
+				stack_used += 8;
+			}
+
 			for(size_t i = 0; i < list_len(ins->call_args); i++) {
 				int arg = ins->call_args[i]->r->rr;
 				if(ins->call_args[i]->r->spilld2) {
-					arg = 5;
+					arg = 7;
 					fprintf(f, "\tmov %s, [rbp - %lld]\n", x64_reg[arg],
 							i64abs(ins->call_args[i]->r->off));
 				}
 				if(i < 6) {
 					fprintf(f, "\tmov %s, %s\n", arg_reg[i], x64_reg[arg]);
-
-				} else {
-					fprintf(f, "\tpush %s\n", x64_reg[arg]);
-					stack_used += 8;
 				}
 			}
 			/* set RAX to zero.
