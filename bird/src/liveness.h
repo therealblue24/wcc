@@ -12,6 +12,9 @@ void ir_blk_flow(ir_func_t *fun);
 /* requires liveness: coalesces non-interfering registers */
 void ir_coalesce(ir_func_t *fun);
 
+/* tries to coalesce reg `reg` with `join_with` */
+int ir_try_coalesce(ir_func_t *fun, reg_t *reg, reg_t *join_with);
+
 /* calculates register defs & last use for all blocks in `fun`. returns registers allocated */
 LIST(reg_t *) ir_blk_reglive(ir_func_t *fun);
 

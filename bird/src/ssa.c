@@ -2,6 +2,7 @@
 
 #include "bird.h"
 #include "ir.h"
+#include "liveness.h"
 #include <stdint.h>
 
 static void find_before_last_term_ins(ir_blk_t *blk)
@@ -461,6 +462,31 @@ cont:;
 	return;
 }
 
+/* tries to coalesce phi arguments */
+static void coalesce_phis(ir_func_t *fun)
+{
+	ir_blk_liveness(fun);
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_PHI) {
+				continue;
+			}
+
+			for(size_t i = 0; i < list_len(inst->phi_args); i++) {
+				reg_t *arg = inst->phi_args[i];
+				if(arg == inst->r0) {
+					continue;
+				}
+
+				if(ir_try_coalesce(fun, inst->r0, arg)) {
+					inst->phi_args[i] = inst->r0;
+				}
+			}
+		}
+	}
+}
+
 /* inserts parallel moves */
 static void insert_parallel_moves(ir_func_t *fun)
 {
@@ -664,6 +690,10 @@ static void deparallelize_pmovs(ir_func_t *fun)
 
 			LIST(reg_pmov_t) seq = deparallelize_pmov(inst);
 			list_delete(inst->pmov_args);
+			if(list_len(seq) == 0) {
+				list_delete(seq);
+				continue;
+			}
 			movs = zcalloc(sizeof(ir_inst_t *), list_len(seq));
 			for(size_t i = 0; i < list_len(seq); i++) {
 				reg_pmov_t pmov1 = seq[i];
@@ -893,6 +923,7 @@ void ir_ssa_exit(ir_func_t *fun)
 	ir_fix(fun);
 	ir_blk_flow(fun);
 	split_critical(fun);
+	coalesce_phis(fun);
 	insert_parallel_moves(fun);
 	deparallelize_pmovs(fun);
 	ir_blk_flow(fun);
