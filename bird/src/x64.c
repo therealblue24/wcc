@@ -384,8 +384,9 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		}; break;
 		case IR_INST_CALL: {
 			size_t stack_used = 0;
-			for(size_t i = 5; i < x64_reg_count; i++) {
-				if(fn->alloc_used[i]) {
+			int retval = ins->r0 ? ins->r0->rr : -1;
+			for(int i = 5; i < x64_reg_count; i++) {
+				if(fn->alloc_used[i] && i != retval) {
 					fprintf(f, "\tpush %s\n", x64_reg[i]);
 				}
 			}
@@ -426,8 +427,8 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			if(stack_used) {
 				fprintf(f, "\tsub rsp, %zu\n", stack_used);
 			}
-			for(size_t i = x64_reg_count - 1; i >= 5; i--) {
-				if(fn->alloc_used[i]) {
+			for(int i = x64_reg_count - 1; i >= 5; i--) {
+				if(fn->alloc_used[i] && i != retval) {
 					fprintf(f, "\tpop %s\n", x64_reg[i]);
 				}
 			}
