@@ -924,14 +924,8 @@ static void varopt(ir_func_t *func)
 
 				reg_t *replacement = ins->r1->lhs;
 
-				/* rewrite %var = load %addr into %var = (EXT) %var_reg */
-				bool ext = !obj->type->unsignd;
-				size_t sz = obj->type->size;
-				ins->type = ext ? IR_INST_SXT : IR_INST_ZXT;
-				ins->size = sz;
-				if(ins->size == 8) {
-					ins->type = IR_INST_MOV;
-				}
+				/* rewrite %var = load %addr into %var = %var_reg */
+				ins->type = IR_INST_MOV;
 				ins->r1 = replacement;
 				continue;
 			}
@@ -944,8 +938,15 @@ static void varopt(ir_func_t *func)
 
 				reg_t *replacement = ins->r1->lhs;
 
-				/* rewrite store %addr, %var into %var_reg = %var */
-				ins->type = IR_INST_MOV;
+				/* rewrite store %addr, %var into %var_reg = (EXT) %var */
+
+				bool ext = !obj->type->unsignd;
+				size_t sz = obj->type->size;
+				ins->type = ext ? IR_INST_SXT : IR_INST_ZXT;
+				ins->size = sz;
+				if(ins->size == 8) {
+					ins->type = IR_INST_MOV;
+				}
 				ins->r1 = ins->r2;
 				ins->r0 = replacement;
 				continue;
