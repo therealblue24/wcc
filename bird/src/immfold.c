@@ -74,7 +74,7 @@ void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound)
 				continue;
 			}
 
-			int64_t immv = *(int64_t *)(&inst->imm);
+			int64_t immv = *(int64_t *)(&inst->r2->imm);
 			if(immv >= lower_bound && immv <= higher_bound) {
 				/* fold */
 				inst->imm = inst->r2->imm;

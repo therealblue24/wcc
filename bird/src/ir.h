@@ -27,6 +27,11 @@ enum ins_type {
 	IR_INST_SHL, /* %r0 = shl %r1, %r2 */
 	IR_INST_SHR, /* %r0 = shr %r1, %r2 */
 	IR_INST_ASHR, /* %r0 = ashr %r1, %r2 */
+
+	/* immediate ops */
+	IR_INST_ADDI,
+	IR_INST_SUBI,
+
 	IR_INST_SHLI,
 	IR_INST_SHRI,
 	IR_INST_ASHRI,

@@ -1,6 +1,7 @@
 #include "bird.h"
 #include "immfold.h"
 #include "ir.h"
+#include "liveness.h"
 #include "ssa.h"
 
 extern int debug;
@@ -485,6 +486,62 @@ static int ir_memopt_ins(ir_inst_t *ins)
 	   ins->r1 == nxt->r1 && ins->size == nxt->size) {
 		nxt->type = IR_INST_MOV;
 		nxt->r1 = ins->r2;
+		change = 1;
+	}
+
+	/* rewrite
+	 * %r1 = loads #adr
+	 * %r2 = loads #adr
+	 * ->
+	 * %r1 = loads #adr
+	 * %r2 = %r1
+	 */
+	if(nxt && ins->type == IR_INST_LOADS && nxt->type == IR_INST_LOADS &&
+	   ins->imm == nxt->imm && ins->sign_ext == nxt->sign_ext &&
+	   ins->size == nxt->size) {
+		nxt->type = IR_INST_MOV;
+		nxt->r1 = ins->r0;
+		change = 1;
+	}
+
+	/* rewrite
+	 * %r1 = load %adr
+	 * %r2 = load %adr
+	 * ->
+	 * %r1 = load %adr
+	 * %r2 = %r1
+	 */
+	if(nxt && ins->type == IR_INST_LOAD && nxt->type == IR_INST_LOAD &&
+	   ins->r1 == nxt->r1 && ins->sign_ext == nxt->sign_ext &&
+	   ins->size == nxt->size) {
+		nxt->type = IR_INST_MOV;
+		nxt->r1 = ins->r0;
+		change = 1;
+	}
+
+	/* rewrite
+	 * stores #adr, %r0
+	 * stores #adr, %r1
+	 * ->
+	 * nop
+	 * stores #adr, %r1
+	 */
+	if(nxt && ins->type == IR_INST_STORES && nxt->type == IR_INST_STORES &&
+	   ins->imm == nxt->imm && ins->size == nxt->size) {
+		ins->type = IR_INST_NOP;
+		change = 1;
+	}
+
+	/* rewrite
+	 * store %adr, %r0
+	 * store %adr, %r1
+	 * ->
+	 * nop
+	 * store %adr, %r1
+	 */
+	if(nxt && ins->type == IR_INST_STORE && nxt->type == IR_INST_STORE &&
+	   ins->r1 == nxt->r1 && ins->size == nxt->size) {
+		ins->type = IR_INST_NOP;
 		change = 1;
 	}
 
@@ -1425,6 +1482,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	default:
 		break;
 	}
+	ir_blk_liveness(func);
+	ir_dce(func);
 
 	ir_ssa_exit(func);
 	ir_nopremover(func);

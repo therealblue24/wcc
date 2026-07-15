@@ -63,7 +63,8 @@ int ir_inst_is_assoc(enum ins_type type)
 /* can the instruction be immediate folded? */
 int ir_inst_can_fold_imm(enum ins_type type)
 {
-	return type == IR_INST_SHL || type == IR_INST_SHR || type == IR_INST_ASHR;
+	return type == IR_INST_SHL || type == IR_INST_SHR || type == IR_INST_ASHR ||
+		   type == IR_INST_ADD || type == IR_INST_SUB;
 }
 
 /* turn instruction type -> immediate instruction type */
@@ -73,6 +74,8 @@ int ir_inst_turn_imm(enum ins_type type)
 	case x:     \
 		return x##I
 	switch(type) {
+		CASE(IR_INST_ADD);
+		CASE(IR_INST_SUB);
 		CASE(IR_INST_SHL);
 		CASE(IR_INST_SHR);
 		CASE(IR_INST_ASHR);
@@ -574,12 +577,22 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = add %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_SUB:
 		out("%%r%ld = sub %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_ADDI:
+		out("%%r%ld = addi %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_SUBI:
+		out("%%r%ld = subi %%r%ld, #%lld", r0, r1, imm);
 	case IR_INST_SHL:
 		out("%%r%ld = shl %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_SHR:
 		out("%%r%ld = shr %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_ASHR:
 		out("%%r%ld = ashr %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_SHLI:
+		out("%%r%ld = shli %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_SHRI:
+		out("%%r%ld = shri %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_ASHRI:
+		out("%%r%ld = ashri %%r%ld, #%lld", r0, r1, imm);
 	case IR_INST_AND:
 		out("%%r%ld = and %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_OR:
