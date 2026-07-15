@@ -114,6 +114,38 @@ static UNUSEDA void emit_lea(reg_t *res, ir_global_t *glob)
 	return;
 }
 
+#define LOOPSZ(num)                                      \
+	do {                                                 \
+		while(left >= (num)) {                           \
+			emit_imm(data, ptr);                         \
+			emit_add(toaddr, to, data);                  \
+			emit_add(fromaddr, from, data);              \
+			ir_inst_t *loadi = ins_load(data, fromaddr); \
+			loadi->size = (num);                         \
+			ir_blk_add(outblk, loadi);                   \
+			ir_inst_t *storei = ins_store(toaddr, data); \
+			storei->size = (num);                        \
+			ir_blk_add(outblk, storei);                  \
+			left -= (num);                               \
+			ptr += (num);                                \
+		}                                                \
+	} while(0)
+
+static void blit(size_t size, reg_t *from, reg_t *to)
+{
+	size_t ptr = 0;
+	reg_t *toaddr = reg_make(), *fromaddr = reg_make();
+	reg_t *data = reg_make();
+	size_t left = size;
+
+	LOOPSZ(8);
+	LOOPSZ(4);
+	LOOPSZ(2);
+	LOOPSZ(1);
+
+	return;
+}
+
 static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
 {
 	reg_t *new_r0 = reg_make();
@@ -133,11 +165,31 @@ static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
 	return;
 }
 
+static void emit_load_obj(type_t *typ, reg_t *val, reg_t *addr)
+{
+	if(typ->kind == TYPE_ARRAY || typ->kind == TYPE_STRUCT) {
+		emit_mov(val, addr);
+	} else {
+		emit_load_sz(typ, val, addr);
+	}
+	return;
+}
+
 static UNUSEDA void emit_store_sz(type_t *typ, reg_t *r1, reg_t *r2)
 {
 	ir_inst_t *ins = ins_store(r1, r2);
 	ins->size = typ->size;
 	ir_blk_add(outblk, ins);
+	return;
+}
+
+static void emit_store_obj(type_t *typ, reg_t *val, reg_t *addr)
+{
+	if(typ->kind == TYPE_STRUCT) {
+		blit(typ->size, addr, val);
+	} else {
+		emit_store_sz(typ, val, addr);
+	}
 	return;
 }
 
@@ -312,11 +364,7 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_MEMBER: {
 		reg_t *addr = calc_addr(node);
 		reg_t *val = reg_make();
-		if(node->type->kind == TYPE_ARRAY) {
-			emit_mov(val, addr);
-		} else {
-			emit_load_sz(type, val, addr);
-		}
+		emit_load_obj(type, val, addr);
 		return val;
 	};
 	case NODE_ADDR: {
@@ -324,13 +372,9 @@ reg_t *codegen_expr(node_t *node)
 		return calc_addr(node->lhs);
 	}
 	case NODE_DEREF: {
-		reg_t *expr = codegen_expr(node->lhs);
+		reg_t *addr = codegen_expr(node->lhs);
 		reg_t *val = reg_make();
-		if(node->type->kind == TYPE_ARRAY) {
-			emit_mov(val, expr);
-		} else {
-			emit_load_sz(type, val, expr);
-		}
+		emit_load_obj(type, val, addr);
 		return val;
 	}
 	case NODE_CAST: {
@@ -340,7 +384,7 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_ASSIGN: {
 		reg_t *lval = calc_addr(node->lhs);
 		reg_t *rval = codegen_expr(node->rhs);
-		emit_store_sz(type, lval, rval);
+		emit_store_obj(type, lval, rval);
 		return rval;
 	};
 	case NODE_FUNCALL: {
