@@ -1,7 +1,8 @@
+#include "test/one.c"
 int main()
 {
-	long b = (unsigned int)-1;
-	long c = (unsigned short)-5;
+	long b = (unsigned int)-1 + (blackbox(0));
+	long c = (unsigned short)-5 + (blackbox(0));
 	long a = (int)b + (int)c;
 	_Bool ok1 = a == 65530;
 
