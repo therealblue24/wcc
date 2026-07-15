@@ -501,6 +501,15 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_ASHR:
 			fprintf(f, "\tasr x%d, x%d, x%d\n", r0, r1, r2);
 			break;
+		case IR_INST_SHLI:
+			fprintf(f, "\tlsl x%d, x%d, #%lld\n", r0, r1, imm);
+			break;
+		case IR_INST_SHRI:
+			fprintf(f, "\tlsr x%d, x%d, #%lld\n", r0, r1, imm);
+			break;
+		case IR_INST_ASHRI:
+			fprintf(f, "\tasr x%d, x%d, #%lld\n", r0, r1, imm);
+			break;
 		case IR_INST_SMUL:
 		case IR_INST_UMUL:
 			fprintf(f, "\tmul x%d, x%d, x%d\n", r0, r1, r2);

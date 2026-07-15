@@ -27,6 +27,9 @@ enum ins_type {
 	IR_INST_SHL, /* %r0 = shl %r1, %r2 */
 	IR_INST_SHR, /* %r0 = shr %r1, %r2 */
 	IR_INST_ASHR, /* %r0 = ashr %r1, %r2 */
+	IR_INST_SHLI,
+	IR_INST_SHRI,
+	IR_INST_ASHRI,
 
 	/* arithmetic - unaryops */
 	IR_INST_NEG, /* %r0 = neg %r1 */
@@ -313,6 +316,12 @@ int ir_inst_is_cmp(enum ins_type type);
 
 /* is this instruction associative? (F(B, C) == F(C, B)) */
 int ir_inst_is_assoc(enum ins_type type);
+
+/* can the instruction be immediate folded? */
+int ir_inst_can_fold_imm(enum ins_type type);
+
+/* turn instruction type -> immediate instruction type */
+int ir_inst_turn_imm(enum ins_type type);
 
 /* make a (new) register */
 reg_t *reg_make(void);

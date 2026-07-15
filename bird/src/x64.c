@@ -1,5 +1,7 @@
 #include "bird.h"
+#include "ir.h"
 #include "liveness.h"
+#include <inttypes.h>
 #include <ctype.h>
 
 /* is the instruction in form A = F(B, C) where it needs A and B to be separate? */
@@ -349,6 +351,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 														NULL;
 		const UNUSEDA char *r2d =
 			ins->r2 && ins->r2->rr >= 0 ? x64_reg32[ins->r2->rr] : NULL;
+		int64_t imm = ins->imm;
 		switch(ins->type) {
 		case IR_INST_ZXT: {
 			switch(ins->size) {
@@ -564,6 +567,15 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			break;
 		case IR_INST_EOR:
 			fprintf(f, "\txor %s, %s\n", r0, r2);
+			break;
+		case IR_INST_SHLI:
+			fprintf(f, "\tshl %s, %lld\n", r0, imm);
+			break;
+		case IR_INST_SHRI:
+			fprintf(f, "\tshr %s, %lld\n", r0, imm);
+			break;
+		case IR_INST_ASHRI:
+			fprintf(f, "\tsar %s, %lld\n", r0, imm);
 			break;
 		case IR_INST_SHL:
 		case IR_INST_SHR:

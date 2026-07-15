@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "immfold.h"
 #include "ir.h"
 #include "ssa.h"
 
@@ -503,7 +504,7 @@ static int ir_memopt(ir_func_t *func)
 	return change;
 }
 
-static int ir_leas_addsub_opt(ir_func_t *func)
+static int ir_leas_arith_opt(ir_func_t *func)
 {
 	int change = 0;
 
@@ -526,7 +527,9 @@ static int ir_leas_addsub_opt(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->type != IR_INST_ADD && ins->type != IR_INST_SUB) {
+			if(ins->type != IR_INST_ADD && ins->type != IR_INST_SUB &&
+			   ins->type != IR_INST_UMUL && ins->type != IR_INST_SMUL &&
+			   ins->type != IR_INST_UDIV && ins->type != IR_INST_SDIV) {
 				continue;
 			}
 
@@ -539,13 +542,27 @@ static int ir_leas_addsub_opt(ir_func_t *func)
 			}
 
 			change = 1;
-			ins->type = IR_INST_LEAS;
 			ins->imm = ins->r1->imm;
-			if(ins->type == IR_INST_ADD) {
-				ins->imm += ins->r2->imm;
-			} else {
+
+			switch(ins->type) {
+			case IR_INST_ADD:
 				ins->imm -= ins->r2->imm;
+				break;
+			case IR_INST_SUB:
+				ins->imm += ins->r2->imm;
+				break;
+			case IR_INST_UMUL:
+			case IR_INST_SMUL:
+				ins->imm *= ins->r2->imm;
+				break;
+			case IR_INST_UDIV:
+			case IR_INST_SDIV:
+				ins->imm /= ins->r2->imm;
+				break;
+			default:
+				break;
 			}
+			ins->type = IR_INST_LEAS;
 		}
 	}
 
@@ -1352,7 +1369,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		{
 			change |= ir_fold(func);
 			ir_placemarks(func);
-			change |= ir_leas_addsub_opt(func);
+			change |= ir_leas_arith_opt(func);
 			ir_placemarks(func);
 			ir_fix_phis(func);
 		}
@@ -1395,6 +1412,18 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		printf("Before SSA destruct.:\n");
 		ir_dump(func, 'v');
 		printf("****\n");
+	}
+
+	ir_immfold_analyze(func);
+	switch(arch) {
+	case IR_ARCH_AARCH64_APPLE:
+		ir_immfold_do(func, 0, 4095);
+		break;
+	case IR_ARCH_X64_SYSV:
+		ir_immfold_do(func, INT32_MIN, INT32_MAX);
+		break;
+	default:
+		break;
 	}
 
 	ir_ssa_exit(func);

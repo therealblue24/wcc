@@ -60,6 +60,29 @@ int ir_inst_is_assoc(enum ins_type type)
 		   type == IR_INST_EOR;
 }
 
+/* can the instruction be immediate folded? */
+int ir_inst_can_fold_imm(enum ins_type type)
+{
+	return type == IR_INST_SHL || type == IR_INST_SHR || type == IR_INST_ASHR;
+}
+
+/* turn instruction type -> immediate instruction type */
+int ir_inst_turn_imm(enum ins_type type)
+{
+#define CASE(x) \
+	case x:     \
+		return x##I
+	switch(type) {
+		CASE(IR_INST_SHL);
+		CASE(IR_INST_SHR);
+		CASE(IR_INST_ASHR);
+	default:
+		return type;
+	}
+	return type;
+#undef CASE
+}
+
 /* reset register counter */
 void reg_reset_counter(void)
 {

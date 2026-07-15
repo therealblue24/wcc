@@ -8,5 +8,6 @@
 #include "aarch64.h"
 #include "x64.h"
 #include "ssa.h"
+#include "immfold.h"
 
 #endif /* BIRD_H_ */
