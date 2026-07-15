@@ -16,7 +16,8 @@ static bool ins_is_3source(enum ins_type t)
 /* is the instruction in form A = F(B) where it needs A and B to be separate? */
 static bool ins_is_2source(enum ins_type t)
 {
-	return t == IR_INST_NEG || t == IR_INST_NOT;
+	return t == IR_INST_NEG || t == IR_INST_NOT || t == IR_INST_SHLI ||
+		   t == IR_INST_SHRI || t == IR_INST_ASHRI || t == IR_INST_SUBI;
 }
 
 static void turn_into_x64_ins(ir_inst_t *prev, ir_inst_t *cur)
@@ -25,18 +26,8 @@ static void turn_into_x64_ins(ir_inst_t *prev, ir_inst_t *cur)
 		return;
 	}
 
-	if(ins_is_3source(cur->type)) {
+	if(ins_is_3source(cur->type) || ins_is_2source(cur->type)) {
 		/* rewrite A = F(B, C) into A = B; A = F(A, C) */
-		ir_inst_t *mov = ins_mov(cur->r0, cur->r1);
-		mov->noopt = true;
-		cur->r1 = cur->r0;
-		mov->next = cur;
-		prev->next = mov;
-		return;
-	}
-
-	if(ins_is_2source(cur->type)) {
-		/* rewrite A = F(B) into A = B; A = F(A) */
 		ir_inst_t *mov = ins_mov(cur->r0, cur->r1);
 		mov->noopt = true;
 		cur->r1 = cur->r0;
@@ -536,8 +527,21 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				fprintf(f, "\tadd %s, %s\n", r0, r2);
 			}
 			break;
+		case IR_INST_ADDI:
+			if(ins->r1->rr != ins->r0->rr) {
+				if(imm < 0) {
+					fprintf(f, "\tlea %s, [%s - %lld]\n", r0, r1, i64abs(imm));
+				} else {
+					fprintf(f, "\tlea %s, [%s + %lld]\n", r0, r1, imm);
+				}
+			} else {
+				fprintf(f, "\tadd %s, %lld\n", r0, imm);
+			}
 		case IR_INST_SUB:
 			fprintf(f, "\tsub %s, %s\n", r0, r2);
+			break;
+		case IR_INST_SUBI:
+			fprintf(f, "\tsub %s, %lld\n", r0, imm);
 			break;
 		case IR_INST_SMUL:
 		case IR_INST_UMUL:
