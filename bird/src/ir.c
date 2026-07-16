@@ -1,3 +1,4 @@
+#include "ir.h"
 #include "bird.h"
 #include "regalloc.h"
 #include "zz/arena.h"
@@ -33,14 +34,29 @@ int ir_inst_is_foldable(enum ins_type type)
 		   type == IR_INST_OR;
 }
 
-/* is this instruction a branch? */
-int ir_inst_is_br(enum ins_type type)
+static int ir_inst_is_br_cond(enum ins_type type)
 {
-	return type == IR_INST_BR || type == IR_INST_BREQ || type == IR_INST_BRNE ||
+	return type == IR_INST_BREQ || type == IR_INST_BRNE ||
 		   type == IR_INST_BRSLT || type == IR_INST_BRSLE ||
 		   type == IR_INST_BRSGT || type == IR_INST_BRSGE ||
 		   type == IR_INST_BRULT || type == IR_INST_BRULE ||
 		   type == IR_INST_BRUGT || type == IR_INST_BRUGE;
+}
+
+static int ir_inst_is_br_condimm(enum ins_type type)
+{
+	return type == IR_INST_BREQI || type == IR_INST_BRNEI ||
+		   type == IR_INST_BRSLTI || type == IR_INST_BRSLEI ||
+		   type == IR_INST_BRSGTI || type == IR_INST_BRSGEI ||
+		   type == IR_INST_BRULTI || type == IR_INST_BRULEI ||
+		   type == IR_INST_BRUGTI || type == IR_INST_BRUGEI;
+}
+
+/* is this instruction a branch? */
+int ir_inst_is_br(enum ins_type type)
+{
+	return type == IR_INST_BR || ir_inst_is_br_cond(type) ||
+		   ir_inst_is_br_condimm(type);
 }
 
 /* is this instruction a comparison? */
@@ -65,7 +81,8 @@ int ir_inst_can_fold_imm(enum ins_type type)
 {
 	return type == IR_INST_SHL || type == IR_INST_SHR || type == IR_INST_ASHR ||
 		   type == IR_INST_ADD || type == IR_INST_SUB || type == IR_INST_OR ||
-		   type == IR_INST_AND || type == IR_INST_EOR;
+		   type == IR_INST_AND || type == IR_INST_EOR || ir_inst_is_cmp(type) ||
+		   ir_inst_is_br_cond(type);
 }
 
 /* turn instruction type -> immediate instruction type */
@@ -83,6 +100,26 @@ int ir_inst_turn_imm(enum ins_type type)
 		CASE(IR_INST_SHL);
 		CASE(IR_INST_SHR);
 		CASE(IR_INST_ASHR);
+		CASE(IR_INST_EQ);
+		CASE(IR_INST_NE);
+		CASE(IR_INST_SLT);
+		CASE(IR_INST_SLE);
+		CASE(IR_INST_SGT);
+		CASE(IR_INST_SGE);
+		CASE(IR_INST_ULT);
+		CASE(IR_INST_ULE);
+		CASE(IR_INST_UGT);
+		CASE(IR_INST_UGE);
+		CASE(IR_INST_BREQ);
+		CASE(IR_INST_BRNE);
+		CASE(IR_INST_BRSLT);
+		CASE(IR_INST_BRSLE);
+		CASE(IR_INST_BRSGT);
+		CASE(IR_INST_BRSGE);
+		CASE(IR_INST_BRULT);
+		CASE(IR_INST_BRULE);
+		CASE(IR_INST_BRUGT);
+		CASE(IR_INST_BRUGE);
 	default:
 		return type;
 	}

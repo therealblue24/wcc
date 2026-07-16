@@ -57,6 +57,17 @@ enum ins_type {
 	IR_INST_UGT, /* %r0 = cmp.ugt %r1, %r2 */
 	IR_INST_UGE, /* %r0 = cmp.uge %r1, %r2 */
 
+	IR_INST_EQI,
+	IR_INST_NEI,
+	IR_INST_SLTI,
+	IR_INST_SLEI,
+	IR_INST_SGTI,
+	IR_INST_SGEI,
+	IR_INST_ULTI,
+	IR_INST_ULEI,
+	IR_INST_UGTI,
+	IR_INST_UGEI,
+
 	/* compare-and-branches */
 	IR_INST_BREQ, /* br.eq %r1, %r2, true-blk, false-blk */
 	IR_INST_BRNE, /* br.ne %r1, %r2, true-blk, false-blk */
@@ -68,6 +79,17 @@ enum ins_type {
 	IR_INST_BRULE, /* br.ule %r1, %r2, true-blk, false-blk */
 	IR_INST_BRUGT, /* br.ugt %r1, %r2, true-blk, false-blk */
 	IR_INST_BRUGE, /* br.uge %r1, %r2, true-blk, false-blk */
+
+	IR_INST_BREQI,
+	IR_INST_BRNEI,
+	IR_INST_BRSLTI,
+	IR_INST_BRSLEI,
+	IR_INST_BRSGTI,
+	IR_INST_BRSGEI,
+	IR_INST_BRULTI,
+	IR_INST_BRULEI,
+	IR_INST_BRUGTI,
+	IR_INST_BRUGEI,
 
 	/* memory */
 	IR_INST_LOAD, /* %r0 = load %r1 */

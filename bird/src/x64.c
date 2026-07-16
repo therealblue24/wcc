@@ -431,6 +431,18 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			}
 		} break;
 
+		case IR_INST_BREQI:
+		case IR_INST_BRNEI:
+		case IR_INST_BRSLTI:
+		case IR_INST_BRSLEI:
+		case IR_INST_BRSGTI:
+		case IR_INST_BRSGEI:
+		case IR_INST_BRULTI:
+		case IR_INST_BRULEI:
+		case IR_INST_BRUGTI:
+		case IR_INST_BRUGEI:
+			fprintf(f, "\tcmp %s, %lld\n", r1, imm);
+			goto branch_cond;
 		case IR_INST_BREQ:
 		case IR_INST_BRNE:
 		case IR_INST_BRSLT:
@@ -442,37 +454,48 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_BRUGT:
 		case IR_INST_BRUGE:
 			fprintf(f, "\tcmp %s, %s\n", r1, r2);
+branch_cond:
 			switch(ins->type) {
 			default:
 				break;
 			case IR_INST_BREQ:
+			case IR_INST_BREQI:
 				fprintf(f, "\tjne .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRNE:
+			case IR_INST_BRNEI:
 				fprintf(f, "\tje .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRSLT:
+			case IR_INST_BRSLTI:
 				fprintf(f, "\tjge .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRSLE:
+			case IR_INST_BRSLEI:
 				fprintf(f, "\tjg .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRSGT:
+			case IR_INST_BRSGTI:
 				fprintf(f, "\tjle .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRSGE:
+			case IR_INST_BRSGEI:
 				fprintf(f, "\tjl .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRULT:
+			case IR_INST_BRULTI:
 				fprintf(f, "\tjae .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRULE:
+			case IR_INST_BRULEI:
 				fprintf(f, "\tja .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRUGT:
+			case IR_INST_BRUGTI:
 				fprintf(f, "\tjbe .BB%ld\n", ins->false_blk->num);
 				break;
 			case IR_INST_BRUGE:
+			case IR_INST_BRUGEI:
 				fprintf(f, "\tjb .BB%ld\n", ins->false_blk->num);
 				break;
 			}
@@ -658,6 +681,23 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_NEG:
 			fprintf(f, "\tneg %s\n", r0);
 			break;
+
+		case IR_INST_EQI:
+		case IR_INST_NEI:
+		case IR_INST_SLTI:
+		case IR_INST_SLEI:
+		case IR_INST_SGTI:
+		case IR_INST_SGEI:
+		case IR_INST_ULTI:
+		case IR_INST_ULEI:
+		case IR_INST_UGTI:
+		case IR_INST_UGEI:
+			if(r0i != r1i && r1i != r2i && r0i != r2i) {
+				fprintf(f, "\txor %s, %s\n", r0d, r0d);
+			}
+			fprintf(f, "\tcmp %s, %lld\n", r1, imm);
+			goto set_cond;
+
 		case IR_INST_EQ:
 		case IR_INST_NE:
 		case IR_INST_SLT:
@@ -672,36 +712,46 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				fprintf(f, "\txor %s, %s\n", r0d, r0d);
 			}
 			fprintf(f, "\tcmp %s, %s\n", r1, r2);
-
+set_cond:
 			switch(ins->type) {
 			case IR_INST_EQ:
+			case IR_INST_EQI:
 				fprintf(f, "\tsete %s\n", r0b);
 				break;
 			case IR_INST_NE:
+			case IR_INST_NEI:
 				fprintf(f, "\tsetne %s\n", r0b);
 				break;
 			case IR_INST_SLT:
+			case IR_INST_SLTI:
 				fprintf(f, "\tsetl %s\n", r0b);
 				break;
 			case IR_INST_SLE:
+			case IR_INST_SLEI:
 				fprintf(f, "\tsetle %s\n", r0b);
 				break;
 			case IR_INST_SGT:
+			case IR_INST_SGTI:
 				fprintf(f, "\tsetg %s\n", r0b);
 				break;
 			case IR_INST_SGE:
+			case IR_INST_SGEI:
 				fprintf(f, "\tsetge %s\n", r0b);
 				break;
 			case IR_INST_ULT:
+			case IR_INST_ULTI:
 				fprintf(f, "\tsetb %s\n", r0b);
 				break;
 			case IR_INST_ULE:
+			case IR_INST_ULEI:
 				fprintf(f, "\tsetbe %s\n", r0b);
 				break;
 			case IR_INST_UGT:
+			case IR_INST_UGTI:
 				fprintf(f, "\tseta %s\n", r0b);
 				break;
 			case IR_INST_UGE:
+			case IR_INST_UGEI:
 				fprintf(f, "\tsetae %s\n", r0b);
 				break;
 			default: /* wth? */
