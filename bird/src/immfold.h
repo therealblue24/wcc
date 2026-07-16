@@ -8,6 +8,7 @@
 void ir_immfold_analyze(ir_func_t *fun);
 
 /* do the folding */
-void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound);
+void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound,
+				   enum ir_arch arch);
 
 #endif /* IMMFOLD_H_ */

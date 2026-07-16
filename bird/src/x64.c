@@ -4,6 +4,8 @@
 #include <inttypes.h>
 #include <ctype.h>
 
+/* Even though these 2 functions could be merged into 1, I'm going to keep them seperate as a way to see which functions are unary and which aren't. */
+
 /* is the instruction in form A = F(B, C) where it needs A and B to be separate? */
 static bool ins_is_3source(enum ins_type t)
 {
@@ -17,7 +19,8 @@ static bool ins_is_3source(enum ins_type t)
 static bool ins_is_2source(enum ins_type t)
 {
 	return t == IR_INST_NEG || t == IR_INST_NOT || t == IR_INST_SHLI ||
-		   t == IR_INST_SHRI || t == IR_INST_ASHRI || t == IR_INST_SUBI;
+		   t == IR_INST_SHRI || t == IR_INST_ASHRI || t == IR_INST_SUBI ||
+		   t == IR_INST_ANDI || t == IR_INST_EORI || t == IR_INST_ORI;
 }
 
 static void turn_into_x64_ins(ir_inst_t *prev, ir_inst_t *cur)
@@ -537,6 +540,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			} else {
 				fprintf(f, "\tadd %s, %lld\n", r0, imm);
 			}
+			break;
 		case IR_INST_SUB:
 			fprintf(f, "\tsub %s, %s\n", r0, r2);
 			break;
@@ -571,6 +575,15 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			break;
 		case IR_INST_EOR:
 			fprintf(f, "\txor %s, %s\n", r0, r2);
+			break;
+		case IR_INST_ANDI:
+			fprintf(f, "\tand %s, %lld\n", r0, imm);
+			break;
+		case IR_INST_ORI:
+			fprintf(f, "\tor %s, %lld\n", r0, imm);
+			break;
+		case IR_INST_EORI:
+			fprintf(f, "\txor %s, %lld\n", r0, imm);
 			break;
 		case IR_INST_SHLI:
 			fprintf(f, "\tshl %s, %lld\n", r0, imm);

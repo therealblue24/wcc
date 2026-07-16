@@ -351,7 +351,7 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_NOT: {
 		reg_t *val = codegen_expr(node->lhs);
 		reg_t *not = reg_make();
-		emit_neg(not, val);
+		emit_not(not, val);
 		return not;
 	};
 	case NODE_LOGNEG: {

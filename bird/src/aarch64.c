@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "ir.h"
 #include <ctype.h>
 
 void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
@@ -498,6 +499,15 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_EOR:
 			fprintf(f, "\teor x%d, x%d, x%d\n", r0, r1, r2);
 			break;
+		case IR_INST_ANDI:
+			fprintf(f, "\tand x%d, x%d, #%lld\n", r0, r1, imm);
+			break;
+		case IR_INST_ORI:
+			fprintf(f, "\torr x%d, x%d, #%lld\n", r0, r1, imm);
+			break;
+		case IR_INST_EORI:
+			fprintf(f, "\teor x%d, x%d, #%lld\n", r0, r1, imm);
+			break;
 		case IR_INST_SHL:
 			fprintf(f, "\tlsl x%d, x%d, x%d\n", r0, r1, r2);
 			break;
@@ -535,7 +545,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			fprintf(f, "\tmsub x%d, x10, x%d, x%d\n", r0, r2, r1);
 			break;
 		case IR_INST_NOT:
-			fprintf(f, "\tnot x%d, x%d\n", r0, r1);
+			fprintf(f, "\tmvn x%d, x%d\n", r0, r1);
 			break;
 		case IR_INST_MKBOOL:
 			fprintf(f, "\ttst x%d, x%d\n", r1, r1);

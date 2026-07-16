@@ -305,6 +305,7 @@ void type_propagate(node_t *node)
 		node->type = node->lhs->type;
 		break;
 	case NODE_LOGNEG:
+	case NODE_NOT:
 	case NODE_NEG:
 		node->type = usual_arith_conv_type(TY_INT, node->lhs->type);
 		fastcast(&node->lhs, node->type);

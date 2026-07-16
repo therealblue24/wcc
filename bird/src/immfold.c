@@ -43,8 +43,29 @@ void ir_immfold_analyze(ir_func_t *fun)
 
 #undef ACC
 
+static bool can_fold(enum ins_type t, int64_t imm, int64_t lower_bound,
+					 int64_t higher_bound, enum ir_arch arch)
+{
+	switch(t) {
+	case IR_INST_EOR:
+	case IR_INST_AND:
+	case IR_INST_OR:
+		/* arm in a nutshell */
+		if(arch != IR_ARCH_AARCH64_APPLE) {
+			goto check;
+		}
+		return imm >= 0 && imm <= 15;
+	default:
+check:;
+		return imm >= lower_bound && imm <= higher_bound;
+	}
+	/* unreachable */
+	return false;
+}
+
 /* do the folding */
-void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound)
+void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound,
+				   enum ir_arch arch)
 {
 	/* only fold immediates if it has less than (or equal to) 3 usages */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
@@ -75,9 +96,13 @@ void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound)
 			}
 
 			int64_t immv = *(int64_t *)(&inst->r2->imm);
-			if(immv >= lower_bound && immv <= higher_bound) {
+			if(can_fold(inst->type, immv, lower_bound, higher_bound, arch)) {
 				/* fold */
 				inst->imm = inst->r2->imm;
+				if(inst->type == IR_INST_SHL || inst->type == IR_INST_SHR ||
+				   inst->type == IR_INST_ASHR) {
+					inst->imm &= 63;
+				}
 				inst->type = ir_inst_turn_imm(inst->type);
 				inst->r2 = NULL;
 			}

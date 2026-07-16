@@ -29,6 +29,9 @@ enum ins_type {
 	IR_INST_ASHR, /* %r0 = ashr %r1, %r2 */
 
 	/* immediate ops */
+	IR_INST_ANDI,
+	IR_INST_ORI,
+	IR_INST_EORI,
 	IR_INST_ADDI,
 	IR_INST_SUBI,
 

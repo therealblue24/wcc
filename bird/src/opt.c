@@ -1474,10 +1474,10 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	ir_immfold_analyze(func);
 	switch(arch) {
 	case IR_ARCH_AARCH64_APPLE:
-		ir_immfold_do(func, 0, 4095);
+		ir_immfold_do(func, 0, 4095, arch);
 		break;
 	case IR_ARCH_X64_SYSV:
-		ir_immfold_do(func, INT32_MIN, INT32_MAX);
+		ir_immfold_do(func, INT32_MIN, INT32_MAX, arch);
 		break;
 	default:
 		break;
