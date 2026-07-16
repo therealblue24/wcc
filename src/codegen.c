@@ -2,6 +2,7 @@
 #include "bird.h"
 #include "parse.h"
 #include "type.h"
+#include "zz/base.h"
 #include "zz/list.h"
 #include <stdlib.h>
 
@@ -1015,7 +1016,6 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		fun = func;
 		fun_obj = cur_fn;
 		func->args = list_make(callreg_t *);
-		type_propagate(cur_fn->body);
 
 		ir_blk_t *blk = emit_blk();
 		outblk = blk;
@@ -1065,7 +1065,10 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		list_append(prog.funcs, fun);
 	}
 
-	ir_prog_compile(f, &prog, backend, opt_level);
+	if(do_profile) {
+		printf("+=======");
+	}
+	TIMEIT("ir", { ir_prog_compile(f, &prog, backend, opt_level); });
 	for(size_t i = 0; i < list_len(prog.funcs); i++) {
 		ir_func_delete(prog.funcs[i]);
 	}

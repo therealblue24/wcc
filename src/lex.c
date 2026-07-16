@@ -417,9 +417,14 @@ static void read_full_num(uint64_t *num_, type_t **ty_, char *p, char **rest)
 			}
 		} else {
 			int64_t n = num;
+			if(n > INT32_MAX && n < UINT32_MAX) {
+				ty->unsignd = true;
+				goto skip;
+			}
 			if(n < INT32_MIN || n > INT32_MAX) {
 				compile_warn(start, "number is too big for target type");
 			}
+skip:;
 		}
 		num = ty->unsignd ? zxt(num, 32) : sxt(num, 32);
 	}

@@ -261,3 +261,15 @@ char *file_reader(FILE *f)
 
 	return crlf_to_lf;
 }
+
+long start;
+int do_profile;
+
+void report_time(char *l, long s, long e)
+{
+	if(do_profile) {
+		long d = e - s;
+		float ms = (float)d / 1000.;
+		printf("%.1fms\t%s\n", ms, l);
+	}
+}

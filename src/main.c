@@ -12,6 +12,7 @@
 #include "type.h"
 #include "sema.h"
 #include "codegen.h"
+#include <time.h>
 
 int debug = 0;
 int opt_level = 0;
@@ -137,6 +138,7 @@ static void test_strmap(void)
 
 int main(int argc, char *argv[])
 {
+	do_profile = 0;
 	ENSURE(sizeof(char) == 1 && sizeof(short) == 2 && sizeof(int) == 4,
 		   "invalid runtime platform");
 
@@ -189,6 +191,11 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
+		if(strcmp(arg, "-p") == 0) {
+			do_profile = 1;
+			continue;
+		}
+
 		if(strcmp(arg, "--internal-test-strmap") == 0) {
 			test_strmap();
 			printf("OK\n");
@@ -237,20 +244,27 @@ int main(int argc, char *argv[])
 	fclose(read_from);
 	compile_setsrc(prog, read_from_name);
 
-	token_t *head = lex_do(prog, NULL);
-	head = preproc_do(head);
+	token_t *head;
+	TIMEIT("lex", { head = lex_do(prog, NULL); });
+	TIMEIT("preproc", { head = preproc_do(head); });
 
 	token_t *cur = head;
-	parse_res_t res = parse_do(cur);
-	for(size_t i = 0; i < list_len(res.globals); i++) {
-		obj_t *glob = res.globals[i];
-		if(glob->is_func) {
-			sema_do(glob->body);
+	parse_res_t res;
+	TIMEIT("parse", { res = parse_do(cur); });
+	TIMEIT("sema", {
+		for(size_t i = 0; i < list_len(res.globals); i++) {
+			obj_t *glob = res.globals[i];
+			if(glob->is_func) {
+				sema_do(glob->body);
+			}
 		}
-	}
+	});
 
 	LIST(obj_t *) globals = res.globals;
+
+	long start = clock();
 	codegen_func(emit_to, globals, opt_level, arch);
+	report_time("codegen", start, clock());
 
 	fclose(emit_to);
 
