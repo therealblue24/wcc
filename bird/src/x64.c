@@ -187,19 +187,20 @@ void ir_glob_emit_x64_sysv(FILE *f, ir_global_t *glob)
 	return;
 }
 
-/* for caller-save: we use rsi, rdi, r10, r11 */
+/* for caller-save: we use rsi, rdi, r10, r11, r9, r8 */
 
-static const char *x64_reg[9] = {
-	"rbx", "r12", "r13", "r14", "r15", "rsi", "rdi", "r10", "r11",
-};
-static const char *x64_reg8[9] = { "bl",  "r12b", "r13b", "r14b", "r15b",
-								   "sil", "dil",  "r10b", "r11b" };
-static const char *x64_reg16[9] = { "bx", "r12w", "r13w", "r14w", "r15w",
-									"si", "di",	  "r10w", "r11w" };
-static const char *x64_reg32[9] = { "ebx", "r12d", "r13d", "r14d", "r15d",
-									"esi", "edi",  "r10d", "r11d" };
+static const char *x64_reg[11] = { "rbx", "r12", "r13", "r14", "r15", "rsi",
+								   "rdi", "r10", "r11", "r9",  "r8" };
+static const char *x64_reg8[11] = { "bl",	"r12b", "r13b", "r14b",
+									"r15b", "sil",	"dil",	"r10b",
+									"r11b", "r9b",	"r8b" };
+static const char *x64_reg16[11] = { "bx", "r12w", "r13w", "r14w", "r15w", "si",
+									 "di", "r10w", "r11w", "r9w",  "r8w" };
+static const char *x64_reg32[11] = { "ebx",	 "r12d", "r13d", "r14d",
+									 "r15d", "esi",	 "edi",	 "r10d",
+									 "r11d", "r9d",	 "r8d" };
 
-static const int x64_reg_count = 9;
+static const int x64_reg_count = 11;
 
 static int64_t i64abs(int64_t v)
 {
