@@ -302,6 +302,7 @@ static void store(FILE *f, size_t size, int reg_to, char *addr_fmt, ...)
 }
 
 static const char *arg_reg[6] = { "rdi", "rsi", "rdx", "rcx", "r8", "r9" };
+int x64_arg_reg_map[6] = { 6, 5, 12, 13, 10, 9 };
 
 static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 								 long last_i)
@@ -384,12 +385,16 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		}; break;
 		case IR_INST_CALL: {
 			size_t stack_used = 0;
+			int v[16] = { 0 };
+			int p = 0;
 			int retval = ins->r0 ? ins->r0->rr : -1;
 			for(int i = 5; i < x64_reg_count; i++) {
 				if(fn->alloc_used[i] && i != retval) {
 					fprintf(f, "\tpush %s\n", x64_reg[i]);
+					v[i] = p++;
 				}
 			}
+			p--;
 
 			for(size_t i = 6; i < list_len(ins->call_args); i++) {
 				int arg = ins->call_args[i]->r->rr;
@@ -403,14 +408,32 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				stack_used += 8;
 			}
 
+			for(int i = 0; i < 16; i++) {
+				v[i] = ((p - v[i]) * 8) - stack_used;
+			}
+
 			for(size_t i = 0; i < list_len(ins->call_args); i++) {
+				if(i >= 6) {
+					break;
+				}
 				int arg = ins->call_args[i]->r->rr;
+				int nold = 0;
 				if(ins->call_args[i]->r->spilld2) {
 					arg = 7;
+					nold = 1;
 					fprintf(f, "\tmov %s, [rbp - %lld]\n", x64_reg[arg],
 							i64abs(ins->call_args[i]->r->off));
 				}
-				if(i < 6) {
+
+				if(!nold && arg >= 5) {
+					int off = v[arg];
+
+					if(off) {
+						fprintf(f, "\tmov %s, [rsp + %d]\n", arg_reg[i], off);
+					} else {
+						fprintf(f, "\tmov %s, [rsp]\n", arg_reg[i]);
+					}
+				} else {
 					fprintf(f, "\tmov %s, %s\n", arg_reg[i], x64_reg[arg]);
 				}
 			}
@@ -851,13 +874,10 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	}
 	/* setup function frame */
 
-	/* TODO: hack */
-	int x64_reg_map[6] = { 6, 5, 12, 13, 10, 9 };
-
 	for(size_t i = 0; i < list_len(fun->args); i++) {
 		callreg_t *arg = fun->args[i];
 		if(i < 6) {
-			store(f, arg->size, x64_reg_map[i], "[rbp - %lld]",
+			store(f, arg->size, x64_arg_reg_map[i], "[rbp - %lld]",
 				  i64abs((int64_t)arg->r->off));
 		} else {
 			ENSURE(stack_indx >= 0, "negative stack index, somehow");
