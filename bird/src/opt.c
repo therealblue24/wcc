@@ -64,45 +64,7 @@ static bool regs_same(reg_t *a, reg_t *b)
 static int ir_stackopt(ir_func_t *func)
 {
 	int changed = 0;
-	/* first, check which registers are leas */
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->type == IR_INST_LEAS) {
-				ins->r0->stack_loc = true;
-				ins->r0->stack_off = ins->imm;
-			} else if(ins->r0) {
-				ins->r0->stack_loc = false;
-			}
-
-			/* however if we use this register outside of loads and stores
-			 * we can't optimize it */
-			if(ins->r1 && ins->r1->stack_loc && ins->type != IR_INST_LOAD &&
-			   ins->type != IR_INST_STORE) {
-				ins->r1->stack_loc = false;
-			}
-			if(ins->r2 && ins->r2->stack_loc && ins->type != IR_INST_LOAD &&
-			   ins->type != IR_INST_STORE) {
-				ins->r2->stack_loc = false;
-			}
-
-			if(ins->type == IR_INST_CALL) {
-				for(size_t i = 0; i < list_len(ins->call_args); i++) {
-					reg_t *r = ins->call_args[i]->r;
-					if(r && r->stack_loc && i >= 6) {
-						r->stack_loc = false;
-					}
-				}
-			}
-
-			/* edge case */
-			if(ins->r2 && ins->r2->stack_loc && ins->type == IR_INST_STORE) {
-				ins->r2->stack_loc = false;
-			}
-		}
-	}
-
-	/* now, simply replace the load %leas_reg with loads #off */
+	/* replace load %leas_reg with loads #off */
 	/* and store %leas_reg, %reg with stores %reg, #off */
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
@@ -111,17 +73,17 @@ static int ir_stackopt(ir_func_t *func)
 				continue;
 			}
 
-			if(ins->type == IR_INST_LOAD && ins->r1->stack_loc) {
+			if(ins->type == IR_INST_LOAD && ins->r1->insty == IR_INST_LEAS) {
 				ins->type = IR_INST_LOADS;
-				ins->imm = -ins->r1->stack_off;
+				ins->imm = -ins->r1->imm;
 				changed = 1;
 			}
 
-			if(ins->type == IR_INST_STORE && ins->r1->stack_loc) {
+			if(ins->type == IR_INST_STORE && ins->r1->insty == IR_INST_LEAS) {
 				reg_t *r1 = ins->r1;
 				ins->r1 = ins->r2;
 				ins->type = IR_INST_STORES;
-				ins->imm = -r1->stack_off;
+				ins->imm = -r1->imm;
 				changed = 1;
 			}
 		}
@@ -561,7 +523,7 @@ static int ir_memopt(ir_func_t *func)
 	return change;
 }
 
-static int ir_leas_arith_opt(ir_func_t *func)
+static UNUSEDA int ir_leas_arith_opt(ir_func_t *func)
 {
 	int change = 0;
 
@@ -599,14 +561,14 @@ static int ir_leas_arith_opt(ir_func_t *func)
 			}
 
 			change = 1;
-			ins->imm = ins->r1->imm;
+			ins->imm = -ins->r1->imm;
 
 			switch(ins->type) {
 			case IR_INST_ADD:
-				ins->imm -= ins->r2->imm;
+				ins->imm += ins->r2->imm;
 				break;
 			case IR_INST_SUB:
-				ins->imm += ins->r2->imm;
+				ins->imm -= ins->r2->imm;
 				break;
 			case IR_INST_UMUL:
 			case IR_INST_SMUL:
@@ -620,6 +582,8 @@ static int ir_leas_arith_opt(ir_func_t *func)
 				break;
 			}
 			ins->type = IR_INST_LEAS;
+			ins->r2 = NULL;
+			ins->imm = -ins->imm;
 		}
 	}
 
@@ -1123,6 +1087,7 @@ static int ir_mov_elim(ir_func_t *func)
 
 	return change;
 }
+#undef REPLACE
 
 static int ins_is_same(ir_inst_t *a, ir_inst_t *b)
 {
@@ -1300,6 +1265,7 @@ static int ir_adce(ir_func_t *func)
 
 	return change;
 }
+#undef MKALIVE
 
 static int ir_dce_opt(ir_func_t *func)
 {
@@ -1362,7 +1328,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		max_tolerated_change = 16;
 		break;
 	case 3:
-		max_tolerated_change = 256; /* mimic the nature of -O3 */
+		max_tolerated_change = 64; /* mimic the nature of -O3 */
 		break;
 	default:
 		max_tolerated_change = 0;
@@ -1426,7 +1392,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		{
 			change |= ir_fold(func);
 			ir_placemarks(func);
-			change |= ir_leas_arith_opt(func);
+			// change |= ir_leas_arith_opt(func);
 			ir_placemarks(func);
 			ir_fix_phis(func);
 		}
@@ -1448,6 +1414,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 		/* stack-based optimizations */
 		{
+			ir_placemarks(func);
 			change |= ir_stackopt(func);
 			ir_nopremover(func);
 			change |= ir_stackreduce(func);
