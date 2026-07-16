@@ -36,9 +36,8 @@ static void calculate_spill_costs(LIST(reg_t *) allocated, ir_func_t *fun)
 		if(blk->loop_order) {
 			/* they better shoot into the goal */
 			int64_t penalty = blk->loop_order * 2500;
-			for(size_t i = 0; i < list_len(blk->regs_def); i++) {
-				blk->regs_def[i]->spill_cost += penalty;
-			}
+			reg_t *r;
+			set_iter(blk->regs_def, r, { r->spill_cost += penalty; });
 		}
 
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {

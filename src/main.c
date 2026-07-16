@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "zz/set.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include "zz/base.h"
@@ -68,8 +69,73 @@ static char *fmt(char *fmt, ...)
 	return res;
 }
 
+static int *evade_c_compiler(int x)
+{
+	return (int *)(intptr_t)x;
+}
+
+static void test_set(void)
+{
+	/* strmap test but with "numbers" instead */
+	SET(int *) set = set_empty();
+
+	for(int i = 1; i < 1000; i++) {
+		int *p = evade_c_compiler(i);
+		set_add(&set, p);
+		int *r = set_get(set, p);
+		if(r != p) {
+			printf("uh oh\n");
+			exit(1);
+		}
+	}
+
+	for(int i = 1; i < 1000; i++) {
+		int *p = evade_c_compiler(i);
+		int *r = set_get(set, p);
+		if(r != p) {
+			printf("uh oh\n");
+			exit(1);
+		}
+	}
+
+	for(int i = 1; i < 1000; i++) {
+		int *p = evade_c_compiler(i);
+		if(i & 1) {
+			set_del(set, p);
+		}
+	}
+
+	for(int i = 1; i < 1000; i++) {
+		int *p = evade_c_compiler(i);
+		if(i & 1) {
+			/* expect nothing */
+			if(set_has(set, p)) {
+				printf("uh oh\n");
+				exit(1);
+			}
+		} else {
+			/* expect something */
+			int *r = set_get(set, p);
+			if(r != p) {
+				printf("uh oh\n");
+				exit(1);
+			}
+		}
+	}
+
+	int *v;
+	set_iter(set, v, {
+		if((intptr_t)v & 1) {
+			printf("uh oh\n");
+		}
+	});
+
+	set_delete(set);
+}
+
 static void test_strmap(void)
 {
+	test_set();
 	STRMAP(int) map = strmap_make(int);
 	/* populate with keys */
 	for(int i = 0; i < 1000; i++) {

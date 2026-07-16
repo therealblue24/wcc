@@ -124,6 +124,7 @@ static lookup_t strmap_lookup(void *map, zz_hashstr_t *str)
 
 	/* you don't get here */
 	ASSERT(false, "unreachable");
+	return (lookup_t){ .loc = 0, .exists = false };
 }
 
 void strmap_donotuse_del(void *map, zz_hashstr_t *str)

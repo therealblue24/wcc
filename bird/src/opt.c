@@ -1170,6 +1170,7 @@ static int ir_adce(ir_func_t *func)
 		}
 	}
 
+	prof_begin("seed");
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
@@ -1194,6 +1195,7 @@ static int ir_adce(ir_func_t *func)
 			}
 		}
 	}
+	prof_end();
 
 #define MKALIVE(x)                 \
 	do {                           \
@@ -1210,6 +1212,7 @@ static int ir_adce(ir_func_t *func)
 	 * for any register that is alive, mark all registers in its def as alive.
 	 * repeat until no more marks made */
 
+	prof_begin("prop");
 	while(lchange) {
 		lchange = 0;
 
@@ -1240,8 +1243,10 @@ static int ir_adce(ir_func_t *func)
 		}
 		change |= lchange;
 	}
+	prof_end();
 
 	/* eliminate all dead instructions */
+	prof_begin("aggelim");
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
@@ -1262,6 +1267,7 @@ static int ir_adce(ir_func_t *func)
 			ins->type = IR_INST_NOP;
 		}
 	}
+	prof_end();
 
 	return change;
 }
@@ -1366,9 +1372,11 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		/* dead code elim */
 		TIMEIT("dce", {
 			ir_fix(func);
-			change |= ir_adce(func);
-			ir_blk_liveness(func);
-			change |= ir_dce_opt(func);
+			TIMEIT("agg", { change |= ir_adce(func); });
+			TIMEIT("norm", {
+				ir_blk_liveness(func);
+				change |= ir_dce_opt(func);
+			});
 			ir_nopremover(func);
 		});
 

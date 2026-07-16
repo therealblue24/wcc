@@ -1,16 +1,5 @@
 #include "bird.h"
 
-/* simple linear search */
-static int has_reg(LIST(reg_t *) list, reg_t *target)
-{
-	for(size_t i = 0; i < list_len(list); i++) {
-		if(list[i] == target) {
-			return 1;
-		}
-	}
-	return 0;
-}
-
 static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
 {
 	ir_inst_t *ret = root;
@@ -30,9 +19,7 @@ static void fill_defs(ir_blk_t *blk)
 		if(!ins->r0) {
 			continue;
 		}
-		if(!has_reg(blk->regs_def, ins->r0)) {
-			list_append(blk->regs_def, ins->r0);
-		}
+		set_add(&blk->regs_def, ins->r0);
 	}
 	return;
 }
@@ -78,21 +65,21 @@ static void fill_ins_outs_reg(ir_blk_t *blk, reg_t *reg)
 	}
 
 	/* want to make sure it's not a defined reg */
-	if(has_reg(blk->regs_def, reg)) {
+	if(set_has(blk->regs_def, reg)) {
 		return;
 	}
 
 	/* its an input reg */
-	if(!has_reg(blk->regs_in, reg)) {
-		list_append(blk->regs_in, reg);
+	if(!set_has(blk->regs_in, reg)) {
+		set_add(&blk->regs_in, reg);
 	} else {
 		return;
 	}
 
 	/* to the predeccesors it's also an output reg: add it there */
 	for(size_t i = 0; i < list_len(blk->pred); i++) {
-		if(!has_reg(blk->pred[i]->regs_out, reg)) {
-			list_append(blk->pred[i]->regs_out, reg);
+		if(!set_has(blk->pred[i]->regs_out, reg)) {
+			set_add(&blk->pred[i]->regs_out, reg);
 			fill_ins_outs_reg(blk->pred[i], reg);
 		}
 	}
@@ -123,9 +110,9 @@ static void reset_blk(ir_blk_t *blk)
 {
 	list_hdr(blk->pred)->size = 0;
 	list_hdr(blk->succ)->size = 0;
-	list_hdr(blk->regs_def)->size = 0;
-	list_hdr(blk->regs_in)->size = 0;
-	list_hdr(blk->regs_out)->size = 0;
+	set_reset(blk->regs_def);
+	set_reset(blk->regs_in);
+	set_reset(blk->regs_out);
 	blk->loop_order = 0;
 }
 
@@ -196,12 +183,12 @@ void ir_blk_fixup_entry(ir_func_t *fun)
 	ir_inst_t *prev = entry->insts;
 	ir_inst_t *cur = entry->insts->next;
 
-	for(size_t i = 0; i < list_len(entry->regs_in); i++) {
-		reg_t *reg = entry->regs_in[i];
+	reg_t *reg;
+	set_iter(entry->regs_in, reg, {
 		ir_inst_t *def = ir_inst_make(IR_INST_IMM, reg, NULL, NULL, 0);
 		def->next = cur;
 		prev->next = def;
-	}
+	});
 
 	entry->insts = entry->insts->next;
 	ir_inst_delete(nop);
@@ -271,9 +258,8 @@ void ir_blk_liveness(ir_func_t *fun)
 
 			ins_count++;
 		}
-		for(size_t j = 0; j < list_len(blk->regs_out); j++) {
-			reg_update_counter(blk->regs_out[j], ins_count);
-		}
+		reg_t *r;
+		set_iter(blk->regs_out, r, { reg_update_counter(r, ins_count); });
 	}
 }
 
@@ -440,9 +426,8 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 
 			ins_count++;
 		}
-		for(size_t j = 0; j < list_len(blk->regs_out); j++) {
-			reg_update_counter(blk->regs_out[j], ins_count);
-		}
+		reg_t *r;
+		set_iter(blk->regs_out, r, { reg_update_counter(r, ins_count); });
 	}
 	return allocated;
 }

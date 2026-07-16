@@ -392,9 +392,9 @@ ir_blk_t *ir_blk_make(ir_inst_t *insts)
 	blk->pred = list_make(ir_blk_t *);
 	blk->succ = list_make(ir_blk_t *);
 	blk->incomplete_phis = list_make(ir_inst_t *);
-	blk->regs_def = list_make(reg_t *);
-	blk->regs_in = list_make(reg_t *);
-	blk->regs_out = list_make(reg_t *);
+	blk->regs_def = set_empty();
+	blk->regs_in = set_empty();
+	blk->regs_out = set_empty();
 	blk->tail = NULL;
 	return blk;
 }
@@ -418,9 +418,9 @@ void ir_blk_delete(ir_blk_t *blk)
 	list_delete(blk->pred);
 	list_delete(blk->succ);
 	list_delete(blk->incomplete_phis);
-	list_delete(blk->regs_def);
-	list_delete(blk->regs_in);
-	list_delete(blk->regs_out);
+	set_delete(blk->regs_def);
+	set_delete(blk->regs_in);
+	set_delete(blk->regs_out);
 	free(blk);
 	return;
 }

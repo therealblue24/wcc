@@ -16,9 +16,8 @@ void ir_immfold_analyze(ir_func_t *fun)
 	/* reset counts */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
-		for(size_t j = 0; j < list_len(blk->regs_def); j++) {
-			blk->regs_def[j]->spill_cost = 0;
-		}
+		reg_t *r;
+		set_iter(blk->regs_def, r, { r->spill_cost = 0; });
 	}
 
 	/* track usage */
@@ -70,14 +69,14 @@ void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound,
 	/* only fold immediates if it has less than (or equal to) 3 usages */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
-		for(size_t j = 0; j < list_len(blk->regs_def); j++) {
-			reg_t *r = blk->regs_def[j];
+		reg_t *r;
+		set_iter(blk->regs_def, r, {
 			if(r->spill_cost <= 3) {
 				r->spill_cost = 1;
 			} else {
 				r->spill_cost = 0;
 			}
-		}
+		});
 	}
 
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {

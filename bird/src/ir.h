@@ -4,6 +4,7 @@
 
 #include "zz/base.h"
 #include "zz/list.h"
+#include "zz/set.h"
 #include "zz/prof.h"
 
 enum ins_type {
@@ -214,9 +215,9 @@ typedef struct ir_blk {
 	LIST(struct ir_blk *) succ; /* block's successors */
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */
-	LIST(reg_t *) regs_def; /* registers in this block */
-	LIST(reg_t *) regs_in; /* registers in */
-	LIST(reg_t *) regs_out; /* registers out */
+	SET(reg_t *) regs_def; /* registers in this block */
+	SET(reg_t *) regs_in; /* registers in */
+	SET(reg_t *) regs_out; /* registers out */
 } ir_blk_t;
 
 /* for SSA construction */
