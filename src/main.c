@@ -4,6 +4,7 @@
 #include "zz/base.h"
 #include "zz/arena.h"
 #include "zz/strmap.h"
+#include "zz/prof.h"
 #include <ctype.h>
 #include <stdarg.h>
 #include "lex.h"
@@ -140,6 +141,8 @@ static void test_strmap(void)
 int main(int argc, char *argv[])
 {
 	do_profile = 0;
+	long begin_clock = clock();
+	prof_make();
 	ENSURE(sizeof(char) == 1 && sizeof(short) == 2 && sizeof(int) == 4,
 		   "invalid runtime platform");
 
@@ -263,9 +266,7 @@ int main(int argc, char *argv[])
 
 	LIST(obj_t *) globals = res.globals;
 
-	long start = clock();
-	codegen_func(emit_to, globals, opt_level, arch);
-	report_time("codegen", start, clock());
+	TIMEIT("codegen", { codegen_func(emit_to, globals, opt_level, arch); });
 
 	fclose(emit_to);
 
@@ -292,5 +293,11 @@ int main(int argc, char *argv[])
 	type_delete_arenas();
 	parse_delete_arenas();
 	scr_cleanup();
+	prof_delete();
+	long diff = clock() - begin_clock;
+	float ms = (float)diff / 1000.f;
+	if(do_profile) {
+		printf("Total time: %.1fms\n", ms);
+	}
 	return 0;
 }

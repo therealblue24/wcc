@@ -4,6 +4,7 @@
 #include "type.h"
 #include "zz/base.h"
 #include "zz/list.h"
+#include "zz/prof.h"
 #include <stdlib.h>
 
 static ir_func_t *fun;
@@ -1065,9 +1066,6 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		list_append(prog.funcs, fun);
 	}
 
-	if(do_profile) {
-		printf("+=======");
-	}
 	TIMEIT("ir", { ir_prog_compile(f, &prog, backend, opt_level); });
 	for(size_t i = 0; i < list_len(prog.funcs); i++) {
 		ir_func_delete(prog.funcs[i]);

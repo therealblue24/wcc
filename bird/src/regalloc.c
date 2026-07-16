@@ -209,6 +209,7 @@ static reg_t *regalloc_try(LIST(reg_t *) allocated, size_t amount)
 /* TODO: model lifetime holes */
 void ir_regalloc(ir_func_t *fun, int amount_)
 {
+	prof_begin("regalloc");
 	LIST(reg_t *) allocd;
 	size_t amount = amount_;
 
@@ -238,6 +239,7 @@ void ir_regalloc(ir_func_t *fun, int amount_)
 
 		list_delete(allocd);
 	}
+	prof_end();
 	return;
 }
 

@@ -715,6 +715,7 @@ static void deparallelize_pmovs(ir_func_t *fun)
 
 void ir_ssa_enter(ir_func_t *fun)
 {
+	prof_begin("ssa");
 	reg_reset_counter();
 	UNUSED(fun);
 	ir_fix(fun);
@@ -786,6 +787,7 @@ void ir_ssa_enter(ir_func_t *fun)
 	list_delete(postorder);
 	list_delete(allocated);
 
+	prof_end();
 	return;
 }
 

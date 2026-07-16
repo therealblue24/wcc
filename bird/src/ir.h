@@ -4,6 +4,7 @@
 
 #include "zz/base.h"
 #include "zz/list.h"
+#include "zz/prof.h"
 
 enum ins_type {
 	IR_INST_NOP = 0, /* does nothing */

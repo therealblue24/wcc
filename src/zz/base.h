@@ -147,16 +147,6 @@ char *file_reader(FILE *f);
 
 void report_time(char *l, long s, long e);
 
-extern long start;
-extern int do_profile;
-
-#define TIMEIT(label, code)                 \
-	do {                                    \
-		start = clock();                    \
-		code;                               \
-		report_time(label, start, clock()); \
-	} while(0)
-
 #if defined(__x86_64__) || defined(_M_X64)
 #define DEFAULT_BACKEND IR_ARCH_X64_SYSV
 #endif /* x86 */

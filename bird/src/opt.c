@@ -1311,6 +1311,7 @@ void ir_dce(ir_func_t *fun)
 /* optimizes an IR function */
 void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 {
+	prof_begin("opt");
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		func->blocks[i]->tail = find_last_or_flow_ins(func->blocks[i]->insts);
 	}
@@ -1356,71 +1357,72 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	while(left) {
 		change = 0;
 
-		ir_blk_reguse(func);
-		ir_blk_liveness(func);
-		ir_placemarks(func);
+		TIMEIT("info", {
+			TIMEIT("use", { ir_blk_reguse(func); });
+			TIMEIT("live", { ir_blk_liveness(func); });
+			TIMEIT("mark", { ir_placemarks(func); });
+		});
 
 		/* dead code elim */
-		{
+		TIMEIT("dce", {
 			ir_fix(func);
-
 			change |= ir_adce(func);
 			ir_blk_liveness(func);
 			change |= ir_dce_opt(func);
 			ir_nopremover(func);
-		}
+		});
 
 		/* move elimination */
-		{
+		TIMEIT("movelim", {
 			change |= ir_imm_elim(func);
 			change |= ir_mov_elim(func);
-		}
+		});
 
 		/* peephole opts */
-		{
+		TIMEIT("peep", {
 			change |= ir_simpleopt(func);
 			ir_fix_phis(func);
-		}
+		});
 
 		/* memory optimization */
-		{
+		TIMEIT("mem", {
 			change |= ir_memopt(func);
 			ir_nopremover(func);
-		}
+		});
 
 		/* folding */
-		{
+		TIMEIT("fold", {
 			change |= ir_fold(func);
 			ir_placemarks(func);
 			// change |= ir_leas_arith_opt(func);
 			ir_placemarks(func);
 			ir_fix_phis(func);
-		}
+		});
 
 		/* SSA-related opts */
-		{
+		TIMEIT("phi", {
 			change |= ir_phiopt(func);
 			ir_fix_phis(func);
 			ir_nopremover(func);
 			ir_fix(func);
-		}
+		});
 
 		/* branch opts */
-		{
+		TIMEIT("bropt", {
 			change |= ir_branchopt(func);
 			ir_nopremover(func);
 			ir_fix(func);
-		}
+		});
 
 		/* stack-based optimizations */
-		{
+		TIMEIT("stkopt", {
 			ir_placemarks(func);
 			change |= ir_stackopt(func);
 			ir_nopremover(func);
 			change |= ir_stackreduce(func);
 			ir_nopremover(func);
 			ir_fix(func);
-		}
+		});
 
 		if(!change) {
 			break;
@@ -1438,22 +1440,26 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		printf("****\n");
 	}
 
-	ir_immfold_analyze(func);
-	switch(arch) {
-	case IR_ARCH_AARCH64_APPLE:
-		ir_immfold_do(func, 0, 4095, arch);
-		break;
-	case IR_ARCH_X64_SYSV:
-		ir_immfold_do(func, INT32_MIN, INT32_MAX, arch);
-		break;
-	default:
-		break;
-	}
-	ir_blk_liveness(func);
-	ir_dce(func);
+	TIMEIT("immfold", {
+		ir_immfold_analyze(func);
+		switch(arch) {
+		case IR_ARCH_AARCH64_APPLE:
+			ir_immfold_do(func, 0, 4095, arch);
+			break;
+		case IR_ARCH_X64_SYSV:
+			ir_immfold_do(func, INT32_MIN, INT32_MAX, arch);
+			break;
+		default:
+			break;
+		}
+		ir_blk_liveness(func);
+		ir_dce(func);
+	});
 
-	ir_ssa_exit(func);
-	ir_nopremover(func);
+	TIMEIT("exit", {
+		ir_ssa_exit(func);
+		ir_nopremover(func);
+	});
 
 	if(debug) {
 		printf("After common opts:\n");
@@ -1462,16 +1468,18 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	}
 
 	/* apply arch specific opts */
-	switch(arch) {
-	case IR_ARCH_AARCH64_APPLE:
-		ir_func_opt_aarch64(func, opt_level);
-		break;
-	case IR_ARCH_X64_SYSV:
-		ir_func_opt_x64(func, opt_level);
-		break;
-	default:
-		break;
-	}
+	TIMEIT("archopt", {
+		switch(arch) {
+		case IR_ARCH_AARCH64_APPLE:
+			ir_func_opt_aarch64(func, opt_level);
+			break;
+		case IR_ARCH_X64_SYSV:
+			ir_func_opt_x64(func, opt_level);
+			break;
+		default:
+			break;
+		}
+	});
 
 	ir_fix(func);
 
@@ -1480,5 +1488,6 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		ir_dump(func, 'v');
 		printf("****\n");
 	}
+	prof_end();
 	return;
 }
