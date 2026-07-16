@@ -813,24 +813,24 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 		callreg_t *arg = fun->args[i];
 		if(i < 8) {
 			if(load_fp_imm_x10(f, arg->r->off, false)) {
-				fprintf(f, "\tstr x%d, [fp, x10]\n", (int)i);
+				store(f, arg->size, i, "[fp, x10]");
 			} else {
-				fprintf(f, "\tstr x%d, [fp, #%lld]\n", (int)i,
-						(int64_t)arg->r->off);
+				store(f, arg->size, i, "[fp, #%lld]", (int64_t)arg->r->off);
 			}
 		} else {
 			ENSURE(stack_indx >= 0, "negative stack index, somehow");
 
 			if(load_fp_imm_x10(f, -(int64_t)(stack_indx + stack_disp), false)) {
-				fprintf(f, "\tldr x10, [sp, x10]\n");
+				load(f, arg->size, false, 10, "[sp, x10]");
 			} else {
-				fprintf(f, "\tldr x10, [sp, #%zu]\n", stack_indx + stack_disp);
+				load(f, arg->size, false, 10, "[sp, #%zu]",
+					 stack_indx + stack_disp);
 			}
 
 			if(load_fp_imm_x10(f, arg->r->off, false)) {
-				fprintf(f, "\tstr x10, [fp, x10]\n");
+				store(f, arg->size, 10, "[fp, x10]");
 			} else {
-				fprintf(f, "\tstr x10, [fp, #%lld]\n", (int64_t)arg->r->off);
+				store(f, arg->size, 10, "[fp, #%lld]", (int64_t)arg->r->off);
 			}
 
 			stack_indx -= arg->size;

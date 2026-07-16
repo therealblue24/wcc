@@ -189,16 +189,18 @@ void ir_glob_emit_x64_sysv(FILE *f, ir_global_t *glob)
 
 /* for caller-save: we use rsi, rdi, r10, r11, r9, r8 */
 
-static const char *x64_reg[11] = { "rbx", "r12", "r13", "r14", "r15", "rsi",
-								   "rdi", "r10", "r11", "r9",  "r8" };
-static const char *x64_reg8[11] = { "bl",	"r12b", "r13b", "r14b",
-									"r15b", "sil",	"dil",	"r10b",
-									"r11b", "r9b",	"r8b" };
-static const char *x64_reg16[11] = { "bx", "r12w", "r13w", "r14w", "r15w", "si",
-									 "di", "r10w", "r11w", "r9w",  "r8w" };
-static const char *x64_reg32[11] = { "ebx",	 "r12d", "r13d", "r14d",
-									 "r15d", "esi",	 "edi",	 "r10d",
-									 "r11d", "r9d",	 "r8d" };
+static const char *x64_reg[15] = { "rbx", "r12", "r13", "r14", "r15",
+								   "rsi", "rdi", "r10", "r11", "r9",
+								   "r8",  NULL,	 "rdx", "rcx", "rax" };
+static const char *x64_reg8[15] = { "bl",  "r12b", "r13b", "r14b", "r15b",
+									"sil", "dil",  "r10b", "r11b", "r9b",
+									"r8b", NULL,   "dl",   "cl",   "al" };
+static const char *x64_reg16[15] = { "bx",	"r12w", "r13w", "r14w", "r15w",
+									 "si",	"di",	"r10w", "r11w", "r9w",
+									 "r8w", NULL,	"dx",	"cx",	"ax" };
+static const char *x64_reg32[15] = { "ebx", "r12d", "r13d", "r14d", "r15d",
+									 "esi", "edi",	"r10d", "r11d", "r9d",
+									 "r8d", NULL,	"edx",	"ecx",	"eax" };
 
 static const int x64_reg_count = 11;
 
@@ -849,16 +851,20 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	}
 	/* setup function frame */
 
+	/* TODO: hack */
+	int x64_reg_map[6] = { 6, 5, 12, 13, 10, 9 };
+
 	for(size_t i = 0; i < list_len(fun->args); i++) {
 		callreg_t *arg = fun->args[i];
 		if(i < 6) {
-			fprintf(f, "\tmov [rbp - %lld], %s\n", i64abs((int64_t)arg->r->off),
-					arg_reg[i]);
+			store(f, arg->size, x64_reg_map[i], "[rbp - %lld]",
+				  i64abs((int64_t)arg->r->off));
 		} else {
 			ENSURE(stack_indx >= 0, "negative stack index, somehow");
-			fprintf(f, "\tmov rax, [rsp + %zu]\n", stack_indx + stack_disp);
-			fprintf(f, "\tmov [rbp - %lld], rax\n",
-					i64abs((int64_t)arg->r->off));
+			load(f, arg->size, false, 14, "[rsp + %zu]",
+				 stack_indx + stack_disp);
+			store(f, arg->size, 14, "[rbp - %lld]",
+				  i64abs((int64_t)arg->r->off));
 
 			stack_indx -= arg->size;
 		}

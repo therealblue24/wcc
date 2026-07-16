@@ -392,12 +392,15 @@ reg_t *codegen_expr(node_t *node)
 		node_t *arg = node->fargs;
 		for(; arg; arg = arg->next) {
 			reg_t *argres = codegen_expr(arg);
-			reg_t *argres2 = reg_make();
-			ir_inst_t *ext =
-				ir_inst_make(arg->type->unsignd ? IR_INST_ZXT : IR_INST_SXT,
-							 argres2, argres, NULL, 0);
-			ext->size = arg->type->size;
-			ir_blk_add(outblk, ext);
+			reg_t *argres2 = argres;
+			if(arg->type->size != 8) {
+				argres2 = reg_make();
+				ir_inst_t *ext =
+					ir_inst_make(arg->type->unsignd ? IR_INST_ZXT : IR_INST_SXT,
+								 argres2, argres, NULL, 0);
+				ext->size = arg->type->size;
+				ir_blk_add(outblk, ext);
+			}
 			callreg_t *callreg =
 				callreg_make(argres2, ARG_CLASS_INTEGER, arg->type->size);
 			list_append(callargs, callreg);
@@ -802,6 +805,20 @@ static UNUSEDA void assign_globals(LIST(obj_t *) globals)
 }
 
 /* calculate stack frame space needed for function `fn`. returns maximum alignment */
+static void rewrite_stack_offs(ir_func_t *fun)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_LEAS) {
+				continue;
+			}
+
+			inst->imm = -((obj_t *)(inst->r0->rhs))->off;
+		}
+	}
+}
+
 static size_t calc_stack_needed(obj_t *fn, enum ir_arch arch)
 {
 	size_t max_align = 0;
@@ -867,6 +884,8 @@ static void varopt(ir_func_t *func)
 			if(ins->type == IR_INST_LEAS) {
 				ins->r0->stack_loc = true;
 				continue;
+			} else if(ins->r0) {
+				ins->r0->stack_loc = false;
 			}
 
 			if(ins->r0 && ins->r0->stack_loc && ins->type != IR_INST_LOAD &&
@@ -899,8 +918,17 @@ static void varopt(ir_func_t *func)
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			if(ins->type == IR_INST_LEAS) {
 				obj_t *obj = (obj_t *)ins->r0->rhs;
-				if(!obj || obj->addressed || !ins->r0->stack_loc) {
+				if(!obj) {
+					goto cant;
+				}
+				if(obj->addressed) {
+					goto cant;
+				}
+
+				if(!ins->r0->stack_loc) {
+cant:
 					/* can't optimize sorry */
+					obj->addressed = true;
 					obj->skip = false;
 					continue;
 				}
@@ -1030,6 +1058,7 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		ir_inst_delete(nop);
 
 		size_t max_align = calc_stack_needed(cur_fn, backend);
+		rewrite_stack_offs(func);
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		fun->align_needed = align_to(max_align, 16);
 
