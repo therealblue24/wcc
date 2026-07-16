@@ -45,6 +45,7 @@ static void help(char *pname)
 	printf("  -t <arch>-<abi>:\ttarget architecture, abi\n");
 	printf("                  \tonly aarch64-apple, x64-sysv are supported.\n");
 	printf("  -d:\t\t\tenable debug IR printing\n");
+	printf("  -p:\t\t\tenable profiling\n");
 	printf("  -O0/1/2/3:\t\toptimization level (default: 0)\n");
 	printf("  -?, --help:\t\tthis page\n");
 	return;

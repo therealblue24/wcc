@@ -11,12 +11,13 @@ You can also check out the IR backend, `bIRd` in `bird`, which can probably be p
 ## Usage
 
 ```
-wcc version 0.0.2 build Jun 27 2026
+wcc version 0.0.2 build Jul 16 2026
 Usage: ./bin/wcc <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/--help]
   -o <output>:          file to output assembly to (stdout is default)
   -t <arch>-<abi>:      target architecture, abi
                         only aarch64-apple, x64-sysv are supported.
   -d:                   enable debug IR printing
+  -p:                   enable profiling
   -O0/1/2/3:            optimization level (default: 0)
   -?, --help:           this page
 ```
