@@ -212,8 +212,38 @@ static int64_t i64abs(int64_t v)
 	return v;
 }
 
+static INLINE void vload8_16(FILE *f, size_t size, bool ext, int reg_to,
+							 char *addr_fmt, bool is_32bit, va_list va)
+{
+	if(size == 1) {
+		if(ext) {
+			if(is_32bit) {
+				fprintf(f, "\tmovsx %s, byte ptr ", x64_reg32[reg_to]);
+			} else {
+				fprintf(f, "\tmovsx %s, byte ptr ", x64_reg[reg_to]);
+			}
+		} else {
+			fprintf(f, "\tmovzx %s, byte ptr ", x64_reg32[reg_to]);
+		}
+	} else {
+		if(ext) {
+			if(is_32bit) {
+				fprintf(f, "\tmovsx %s, word ptr ", x64_reg32[reg_to]);
+			} else {
+				fprintf(f, "\tmovsx %s, word ptr ", x64_reg[reg_to]);
+			}
+		} else {
+			fprintf(f, "\tmovzx %s, word ptr ", x64_reg32[reg_to]);
+		}
+	}
+
+	vfprintf(f, addr_fmt, va);
+	fprintf(f, "\n");
+	return;
+}
+
 static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to,
-						 char *addr_fmt, va_list va)
+						 char *addr_fmt, bool is_32bit, va_list va)
 {
 	switch(size) {
 	case 8:
@@ -223,31 +253,21 @@ static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to,
 		fprintf(f, "\n");
 		break;
 	case 4:
-		if(ext) {
-			fprintf(f, "\tmovsxd %s, dword ptr ", x64_reg[reg_to]);
-		} else {
+		if(is_32bit) {
 			fprintf(f, "\tmov %s, dword ptr ", x64_reg32[reg_to]);
+		} else {
+			if(ext) {
+				fprintf(f, "\tmovsxd %s, dword ptr ", x64_reg[reg_to]);
+			} else {
+				fprintf(f, "\tmov %s, dword ptr ", x64_reg32[reg_to]);
+			}
 		}
 		vfprintf(f, addr_fmt, va);
 		fprintf(f, "\n");
 		break;
 	case 2:
-		if(ext) {
-			fprintf(f, "\tmovsx %s, word ptr ", x64_reg[reg_to]);
-		} else {
-			fprintf(f, "\tmovzx %s, word ptr ", x64_reg32[reg_to]);
-		}
-		vfprintf(f, addr_fmt, va);
-		fprintf(f, "\n");
-		break;
 	case 1:
-		if(ext) {
-			fprintf(f, "\tmovsx %s, byte ptr ", x64_reg[reg_to]);
-		} else {
-			fprintf(f, "\tmovzx %s, byte ptr ", x64_reg32[reg_to]);
-		}
-		vfprintf(f, addr_fmt, va);
-		fprintf(f, "\n");
+		vload8_16(f, size, ext, reg_to, addr_fmt, is_32bit, va);
 		break;
 	}
 	return;
@@ -282,18 +302,20 @@ static INLINE void vstore(FILE *f, size_t size, int reg_to, char *addr_fmt,
 	return;
 }
 
-static void load(FILE *f, size_t size, bool ext, int reg_to, char *addr_fmt,
-				 ...)
+static void load(FILE *f, size_t size, bool ext, int reg_to, bool is_32bit,
+				 char *addr_fmt, ...)
 {
 	va_list va;
 	va_start(va, addr_fmt);
-	vload(f, size, ext, reg_to, addr_fmt, va);
+	vload(f, size, ext, reg_to, addr_fmt, is_32bit, va);
 	va_end(va);
 	return;
 }
 
-static void store(FILE *f, size_t size, int reg_to, char *addr_fmt, ...)
+static void store(FILE *f, size_t size, int reg_to, bool is_32bit,
+				  char *addr_fmt, ...)
 {
+	UNUSED(is_32bit);
 	va_list va;
 	va_start(va, addr_fmt);
 	vstore(f, size, reg_to, addr_fmt, va);
@@ -353,13 +375,20 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		const char *r0 = ins->is_32bit ? r0d : r0x;
 		const char *r1 = ins->is_32bit ? r1d : r1x;
 		const char *r2 = ins->is_32bit ? r2d : r2x;
+		bool is_32bit = ins->is_32bit;
+		if(ins->type == IR_INST_LOADSS || ins->type == IR_INST_STORESS) {
+			is_32bit = false;
+		}
 
 		int64_t imm = ins->imm;
 		switch(ins->type) {
 		case IR_INST_ZXT: {
 			switch(ins->size) {
 			case 8:
-				fprintf(f, "\tmov %s, %s\n", r0, r1);
+			default:
+				if(r0i != r1i) {
+					fprintf(f, "\tmov %s, %s\n", r0, r1);
+				}
 				break;
 			case 4:
 				fprintf(f, "\tmov %s, %s\n", r0d, r1d);
@@ -375,10 +404,17 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_SXT: {
 			switch(ins->size) {
 			case 8:
-				fprintf(f, "\tmov %s, %s\n", r0, r1);
+			default:
+				if(r0i != r1i) {
+					fprintf(f, "\tmov %s, %s\n", r0, r1);
+				}
 				break;
 			case 4:
-				fprintf(f, "\tmovsxd %s, %s\n", r0, r1d);
+				if(is_32bit) {
+					fprintf(f, "\tmov %s, %s\n", r0, r1);
+				} else {
+					fprintf(f, "\tmovsxd %s, %s\n", r0, r1d);
+				}
 				break;
 			case 2:
 				fprintf(f, "\tmovsx %s, %s\n", r0, r1w);
@@ -563,7 +599,11 @@ branch_cond:
 			break;
 		case IR_INST_RET:
 			if(r1 != NULL) {
-				fprintf(f, "\tmov rax, %s\n", r1);
+				if(is_32bit) {
+					fprintf(f, "\tmov eax,%s\n", r1);
+				} else {
+					fprintf(f, "\tmov rax, %s\n", r1);
+				}
 			}
 			if(blk->num != last_i) {
 				fprintf(f, "\tjmp %s_ret\n", fn->name);
@@ -800,20 +840,21 @@ set_cond:
 			fprintf(f, "\tlea %s, [rbp - %lld]\n", r0, (int64_t)ins->imm);
 			break;
 		case IR_INST_LOAD:
-			load(f, ins->size, ins->sign_ext, r0i, "[%s]", r1);
+			load(f, ins->size, ins->sign_ext, r0i, is_32bit, "[%s]", r1x);
 			break;
 		case IR_INST_LOADS:
 		case IR_INST_LOADSS:
-			load(f, ins->size, ins->sign_ext, r0i, "[rbp - %lld]",
+			load(f, ins->size, ins->sign_ext, r0i, is_32bit, "[rbp - %lld]",
 				 i64abs((int64_t)ins->imm));
 			break;
 			break;
 		case IR_INST_STORE:
-			store(f, ins->size, r2i, "[%s]", r1);
+			store(f, ins->size, r2i, is_32bit, "[%s]", r1x);
 			break;
 		case IR_INST_STORES:
 		case IR_INST_STORESS:
-			store(f, ins->size, r1i, "[rbp - %lld]", i64abs((int64_t)ins->imm));
+			store(f, ins->size, r1i, is_32bit, "[rbp - %lld]",
+				  i64abs((int64_t)ins->imm));
 			break;
 
 		default:
@@ -886,13 +927,13 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	for(size_t i = 0; i < list_len(fun->args); i++) {
 		callreg_t *arg = fun->args[i];
 		if(i < 6) {
-			store(f, arg->size, x64_arg_reg_map[i], "[rbp - %lld]",
+			store(f, arg->size, x64_arg_reg_map[i], false, "[rbp - %lld]",
 				  i64abs((int64_t)arg->r->off));
 		} else {
 			ENSURE(stack_indx >= 0, "negative stack index, somehow");
-			load(f, arg->size, false, 14, "[rsp + %zu]",
+			load(f, arg->size, false, 14, false, "[rsp + %zu]",
 				 stack_indx + stack_disp);
-			store(f, arg->size, 14, "[rbp - %lld]",
+			store(f, arg->size, 14, false, "[rbp - %lld]",
 				  i64abs((int64_t)arg->r->off));
 
 			stack_indx -= arg->size;
