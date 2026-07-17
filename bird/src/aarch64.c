@@ -203,6 +203,27 @@ void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
 	return;
 }
 
+static INLINE void vload8_16(FILE *f, size_t size, bool ext, int reg_to,
+							 char *addr_fmt, bool is_32bit, va_list va)
+{
+	if(size == 1) {
+		if(ext) {
+			fprintf(f, is_32bit ? "\tldrsb w%d, " : "\tldrsb x%d, ", reg_to);
+		} else {
+			fprintf(f, "\tldrb w%d, ", reg_to);
+		}
+	} else {
+		if(ext) {
+			fprintf(f, is_32bit ? "\tldrsh w%d, " : "\tldrsh x%d, ", reg_to);
+		} else {
+			fprintf(f, "\tldrh w%d, ", reg_to);
+		}
+	}
+
+	vfprintf(f, addr_fmt, va);
+	fprintf(f, "\n");
+}
+
 static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to_,
 						 char *addr_fmt, bool is_32bit, va_list va)
 {
@@ -214,19 +235,17 @@ static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to_,
 		fprintf(f, "\n");
 		break;
 	case 4:
-		fprintf(f, ext ? "\tldrsw x%d, " : "\tldr w%d, ", reg_to);
+		if(is_32bit) {
+			fprintf(f, "\tldr w%d, ", reg_to);
+		} else {
+			fprintf(f, ext ? "\tldrsw x%d, " : "\tldr w%d, ", reg_to);
+		}
 		vfprintf(f, addr_fmt, va);
 		fprintf(f, "\n");
 		break;
 	case 2:
-		fprintf(f, ext ? "\tldrsh x%d, " : "\tldrh w%d, ", reg_to);
-		vfprintf(f, addr_fmt, va);
-		fprintf(f, "\n");
-		break;
 	case 1:
-		fprintf(f, ext ? "\tldrsb x%d, " : "\tldrb w%d, ", reg_to);
-		vfprintf(f, addr_fmt, va);
-		fprintf(f, "\n");
+		vload8_16(f, size, ext, reg_to, addr_fmt, is_32bit, va);
 		break;
 	default:
 		break;
@@ -237,6 +256,7 @@ static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to_,
 static INLINE void vstore(FILE *f, size_t size, int reg_to_, char *addr_fmt,
 						  bool is_32bit, va_list va)
 {
+	UNUSED(is_32bit);
 	int reg_to = arm_reg_mapping[reg_to_];
 	switch(size) {
 	case 8:
@@ -398,7 +418,11 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 				fprintf(f, "\tsxth %s, %s\n", r0, r1);
 				break;
 			case 4:
-				fprintf(f, "\tsxtw %s, %s\n", r0, r1);
+				if(is_32bit) {
+					fprintf(f, "\tmov %s, %s\n", r0, r1);
+				} else {
+					fprintf(f, "\tsxtw %s, %s\n", r0, r1);
+				}
 				break;
 			case 8:
 			default:
@@ -511,7 +535,7 @@ branch_cond:
 		case IR_INST_RET:
 			if(r1i != -1) {
 				if(is_32bit) {
-					fprintf(f, "\tsxtw x0, %s\n", r1x);
+					fprintf(f, "\tmov w0, %s\n", r1);
 				} else {
 					fprintf(f, "\tmov x0, %s\n", r1);
 				}
@@ -527,7 +551,7 @@ branch_cond:
 			break;
 		case IR_INST_IMM:
 			if(is_32bit) {
-				load_imm_w(f, r0, ins->imm);
+				load_imm_w(f, r0, ins->imm & UINT32_MAX);
 			} else {
 				load_imm(f, r0, ins->imm);
 			}

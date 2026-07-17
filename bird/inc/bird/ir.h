@@ -148,7 +148,9 @@ typedef struct reg {
 	struct reg *lhs;
 	struct reg *rhs;
 	struct ir_inst *from; /* NOT meant to be used for any pass except phiopt! */
-	size_t size;
+	size_t size; /* instruction size of register */
+	bool is_32bit;
+	bool ins_ext; /* ins has ext? */
 
 	bool phi_related; /* argument/def to phi; do NOT eliminate */
 	bool alive; /* is this register not dead? */

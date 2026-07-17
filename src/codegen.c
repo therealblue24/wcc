@@ -23,15 +23,17 @@ static LIST(flow_t) break_stack;
 
 #define INSNAME(name) emit_##name
 
-#define DEF_INS(name, name2, r0, r1, r2, imm, ...)     \
-	static UNUSEDA void INSNAME(name)(__VA_ARGS__)     \
-	{                                                  \
-		ir_inst_t *ins = MAKE(name2, r0, r1, r2, imm); \
-		ir_blk_add(outblk, ins);                       \
-		return;                                        \
+#define DEF_INS(name, name2, r0, r1, r2, imm, ...)                 \
+	static UNUSEDA void INSNAME(name)(bool is_32bit __VA_OPT__(, ) \
+										  __VA_ARGS__)             \
+	{                                                              \
+		ir_inst_t *ins = MAKE(name2, r0, r1, r2, imm);             \
+		ins->is_32bit = is_32bit;                                  \
+		ir_blk_add(outblk, ins);                                   \
+		return;                                                    \
 	}
 
-DEF_INS(nop, NOP, NULL, NULL, NULL, 0, void);
+DEF_INS(nop, NOP, NULL, NULL, NULL, 0);
 DEF_INS(mov, MOV, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(imm, IMM, r0, NULL, NULL, imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, ADD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
@@ -70,12 +72,13 @@ DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 #undef MAKE
 
 #define INSNAME2(x) ins_##x
-#define GEN_LOAD(name)                                        \
-	static UNUSEDA void INSNAME(name)(reg_t * r0, reg_t * r1) \
-	{                                                         \
-		ir_inst_t *inst = INSNAME2(name)(r0, r1);             \
-		ir_blk_add(outblk, inst);                             \
-		return;                                               \
+#define GEN_LOAD(name)                                                     \
+	static UNUSEDA void INSNAME(name)(bool is_32bit, reg_t *r0, reg_t *r1) \
+	{                                                                      \
+		ir_inst_t *inst = INSNAME2(name)(r0, r1);                          \
+		inst->is_32bit = is_32bit;                                         \
+		ir_blk_add(outblk, inst);                                          \
+		return;                                                            \
 	}
 
 GEN_LOAD(loadb);
@@ -85,12 +88,13 @@ GEN_LOAD(load);
 
 #undef GEN_LOAD
 
-#define GEN_STORE(name)                                       \
-	static UNUSEDA void INSNAME(name)(reg_t * r1, reg_t * r2) \
-	{                                                         \
-		ir_inst_t *inst = INSNAME2(name)(r1, r2);             \
-		ir_blk_add(outblk, inst);                             \
-		return;                                               \
+#define GEN_STORE(name)                                                    \
+	static UNUSEDA void INSNAME(name)(bool is_32bit, reg_t *r1, reg_t *r2) \
+	{                                                                      \
+		ir_inst_t *inst = INSNAME2(name)(r1, r2);                          \
+		inst->is_32bit = is_32bit;                                         \
+		ir_blk_add(outblk, inst);                                          \
+		return;                                                            \
 	}
 
 GEN_STORE(storeb);
@@ -118,15 +122,18 @@ static UNUSEDA void emit_lea(reg_t *res, ir_global_t *glob)
 
 #define LOOPSZ(num)                                      \
 	do {                                                 \
+		bool is_32bit = (num) <= 4;                      \
 		while(left >= (num)) {                           \
-			emit_imm(data, ptr);                         \
-			emit_add(toaddr, to, data);                  \
-			emit_add(fromaddr, from, data);              \
+			emit_imm(0, data, ptr);                      \
+			emit_add(0, toaddr, to, data);               \
+			emit_add(0, fromaddr, from, data);           \
 			ir_inst_t *loadi = ins_load(data, fromaddr); \
 			loadi->size = (num);                         \
+			loadi->is_32bit = is_32bit;                  \
 			ir_blk_add(outblk, loadi);                   \
 			ir_inst_t *storei = ins_store(toaddr, data); \
 			storei->size = (num);                        \
+			storei->is_32bit = is_32bit;                 \
 			ir_blk_add(outblk, storei);                  \
 			left -= (num);                               \
 			ptr += (num);                                \
@@ -160,7 +167,7 @@ static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
 	ir_blk_add(outblk, ins);
 
 	if(typ->kind == TYPE_BOOL) {
-		emit_mkbool(r0, new_r0);
+		emit_mkbool(typ->size <= 4, r0, new_r0);
 	} else {
 		ins->r0 = r0;
 	}
@@ -170,7 +177,7 @@ static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
 static void emit_load_obj(type_t *typ, reg_t *val, reg_t *addr)
 {
 	if(typ->kind == TYPE_ARRAY || typ->kind == TYPE_STRUCT) {
-		emit_mov(val, addr);
+		emit_mov(0, val, addr);
 	} else {
 		emit_load_sz(typ, val, addr);
 	}
@@ -181,6 +188,7 @@ static UNUSEDA void emit_store_sz(type_t *typ, reg_t *r1, reg_t *r2)
 {
 	ir_inst_t *ins = ins_store(r1, r2);
 	ins->size = typ->size;
+	ins->is_32bit = typ->size <= 4;
 	ir_blk_add(outblk, ins);
 	return;
 }
@@ -236,9 +244,12 @@ DEF_INS(sxtl);
 #undef DEF_INS
 
 /* odd one(s) out */
-static void emit_br(reg_t *on, ir_blk_t *trueblk, ir_blk_t *falseblk)
+static void emit_br(bool is_32bit, reg_t *on, ir_blk_t *trueblk,
+					ir_blk_t *falseblk)
 {
-	ir_blk_add(outblk, ins_br(on, falseblk, trueblk));
+	ir_inst_t *br = ins_br(on, falseblk, trueblk);
+	br->is_32bit = is_32bit;
+	ir_blk_add(outblk, br);
 	return;
 }
 
@@ -288,9 +299,9 @@ static reg_t *calc_addr(node_t *node)
 		 * out. */
 		reg_t *base = calc_addr(node->lhs);
 		reg_t *off = reg_make();
-		emit_imm(off, node->memb->loc);
+		emit_imm(0, off, node->memb->loc);
 		reg_t *add = reg_make();
-		emit_add(add, base, off);
+		emit_add(0, add, base, off);
 		return add;
 	}
 
@@ -337,29 +348,31 @@ reg_t *codegen_expr(node_t *node)
 		ERROR("null node passed");
 	}
 
+	bool is32 = node->lhs ? node->lhs->type->size <= 4 : node->type->size <= 4;
+
 	/* special cases */
 	switch(node->kind) {
 	case NODE_NUM: {
 		reg_t *imm = reg_make();
-		emit_imm(imm, node->num);
+		emit_imm(is32, imm, node->num);
 		return imm;
 	}
 	case NODE_NEG: {
 		reg_t *val = codegen_expr(node->lhs);
 		reg_t *neg = reg_make();
-		emit_neg(neg, val);
+		emit_neg(is32, neg, val);
 		return neg;
 	};
 	case NODE_NOT: {
 		reg_t *val = codegen_expr(node->lhs);
 		reg_t *not = reg_make();
-		emit_not(not, val);
+		emit_not(is32, not, val);
 		return not;
 	};
 	case NODE_LOGNEG: {
 		reg_t *val = codegen_expr(node->lhs);
 		reg_t *logneg = reg_make();
-		emit_notbool(logneg, val);
+		emit_notbool(is32, logneg, val);
 		return logneg;
 	};
 	case NODE_VAR:
@@ -433,37 +446,37 @@ reg_t *codegen_expr(node_t *node)
 		break;
 
 	case NODE_ADD:
-		emit_add(res, lhs, rhs);
+		emit_add(is32, res, lhs, rhs);
 		break;
 	case NODE_SUB:
-		emit_sub(res, lhs, rhs);
+		emit_sub(is32, res, lhs, rhs);
 		break;
 	case NODE_SHL:
-		emit_shl(res, lhs, rhs);
+		emit_shl(is32, res, lhs, rhs);
 		break;
 	case NODE_SHR:
 		if(type->unsignd) {
-			emit_shr(res, lhs, rhs);
+			emit_shr(is32, res, lhs, rhs);
 		} else {
-			emit_ashr(res, lhs, rhs);
+			emit_ashr(is32, res, lhs, rhs);
 		}
 		break;
 	case NODE_AND:
-		emit_and(res, lhs, rhs);
+		emit_and(is32, res, lhs, rhs);
 		break;
 	case NODE_OR:
-		emit_or(res, lhs, rhs);
+		emit_or(is32, res, lhs, rhs);
 		break;
 	case NODE_EOR:
-		emit_eor(res, lhs, rhs);
+		emit_eor(is32, res, lhs, rhs);
 		break;
 	case NODE_LOGAND: {
 		ir_blk_t *left_blk = emit_blk();
 		ir_blk_t *resume = emit_blk();
-		emit_imm(res, 0);
-		emit_br(lhs, left_blk, resume);
+		emit_imm(1, res, 0);
+		emit_br(is32, lhs, left_blk, resume);
 		outblk = left_blk;
-		emit_mkbool(res, rhs);
+		emit_mkbool(is32, res, rhs);
 		emit_jmp(resume);
 		outblk = resume;
 		break;
@@ -472,33 +485,33 @@ reg_t *codegen_expr(node_t *node)
 		ir_blk_t *right_blk = emit_blk();
 		ir_blk_t *resume = emit_blk();
 
-		emit_mkbool(res, lhs);
-		emit_br(lhs, resume, right_blk);
+		emit_mkbool(is32, res, lhs);
+		emit_br(is32, lhs, resume, right_blk);
 		outblk = right_blk;
-		emit_mkbool(res, rhs);
+		emit_mkbool(is32, res, rhs);
 		emit_jmp(resume);
 		outblk = resume;
 		break;
 	}
 	case NODE_MUL:
 		if(type->unsignd) {
-			emit_umul(res, lhs, rhs);
+			emit_umul(is32, res, lhs, rhs);
 		} else {
-			emit_smul(res, lhs, rhs);
+			emit_smul(is32, res, lhs, rhs);
 		}
 		break;
 	case NODE_DIV:
 		if(type->unsignd) {
-			emit_udiv(res, lhs, rhs);
+			emit_udiv(is32, res, lhs, rhs);
 		} else {
-			emit_sdiv(res, lhs, rhs);
+			emit_sdiv(is32, res, lhs, rhs);
 		}
 		break;
 	case NODE_MOD:
 		if(type->unsignd) {
-			emit_umod(res, lhs, rhs);
+			emit_umod(is32, res, lhs, rhs);
 		} else {
-			emit_smod(res, lhs, rhs);
+			emit_smod(is32, res, lhs, rhs);
 		}
 		break;
 	case NODE_VAR:
@@ -507,37 +520,37 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_ASSIGN:
 		break;
 	case NODE_EQ:
-		emit_eq(res, lhs, rhs);
+		emit_eq(is32, res, lhs, rhs);
 		break;
 	case NODE_NE:
-		emit_ne(res, lhs, rhs);
+		emit_ne(is32, res, lhs, rhs);
 		break;
 	case NODE_LE:
 		if(type->unsignd) {
-			emit_ule(res, lhs, rhs);
+			emit_ule(is32, res, lhs, rhs);
 		} else {
-			emit_sle(res, lhs, rhs);
+			emit_sle(is32, res, lhs, rhs);
 		}
 		break;
 	case NODE_LT:
 		if(type->unsignd) {
-			emit_ult(res, lhs, rhs);
+			emit_ult(is32, res, lhs, rhs);
 		} else {
-			emit_slt(res, lhs, rhs);
+			emit_slt(is32, res, lhs, rhs);
 		}
 		break;
 	case NODE_GE:
 		if(type->unsignd) {
-			emit_uge(res, lhs, rhs);
+			emit_uge(is32, res, lhs, rhs);
 		} else {
-			emit_sge(res, lhs, rhs);
+			emit_sge(is32, res, lhs, rhs);
 		}
 		break;
 	case NODE_GT:
 		if(type->unsignd) {
-			emit_ugt(res, lhs, rhs);
+			emit_ugt(is32, res, lhs, rhs);
 		} else {
-			emit_sgt(res, lhs, rhs);
+			emit_sgt(is32, res, lhs, rhs);
 		}
 		break;
 	}
@@ -584,6 +597,7 @@ void codegen_stmt(node_t *node)
 		ir_blk_t *chain;
 		ir_blk_t *def_blk = NULL;
 		reg_t *ctrl = codegen_expr(node->cond);
+		bool is32 = node->cond->type->size <= 4;
 		for(node_t *b = node->then->body; b; b = b->next) {
 			/* default is exception */
 			if(b->kind == NODE_DEFAULT) {
@@ -608,11 +622,11 @@ void codegen_stmt(node_t *node)
 			 */
 
 			reg_t *casenum = reg_make();
-			emit_imm(casenum, b->cond->num); /* %casenum = imm #num */
+			emit_imm(is32, casenum, b->cond->num); /* %casenum = imm #num */
 			reg_t *cmpres = reg_make();
-			emit_eq(cmpres, ctrl,
+			emit_eq(is32, cmpres, ctrl,
 					casenum); /* %cmpres = cmp.eq %ctrl, %casenum */
-			emit_br(cmpres, b->case_blk,
+			emit_br(is32, cmpres, b->case_blk,
 					chain); /* br %cmpres, case_blk, chain */
 			outblk = chain;
 		}
@@ -650,15 +664,19 @@ void codegen_stmt(node_t *node)
 
 	case NODE_RET: {
 		type_t *rettype = fun_obj->type->to;
+
 		if(node->lhs && rettype->kind != TYPE_VOID) {
+			bool is32 = node->lhs->type->size <= 4;
 			reg_t *retval = codegen_expr(node->lhs);
 			reg_t *ext = reg_make();
 			ir_inst_t *ins = ins_sxtl(ext, retval);
 			ins->size = node->lhs->type->size;
+			ins->type = node->lhs->type->unsignd ? IR_INST_ZXT : IR_INST_SXT;
+			ins->is_32bit = is32;
 			ir_blk_add(outblk, ins);
-			emit_ret(ext);
+			emit_ret(is32, ext);
 		} else if(!node->lhs && rettype->kind == TYPE_VOID) {
-			emit_ret(NULL);
+			emit_ret(0, NULL);
 		} else if(node->lhs && rettype->kind == TYPE_VOID) {
 			compile_err(node->tok->loc, "function cannot return something");
 		} else if(!node->lhs && rettype->kind != TYPE_VOID) {
@@ -684,7 +702,8 @@ void codegen_stmt(node_t *node)
 		emit_jmp(condchk);
 		outblk = condchk;
 		reg_t *cond = codegen_expr(node->cond);
-		emit_br(cond, then, resume);
+		bool is32 = node->cond->type->size <= 4;
+		emit_br(is32, cond, then, resume);
 		outblk = resume;
 		list_back(break_stack);
 	}; break;
@@ -701,7 +720,8 @@ void codegen_stmt(node_t *node)
 
 		outblk = condchk;
 		reg_t *cond = codegen_expr(node->cond);
-		emit_br(cond, loop, resume);
+		bool is32 = node->cond->type->size <= 4;
+		emit_br(is32, cond, loop, resume);
 
 		outblk = loop;
 		codegen_stmt(node->then);
@@ -734,10 +754,11 @@ void codegen_stmt(node_t *node)
 			cond = codegen_expr(node->cond);
 		} else {
 			cond = reg_make();
-			emit_imm(cond, 1);
+			emit_imm(1, cond, 1);
 		}
 
-		emit_br(cond, then, resume);
+		bool is32 = node->cond->type->size <= 4;
+		emit_br(is32, cond, then, resume);
 
 		outblk = then;
 		codegen_stmt(node->then);
@@ -764,7 +785,8 @@ void codegen_stmt(node_t *node)
 			resume = emit_blk();
 		}
 
-		emit_br(cond, then, elze);
+		bool is32 = node->cond->type->size <= 4;
+		emit_br(is32, cond, then, elze);
 		outblk = then;
 		codegen_stmt(node->then);
 		emit_jmp(resume);

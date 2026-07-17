@@ -25,11 +25,11 @@ void print_num_helper(long num)
 {
 	/* https://stackoverflow.com/a/59389473 */
 
-	if(num >= 10) {
-		print_num_helper(num / 10);
+	if(num >= 10l) {
+		print_num_helper(num / 10l);
 	}
 
-	putchar((num % 10) + '0');
+	putchar((num % 10l) + '0');
 
 	return;
 }
@@ -49,11 +49,11 @@ void print_num_helper_unsignd(unsigned long num)
 {
 	/* https://stackoverflow.com/a/59389473 */
 
-	if(num >= 10u) {
-		print_num_helper(num / 10);
+	if(num >= 10ul) {
+		print_num_helper_unsignd(num / 10ul);
 	}
 
-	putchar((num % 10) + '0');
+	putchar((num % 10ul) + '0');
 
 	return;
 }

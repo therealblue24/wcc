@@ -36,6 +36,6 @@ int main()
 	char *str = "Hello, World!\n";
 	int len = strlen(str);
 	unsigned int chksum = crc32_do((unsigned char *)str, len);
-	print_num(chksum);
+	print_num_unsignd(chksum);
 	return chksum;
 }

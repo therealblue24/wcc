@@ -195,6 +195,8 @@ static void ir_placemarks(ir_func_t *func)
 				inst->r0->imm = inst->imm;
 				inst->r0->size = inst->size;
 				inst->r0->from = inst;
+				inst->r0->is_32bit = inst->is_32bit;
+				inst->r0->ins_ext = inst->sign_ext;
 			}
 
 			if(inst->type == IR_INST_PHI) {
@@ -596,6 +598,9 @@ static int ir_fold(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->is_32bit) {
+				continue;
+			}
 			/* constant folding */
 			if(ir_inst_is_foldable(ins->type)) {
 				if(ins->r1 && ins->r2 && ins->r1->insty == IR_INST_IMM &&
@@ -747,6 +752,11 @@ static int ir_fold(ir_func_t *func)
 	return change;
 }
 
+static bool ins_is_ext(enum ins_type t)
+{
+	return t == IR_INST_ZXT || t == IR_INST_SXT;
+}
+
 static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 {
 	int change = 0;
@@ -755,6 +765,28 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 
 	if((ins->type == IR_INST_ZXT || ins->type == IR_INST_SXT) &&
 	   ins->r1->insty == ins->type && ins->size <= ins->r1->size) {
+		ins->type = IR_INST_MOV;
+		change = 1;
+	}
+
+	/* elim of exts into 32-bit op */
+	if(ins->is_32bit && ins->r2 && ins_is_ext(ins->r2->insty) &&
+	   ins->r2->size == 4) {
+		ins->r2 = ins->r2->lhs;
+		change = 1;
+	}
+
+	/* I have no idea why, but without the `ins->type != IR_INST_RET`
+	 * part, this just corrupts the return instruction sometimes somehow.
+	 * I don't know why. */
+	if(ins->is_32bit && ins->r1 && ins_is_ext(ins->r1->insty) &&
+	   ins->r1->size == 4 && ins->type != IR_INST_RET) {
+		ins->r1 = ins->r1->lhs;
+		change = 1;
+	}
+
+	/* elim of zero ext out of 32-bit op */
+	if(ins->type == IR_INST_ZXT && ins->r1->is_32bit && ins->size == 4) {
 		ins->type = IR_INST_MOV;
 		change = 1;
 	}
@@ -852,7 +884,7 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 	 * ->
 	 * nop
 	 */
-	if(ins->type == IR_INST_MOV && ins->r0->vr == ins->r1->vr) {
+	if(ins->type == IR_INST_MOV && ins->r0 == ins->r1) {
 		ins->type = IR_INST_NOP;
 		change = 1;
 	}
@@ -1081,6 +1113,10 @@ static int ir_mov_elim(ir_func_t *func)
 				for(size_t j = 0; j < list_len(inst->call_args); j++) {
 					REPLACE(inst->call_args[j]->r);
 				}
+			}
+
+			if(inst->type == IR_INST_MOV && inst->r0 == inst->r1) {
+				inst->type = IR_INST_NOP;
 			}
 		}
 	}
@@ -1386,11 +1422,15 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			change |= ir_mov_elim(func);
 		});
 
+		TIMEIT("mark", { ir_placemarks(func); });
+
 		/* peephole opts */
 		TIMEIT("peep", {
 			change |= ir_simpleopt(func);
 			ir_fix_phis(func);
 		});
+
+		TIMEIT("mark", { ir_placemarks(func); });
 
 		/* memory optimization */
 		TIMEIT("mem", {
@@ -1402,7 +1442,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		TIMEIT("fold", {
 			change |= ir_fold(func);
 			ir_placemarks(func);
-			// change |= ir_leas_arith_opt(func);
+			change |= ir_leas_arith_opt(func);
 			ir_placemarks(func);
 			ir_fix_phis(func);
 		});

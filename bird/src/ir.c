@@ -560,6 +560,7 @@ static void ir_fix_ins(ir_inst_t *ins)
 	if((ins->type == IR_INST_ZXT || ins->type == IR_INST_SXT) &&
 	   ins->is_32bit && ins->size == 8) {
 		ins->size = 4;
+		ins->type = IR_INST_ZXT;
 	}
 }
 
@@ -864,7 +865,8 @@ void ir_dump(ir_func_t *fun, int mode)
 		putchar('\n');
 
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			putchar('\t');
+			int num = inst->is_32bit ? 32 : 64;
+			printf("i%d\t", num);
 			ir_print_inst(inst, mode);
 			putchar('\n');
 		}
@@ -1023,7 +1025,9 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 			ir_dump(func, 'r');
 			printf("====\n");
 		}
+		ir_fix(func);
 		ir_blk_flow(func);
+
 		ir_func_emit(f, func, arch);
 	}
 
