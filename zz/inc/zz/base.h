@@ -127,13 +127,6 @@ uint64_t fnv1a(void *data, size_t size);
 #define UNUSEDA __attribute__((unused))
 #define UNUSED(var) (void)var
 
-/* error, warning */
-void compile_setsrc(char *base, char *fname);
-void compile_err(char *loc, const char *fmt, ...);
-void compile_warn(char *loc, const char *fmt, ...);
-void compile_err_node(void *node, const char *fmt, ...);
-void compile_warn_node(void *node, const char *fmt, ...);
-
 /* does string `thing` start with `with`? */
 int starts_with(char *thing, char *with);
 

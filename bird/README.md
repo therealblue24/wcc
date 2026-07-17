@@ -5,7 +5,7 @@ May need a refactor for floats.
 
 The register allocation algorithm was inspired by 9cc's.
 
-Depends on `zz` in [`../src/zz`](../src/zz).
+Depends on `zz` in [`../zz`](../zz).
 
 ## Want to integrate it in your own project?
 

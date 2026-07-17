@@ -10,6 +10,7 @@ token_t *token_make(enum token_kind kind, char *start, char *end)
 	tok->kind = kind;
 	tok->loc = start;
 	tok->len = end - start;
+	tok->content = mystrndup(tok->loc, tok->len);
 
 	return tok;
 }
@@ -19,6 +20,9 @@ void token_delete(token_t *tok)
 {
 	if(tok->str) {
 		free(tok->str);
+	}
+	if(tok->content) {
+		free(tok->content);
 	}
 	free(tok);
 	return;
@@ -31,7 +35,7 @@ void token_delete_all(token_t *root)
 	token_t *cur = root;
 	while(cur && cur->kind != TOK_END) {
 		nxt = cur->next;
-		free(cur);
+		token_delete(cur);
 		cur = nxt;
 	}
 	free(cur);
@@ -637,7 +641,10 @@ token_t *lex_do(char *prog, token_t **end)
 	if(end) {
 		*end = tok;
 	} else {
-		tok = tok->next = token_make(TOK_END, prog, prog);
+		token_t *endtok = token_make(TOK_END, prog, prog);
+		free(endtok->content);
+		endtok->content = NULL;
+		tok = tok->next = endtok;
 	}
 
 	return start.next;

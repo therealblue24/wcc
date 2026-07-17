@@ -2,7 +2,7 @@
 #ifndef SET_H_
 #define SET_H_
 
-#include "zz/base.h"
+#include "base.h"
 
 #ifndef SET_DEFAULT_SIZE
 #define SET_DEFAULT_SIZE (64)

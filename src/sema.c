@@ -1,5 +1,6 @@
 #include "sema.h"
 #include "type.h"
+#include "zz/base.h"
 
 STRMAP(node_t *) goto_labels;
 
@@ -98,8 +99,8 @@ static void sema_visit_core(node_t *node)
 void sema_do(node_t *prog)
 {
 	goto_labels = strmap_make(node_t *);
-	map_labels(prog);
-	sema_visit(prog);
+	TIMEIT("map", { map_labels(prog); });
+	TIMEIT("core", { sema_visit(prog); });
 	strmap_delete(goto_labels);
 	return;
 }

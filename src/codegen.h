@@ -1,9 +1,9 @@
 #ifndef CODEGEN_H_
 #define CODEGEN_H_
 
-#include "zz/base.h"
+#include "util.h"
 #include "lex.h"
-#include "bird.h"
+#include "bird/bird.h"
 #include "parse.h"
 
 /* generates code for a function */

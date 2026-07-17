@@ -1,5 +1,5 @@
 #include "codegen.h"
-#include "bird.h"
+#include "bird/bird.h"
 #include "parse.h"
 #include "type.h"
 #include "zz/base.h"

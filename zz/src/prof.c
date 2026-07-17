@@ -1,8 +1,9 @@
 /* this is a really bad profiler, but it works ig */
 #include "prof.h"
 #include "list.h"
-#include "zz/strmap.h"
-#include "zz/base.h"
+#include "strmap.h"
+#include "base.h"
+#include <time.h>
 
 typedef struct pentry {
 	long start, end;
@@ -32,7 +33,8 @@ static void report()
 	for(size_t i = list_len(done) - 1; i >= 0; i--) {
 		pentry_t ent = done[i];
 		long d = ent.end - ent.start;
-		float ms = (float)d / 1000.f;
+		const float f = (float)CLOCKS_PER_SEC / 1000.f;
+		float ms = (float)d / f;
 
 		if(strmap_has(times, ent.name)) {
 			float have = *strmap_get(times, ent.name);
@@ -62,7 +64,7 @@ static void report()
 			printf("\t");
 		}
 
-		printf("%.1fms\t%s\n", ms, ent.name);
+		printf("%.2fms\t%s\n", ms, ent.name);
 
 		if(i == 0) {
 			break;
@@ -82,8 +84,10 @@ void prof_end()
 	list_append(done, ent);
 
 	if(list_len(profile_stack) == 0) {
-		if(do_profile)
+		if(do_profile) {
 			report();
+			fflush(stdout);
+		}
 
 		list_hdr(done)->size = 0;
 	}

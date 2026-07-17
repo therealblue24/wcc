@@ -1,8 +1,8 @@
 #ifndef PARSE_H_
 #define PARSE_H_
 
-#include "bird.h"
-#include "zz/base.h"
+#include "bird/bird.h"
+#include "util.h"
 #include "zz/strmap.h"
 #include "lex.h"
 #include "type.h"
@@ -86,6 +86,12 @@ typedef struct member {
 	token_t *ident; /* identifier */
 	size_t loc; /* location relative to struct */
 } member_t;
+
+/* scope (single element, not stack) */
+typedef struct scope {
+	STRMAP(obj_t *) vars;
+	STRMAP(type_t *) types;
+} scope_t;
 
 /* an AST node */
 typedef struct node {

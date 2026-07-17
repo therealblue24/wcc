@@ -1,4 +1,4 @@
-#include "zz/set.h"
+#include "set.h"
 
 /* No pointer is ever going to be 0xffffffffffffffff, so make that the tombstone */
 #define TOMBSTONE ((void *)-1)

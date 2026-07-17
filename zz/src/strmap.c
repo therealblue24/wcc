@@ -2,6 +2,7 @@
  * https://github.com/RealNeGate/Cuik/tree/master/common . */
 #include "strmap.h"
 #include "arena.h"
+#include "base.h"
 
 /* No pointer is ever going to be 0xffffffffffffffff, so make that the tombstone */
 #define TOMBSTONE ((void *)-1)

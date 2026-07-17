@@ -3,10 +3,10 @@ CC = clang
 # binary directory
 BINDIR = bin
 # lib name
-LIBNAM = libbird.a
+LIBNAM = libzz.a
 
 # default compiler flags
-CFLAGS = -std=c11 -Wall -Wextra -I../zz/inc -Iinc/bird/ -g3
+CFLAGS = -std=c11 -Wall -Wextra -Iinc/zz/ -g3
 CFLAGS += -MMD -MP
 # default linker flags
 LDFLAGS = 

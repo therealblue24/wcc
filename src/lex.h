@@ -1,7 +1,7 @@
 #ifndef LEX_H_
 #define LEX_H_
 
-#include "zz/base.h"
+#include "util.h"
 #include "zz/list.h"
 #include "zz/strb.h"
 #include "zz/arena.h"
@@ -26,6 +26,7 @@ typedef struct token {
 	struct token *next; /* linked list fun */
 	uint64_t num; /* for TOK_NUM */
 	char *loc; /* location of token in program */
+	char *content; /* strdup() of token content */
 	char *str; /* parsed string for TOK_STR */
 	struct type *type; /* type for TOK_STR */
 	size_t len;

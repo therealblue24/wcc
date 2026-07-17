@@ -1,4 +1,4 @@
-#include "bird.h"
+#include "bird/bird.h"
 #include "zz/set.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +18,7 @@
 
 int debug = 0;
 int opt_level = 0;
+int do_profile = 0;
 
 char *next_arg(int max, int *argc, char *argv[])
 {

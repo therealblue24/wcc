@@ -8,6 +8,7 @@
 static arena_t obj_arena;
 static arena_t node_arena;
 static arena_t memb_arena;
+static LIST(scope_t) scopes;
 
 /* makes parsing arenas */
 void parse_make_arenas(void)
@@ -18,6 +19,7 @@ void parse_make_arenas(void)
 		   "failed to create AST node arena");
 	ENSURE(arena_make(&memb_arena, ARENA_DEFAULT_SIZE) == 0,
 		   "failed to create struct member arena");
+	scopes = list_make(obj_t *);
 	return;
 }
 
@@ -27,6 +29,7 @@ void parse_delete_arenas(void)
 	arena_delete(&obj_arena);
 	arena_delete(&node_arena);
 	arena_delete(&memb_arena);
+	list_delete(scopes);
 	return;
 }
 
@@ -45,6 +48,40 @@ static long runk(int reset)
 		counter = 0;
 	}
 	return counter++;
+}
+
+/* push new scope */
+static void scope_push()
+{
+	scope_t sc;
+	sc.vars = strmap_make(obj_t *);
+	sc.types = strmap_make(type_t *);
+	list_append(scopes, sc);
+	return;
+}
+
+/* pop scope */
+static void scope_pop()
+{
+	scope_t sc = list_pop(scopes);
+	strmap_delete(sc.vars);
+	strmap_delete(sc.types);
+	return;
+}
+
+/* add var to current scope (& "global" locals) */
+static void scope_add_var(obj_t *var)
+{
+	strmap_put(list_peek(scopes).vars, var->name, var);
+	strmap_put(locals, var->name, var);
+	return;
+}
+
+/* add tag to current scope */
+static void scope_add_tag(type_t *typ)
+{
+	strmap_put(list_peek(scopes).types, typ->ident->content, typ);
+	return;
 }
 
 /* makes a node */
@@ -167,7 +204,7 @@ obj_t *obj_make(char *name, type_t *type, bool is_func)
 {
 	obj_t *obj = obj_make_noadd(name, type, is_func);
 	obj->order = local_order++;
-	strmap_put(locals, obj->name, obj);
+	scope_add_var(obj);
 	return obj;
 }
 
@@ -184,10 +221,24 @@ obj_t *obj_make_global(char *name, type_t *type, bool is_func)
 }
 
 #define STR_SIZE (32)
-obj_t *obj_make_str(token_t *str)
+
+char *anon_name(int managed)
 {
 	char *name;
-	asprintf(&name, ".str%ld", runk(0));
+	if(managed) {
+		name = zalloc(STR_SIZE);
+	} else {
+		name = scr_alloc(STR_SIZE);
+	}
+
+	snprintf(name, STR_SIZE - 1, ".anon%ld", runk(0));
+
+	return name;
+}
+
+obj_t *obj_make_str(token_t *str)
+{
+	char *name = anon_name(1);
 	obj_t *obj = obj_make_global(name, str->type, false);
 	obj->is_anon = true;
 	obj->data = (void *)str->str;
@@ -197,25 +248,53 @@ obj_t *obj_make_str(token_t *str)
 
 obj_t *obj_make_anon(type_t *type)
 {
-	char *name;
-	asprintf(&name, ".anon%ld", runk(0));
+	char *name = anon_name(1);
 	obj_t *obj = obj_make_noadd(name, type, false);
 	obj->is_anon = true;
 	return obj;
+}
+
+/* finds a struct type (tag) given name */
+static type_t *find_tag(token_t *tok)
+{
+	char *content = tok->content;
+
+	/* traverse scope */
+	if(list_len(scopes)) {
+		for(size_t i = list_len(scopes) - 1; i >= 0; i--) {
+			scope_t sc = scopes[i];
+			type_t **found = strmap_get(sc.types, content);
+			if(found) {
+				return *found;
+			}
+
+			if(i == 0) {
+				break;
+			}
+		}
+	}
+
+	return NULL;
 }
 
 /* finds a local variable given token */
 static obj_t *find_var(token_t *tok)
 {
 	/* traverse list */
-
 	char *str = mystrndup(tok->loc, tok->len);
 
-	if(locals) {
-		obj_t **found = strmap_get(locals, str);
-		if(found) {
-			free(str);
-			return *found;
+	if(list_len(scopes)) {
+		for(size_t i = list_len(scopes) - 1; i >= 0; i--) {
+			scope_t sc = scopes[i];
+			obj_t **found = strmap_get(sc.vars, str);
+			if(found) {
+				free(str);
+				return *found;
+			}
+
+			if(i == 0) {
+				break;
+			}
 		}
 	}
 
@@ -307,8 +386,49 @@ static bool is_declspec(token_t *tok)
 
 static type_t *parse_struct(token_t *tok, token_t **rest)
 {
-	tok = token_skip(tok, "{");
+	/* we are at point where we skipped the `struct` keyword */
+
+	/* we have a name if no { */
+	char *tag = NULL;
+	type_t *tag_ty = NULL;
 	type_t *struc = type_clone(TY_VOID);
+	if(!token_eq(tok, "{")) {
+		if(tok->kind != TOK_IDENT) {
+			compile_err(tok->loc, "expected an identifier");
+		}
+
+		/* if name already exists, cant do that */
+		tag_ty = find_tag(tok);
+		struc->ident = tok;
+
+		tag = tok->content;
+		tok = tok->next;
+	} else {
+		/* TODO: hack */
+		char *nam = anon_name(0);
+		token_t *ident_tok = scr_alloc(sizeof(token_t));
+		ident_tok->kind = TOK_IDENT;
+		ident_tok->loc = nam;
+		ident_tok->len = strnlen(nam, STR_SIZE);
+		ident_tok->content = nam;
+		struc->ident = ident_tok;
+	}
+
+	/* if no { members }, then it is a use of a struct */
+	if(!token_eq(tok, "{")) {
+		if(!tag_ty) {
+			compile_err(tok->loc, "empty struct");
+		}
+		*rest = tok;
+		return tag_ty;
+	}
+
+	tok = token_skip(tok, "{");
+
+	if(tag_ty) {
+		compile_err(tok->loc, "redefinition of '%s'", tag);
+	}
+
 	struc->kind = TYPE_STRUCT;
 	struc->membs = list_make(member_t *);
 
@@ -338,6 +458,11 @@ static type_t *parse_struct(token_t *tok, token_t **rest)
 	struc->size = align_to(pos, align);
 	struc->align = align;
 	*rest = tok;
+
+	/* if this struct is named, push it into the scope */
+	if(tag) {
+		scope_add_tag(struc);
+	}
 
 	return struc;
 }
@@ -579,6 +704,12 @@ static node_t *parse_declaration(token_t *tok, token_t **rest)
 
 	node_t head = { 0 };
 	node_t *cur = &head;
+
+	if(token_eat(&tok, ";")) {
+		*rest = tok;
+		goto end;
+	}
+
 	node_t *init_decl_list = parse_init_declarator(decltype_base, tok, &tok);
 
 	if(init_decl_list) {
@@ -602,6 +733,7 @@ static node_t *parse_declaration(token_t *tok, token_t **rest)
 	}
 
 	*rest = tok->next;
+end:;
 	node_t *blk = node_make(NODE_BLOCK, tok);
 	blk->body = head.next;
 
@@ -685,6 +817,7 @@ static node_t *parse_compound_stmt(token_t *tok, token_t **rest)
 	node_t node = { 0 };
 	node_t *cur = &node;
 	node_t *blk = node_make(NODE_BLOCK, tok);
+	scope_push();
 	tok = token_skip(tok, "{");
 	while(!token_eq(tok, "}")) {
 		/* TODO: this is a duct tape solution */
@@ -702,6 +835,7 @@ static node_t *parse_compound_stmt(token_t *tok, token_t **rest)
 
 	blk->body = node.next;
 	*rest = tok;
+	scope_pop();
 	return blk;
 }
 
@@ -1568,6 +1702,9 @@ static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 		func = obj_make_noadd(name, type_func_to(decltype), true);
 		func->order = local_order++;
 	}
+
+	scope_push();
+
 	tok = token_skip(tok, "(");
 
 	if(token_eq(tok, "void")) {
@@ -1618,6 +1755,7 @@ end:
 
 	strmap_put(known_funcs, func->name, func);
 	if(token_eat(&tok, ";")) {
+		scope_pop();
 		strmap_delete(locals);
 		locals = NULL;
 		*rest = tok;
@@ -1625,6 +1763,8 @@ end:
 	}
 
 	func->body = parse_compound_stmt(tok, &tok);
+
+	scope_pop();
 	*rest = tok;
 	return func;
 }

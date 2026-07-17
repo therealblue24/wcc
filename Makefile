@@ -7,10 +7,10 @@ BINDIR = bin
 APP = wcc
 
 # default compiler flags
-CFLAGS = -std=c11 -Wall -Wextra -Isrc -Ibird/src -g3
+CFLAGS = -std=c11 -Wall -Wextra -Isrc -Izz/inc/ -Ibird/inc -g3
 CFLAGS += -MMD -MP
 # default linker flags
-LDFLAGS = -Lbin
+LDFLAGS = -Lbin -lbird -lzz
 
 # Optimize code (-Os, etc)
 RELEASE ?= no
@@ -91,15 +91,14 @@ help:
 	@echo "FORTIFY\t\tyes/no to fortify code"
 	@echo "TESTARGS\targs to pass to 'make test'"
 
-SRC_PLUS_BIRD = $(SRC) $(shell find src -name "*.h") $(shell find bird/src/ -name "*.c") $(shell find bird/src/ -name "*.h")
+SRC_PLUS_BIRD_ZZ = $(SRC) $(shell find src -name "*.h") $(shell find bird/src/ -name "*.c") $(shell find bird/inc/ -name "*.h") $(shell find zz/src/ -name "*.c") $(shell find zz/inc/ -name "*.h") 
 
 count:
-	@cloc $(SRC_PLUS_BIRD)
+	@cloc $(SRC_PLUS_BIRD_ZZ)
 
 dirs:
 	@# Create bin dir
 	@mkdir -p $(BINDIR)
-	@mkdir -p $(BINDIR)/zz
 
 # compile each single file
 $(BINDIR)/%.o: src/%.c
@@ -117,16 +116,22 @@ build-bird:
 	@echo "building bird"
 	@make -C bird RELEASE=$(RELEASE) CODE_REVIEW=$(CODE_REVIEW) SANITIZERS=$(SANITIZERS) FORTIFY=$(FORTIFY)
 
+# build `zz`
+build-zz:
+	@echo "building zz"
+	@make -C zz RELEASE=$(RELEASE) CODE_REVIEW=$(CODE_REVIEW) SANITIZERS=$(SANITIZERS) FORTIFY=$(FORTIFY)
+
 # compile target
 $(BINDIR)/$(APP): link
 
 compile: build link
 
 # link target
-link: build build-bird
+link: build-zz build-bird build
 	@cp bird/bin/libbird.a $(BINDIR)/libbird.a
+	@cp zz/bin/libzz.a $(BINDIR)/libzz.a
 	@echo "linking $(APP)"
-	@$(CC) -o $(BINDIR)/$(APP) $(LDFLAGS) $(OBJ) -lbird
+	@$(CC) -o $(BINDIR)/$(APP) $(LDFLAGS) $(OBJ)
 	@echo "made $(APP)"
 
 # remove bins

@@ -1,7 +1,7 @@
 #ifndef TYPE_H_
 #define TYPE_H_
 
-#include "zz/base.h"
+#include "util.h"
 #include "zz/strmap.h"
 #include "lex.h"
 
