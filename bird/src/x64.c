@@ -325,12 +325,12 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		if(ins->r2 && ins->r2->rr >= 0) {
 			r2i = ins->r2->rr;
 		}
-		const char *r0 = ins->r0 && ins->r0->rr >= 0 ? x64_reg[ins->r0->rr] :
-													   NULL;
-		const char *r1 = ins->r1 && ins->r1->rr >= 0 ? x64_reg[ins->r1->rr] :
-													   NULL;
-		const char *r2 = ins->r2 && ins->r2->rr >= 0 ? x64_reg[ins->r2->rr] :
-													   NULL;
+		const char *r0x = ins->r0 && ins->r0->rr >= 0 ? x64_reg[ins->r0->rr] :
+														NULL;
+		const char *r1x = ins->r1 && ins->r1->rr >= 0 ? x64_reg[ins->r1->rr] :
+														NULL;
+		const char *r2x = ins->r2 && ins->r2->rr >= 0 ? x64_reg[ins->r2->rr] :
+														NULL;
 		const UNUSEDA char *r0b =
 			ins->r0 && ins->r0->rr >= 0 ? x64_reg8[ins->r0->rr] : NULL;
 		const char *r1b = ins->r1 && ins->r1->rr >= 0 ? x64_reg8[ins->r1->rr] :
@@ -349,6 +349,11 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 														NULL;
 		const UNUSEDA char *r2d =
 			ins->r2 && ins->r2->rr >= 0 ? x64_reg32[ins->r2->rr] : NULL;
+
+		const char *r0 = ins->is_32bit ? r0d : r0x;
+		const char *r1 = ins->is_32bit ? r1d : r1x;
+		const char *r2 = ins->is_32bit ? r2d : r2x;
+
 		int64_t imm = ins->imm;
 		switch(ins->type) {
 		case IR_INST_ZXT: {
@@ -445,7 +450,11 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			fprintf(f, "\txor eax, eax\n");
 			fprintf(f, "\tcall %s\n", ins->fname);
 			if(r0) {
-				fprintf(f, "\tmov %s, rax\n", r0);
+				if(ins->is_32bit) {
+					fprintf(f, "\tmov %s, eax\n", r0);
+				} else {
+					fprintf(f, "\tmov %s, rax\n", r0);
+				}
 			}
 			if(stack_used) {
 				fprintf(f, "\tsub rsp, %zu\n", stack_used);

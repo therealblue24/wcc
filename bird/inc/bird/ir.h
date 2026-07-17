@@ -149,6 +149,7 @@ typedef struct reg {
 	struct reg *rhs;
 	struct ir_inst *from; /* NOT meant to be used for any pass except phiopt! */
 	size_t size;
+
 	bool phi_related; /* argument/def to phi; do NOT eliminate */
 	bool alive; /* is this register not dead? */
 } reg_t;
@@ -197,6 +198,7 @@ typedef struct ir_inst {
 	bool noopt; /* is this inst volatile? */
 	bool sign_ext; /* sign extend this load? */
 	size_t size; /* load/store/zero_ext/sign_ext size */
+	bool is_32bit; /* is the operation 32 bit (true) or 64 bit (false)? */
 	struct ir_global *label; /* for lea, the label */
 } ir_inst_t;
 

@@ -550,6 +550,17 @@ static void ir_fix_ins(ir_inst_t *ins)
 
 	ins->false_blk = falseblk;
 	ins->true_blk = trueblk;
+
+	if((ins->type == IR_INST_LOAD || ins->type == IR_INST_LOADS ||
+		ins->type == IR_INST_LOADSS) &&
+	   ins->is_32bit && ins->size == 8) {
+		ins->size = 4;
+	}
+
+	if((ins->type == IR_INST_ZXT || ins->type == IR_INST_SXT) &&
+	   ins->is_32bit && ins->size == 8) {
+		ins->size = 4;
+	}
 }
 
 /* fixes IR function */

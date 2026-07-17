@@ -9,13 +9,12 @@ void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
 	return;
 }
 
-static void load_imm_lane(FILE *f, int reg, uint16_t i, uint16_t shift,
-						  int *keep, int sz)
+static void load_imm_lane(FILE *f, char *reg, uint16_t i, uint16_t shift,
+						  int *keep)
 {
 	char *kt = "zk";
-	char *ss = "xw";
 	if(i) {
-		fprintf(f, "\tmov%c %c%d, #%hu", kt[*keep], ss[sz], reg, i);
+		fprintf(f, "\tmov%c %s, #%hu", kt[*keep], reg, i);
 		if(shift) {
 			fprintf(f, ", lsl #%hu", shift);
 		}
@@ -25,31 +24,31 @@ static void load_imm_lane(FILE *f, int reg, uint16_t i, uint16_t shift,
 	return;
 }
 
-static void load_imm_w(FILE *f, int reg, uint32_t imm_)
+static void load_imm_w(FILE *f, char *reg, uint32_t imm_)
 {
 	uint32_t imm = imm_;
 	int32_t imms = (int32_t)imm;
 
 	if(imms <= 4095 && imms >= -4095) {
-		fprintf(f, "\tmov w%d, #%d\n", reg, imms);
+		fprintf(f, "\tmov %s, #%d\n", reg, imms);
 		return;
 	}
 
 	int keep = 0;
 
-	load_imm_lane(f, reg, (imm >> 0) & 0xffff, 0, &keep, 1);
-	load_imm_lane(f, reg, (imm >> 16) & 0xffff, 16, &keep, 1);
+	load_imm_lane(f, reg, (imm >> 0) & 0xffff, 0, &keep);
+	load_imm_lane(f, reg, (imm >> 16) & 0xffff, 16, &keep);
 	return;
 }
 
 /* loads an immediate into `reg` */
-static void load_imm(FILE *f, int reg, uint64_t imm_)
+static void load_imm(FILE *f, char *reg, uint64_t imm_)
 {
 	uint64_t imm = imm_;
 	int64_t imms = (int64_t)imm;
 
 	if(imms <= 4095 && imms >= -4095) {
-		fprintf(f, "\tmov x%d, #%lld\n", reg, imms);
+		fprintf(f, "\tmov %s, #%lld\n", reg, imms);
 		return;
 	}
 
@@ -61,10 +60,10 @@ static void load_imm(FILE *f, int reg, uint64_t imm_)
 
 	int keep = 0;
 
-	load_imm_lane(f, reg, (imm >> 0) & 0xffff, 0, &keep, 0);
-	load_imm_lane(f, reg, (imm >> 16) & 0xffff, 16, &keep, 0);
-	load_imm_lane(f, reg, (imm >> 32) & 0xffff, 32, &keep, 0);
-	load_imm_lane(f, reg, (imm >> 48) & 0xffff, 48, &keep, 0);
+	load_imm_lane(f, reg, (imm >> 0) & 0xffff, 0, &keep);
+	load_imm_lane(f, reg, (imm >> 16) & 0xffff, 16, &keep);
+	load_imm_lane(f, reg, (imm >> 32) & 0xffff, 32, &keep);
+	load_imm_lane(f, reg, (imm >> 48) & 0xffff, 48, &keep);
 
 	return;
 }
@@ -86,7 +85,14 @@ static int load_fp_imm_x10(FILE *f, long off, bool save)
 	return 1;
 }
 
-static int arm_reg[10] = { 19, 20, 21, 22, 23, 24, 25, 26, 27, 28 };
+static int arm_reg_mapping[20] = { 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+								   10, 0,  1,  2,  3,  4,  5,  6,  7,  8 };
+static char *arm_reg[20] = { "x19", "x20", "x21", "x22", "x23", "x24", "x25",
+							 "x26", "x27", "x28", "x10", "x0",	"x1",  "x2",
+							 "x3",	"x4",  "x5",  "x6",	 "x7",	"x8" };
+static char *arm_reg32[20] = { "w19", "w20", "w21", "w22", "w23", "w24", "w25",
+							   "w26", "w27", "w28", "w10", "w0",  "w1",	 "w2",
+							   "w3",  "w4",	 "w5",	"w6",  "w7",  "w8" };
 static const int arm_reg_count = 10;
 
 void ir_prog_begin_aarch64_apple(FILE *f, ir_prog_t *prog)
@@ -197,9 +203,10 @@ void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
 	return;
 }
 
-static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to,
-						 char *addr_fmt, va_list va)
+static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to_,
+						 char *addr_fmt, bool is_32bit, va_list va)
 {
+	int reg_to = arm_reg_mapping[reg_to_];
 	switch(size) {
 	case 8:
 		fprintf(f, "\tldr x%d, ", reg_to);
@@ -227,9 +234,10 @@ static INLINE void vload(FILE *f, size_t size, bool ext, int reg_to,
 	return;
 }
 
-static INLINE void vstore(FILE *f, size_t size, int reg_to, char *addr_fmt,
-						  va_list va)
+static INLINE void vstore(FILE *f, size_t size, int reg_to_, char *addr_fmt,
+						  bool is_32bit, va_list va)
 {
+	int reg_to = arm_reg_mapping[reg_to_];
 	switch(size) {
 	case 8:
 		fprintf(f, "\tstr x%d, ", reg_to);
@@ -256,21 +264,22 @@ static INLINE void vstore(FILE *f, size_t size, int reg_to, char *addr_fmt,
 	}
 }
 
-static void load(FILE *f, size_t size, bool ext, int reg_to, char *addr_fmt,
-				 ...)
+static void load(FILE *f, size_t size, bool ext, int reg_to, bool is_32bit,
+				 char *addr_fmt, ...)
 {
 	va_list va;
 	va_start(va, addr_fmt);
-	vload(f, size, ext, reg_to, addr_fmt, va);
+	vload(f, size, ext, reg_to, addr_fmt, is_32bit, va);
 	va_end(va);
 	return;
 }
 
-static void store(FILE *f, size_t size, int reg_to, char *addr_fmt, ...)
+static void store(FILE *f, size_t size, int reg_to, bool is_32bit,
+				  char *addr_fmt, ...)
 {
 	va_list va;
 	va_start(va, addr_fmt);
-	vstore(f, size, reg_to, addr_fmt, va);
+	vstore(f, size, reg_to, addr_fmt, is_32bit, va);
 	va_end(va);
 	return;
 }
@@ -297,27 +306,31 @@ static void ir_ins_abi_call_aarch64(FILE *f, ir_func_t *func, ir_blk_t *blk,
 
 	for(size_t i = 0; i < alen; i++) {
 		reg_t *reg = args[i]->r;
-		int arg = arm_reg[reg->rr];
+		char *arg = arm_reg[reg->rr];
 		if(reg->spilld2) {
-			arg = 10;
+			arg = arm_reg[10];
 			if(load_fp_imm_x10(f, reg->off, false)) {
-				fprintf(f, "\tldr x%d, [fp, x10]\n", arg);
+				fprintf(f, "\tldr %s, [fp, x10]\n", arg);
 			} else {
-				fprintf(f, "\tldr x%d, [fp, #%ld]\n", arg, reg->off);
+				fprintf(f, "\tldr %s, [fp, #%ld]\n", arg, reg->off);
 			}
 		}
 
 		if(i <= 7) {
-			fprintf(f, "\tmov x%zu, x%d\n", i, arg);
+			fprintf(f, "\tmov x%zu, %s\n", i, arg);
 		} else {
 			ENSURE(stack_indx >= 0, "negative stack index, somehow");
-			fprintf(f, "\tstr x%d, [sp, #%zu]\n", arg, stack_indx);
+			fprintf(f, "\tstr %s, [sp, #%zu]\n", arg, stack_indx);
 			stack_indx -= args[i]->size;
 		}
 	}
 	fprintf(f, "\tbl _%s\n", ins->fname);
 	if(ins->r0) {
-		fprintf(f, "\tmov x%d, x0\n", r0);
+		if(ins->is_32bit) {
+			fprintf(f, "\tmov %s, w0\n", arm_reg32[r0]);
+		} else {
+			fprintf(f, "\tmov %s, x0\n", arm_reg[r0]);
+		}
 	}
 	if(space_needed) {
 		fprintf(f, "\tadd sp, sp, #%zu\n", space_needed);
@@ -340,28 +353,38 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		fprintf(f, "\n");
 	}
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-		int r0 = ins->r0 && ins->r0->rr >= 0 ? arm_reg[ins->r0->rr] : -1;
-		int r1 = ins->r1 && ins->r1->rr >= 0 ? arm_reg[ins->r1->rr] : -1;
-		int r2 = ins->r2 && ins->r2->rr >= 0 ? arm_reg[ins->r2->rr] : -1;
+		int r0i = ins->r0 && ins->r0->rr >= 0 ? ins->r0->rr : -1;
+		int r1i = ins->r1 && ins->r1->rr >= 0 ? ins->r1->rr : -1;
+		int r2i = ins->r2 && ins->r2->rr >= 0 ? ins->r2->rr : -1;
+		char *r0x = r0i == -1 ? NULL : arm_reg[r0i];
+		char *r1x = r1i == -1 ? NULL : arm_reg[r1i];
+		char *r2x = r2i == -1 ? NULL : arm_reg[r2i];
+		char *r0w = r0i == -1 ? NULL : arm_reg32[r0i];
+		char *r1w = r1i == -1 ? NULL : arm_reg32[r1i];
+		char *r2w = r2i == -1 ? NULL : arm_reg32[r2i];
+		char *r0 = ins->is_32bit ? r0w : r0x;
+		char *r1 = ins->is_32bit ? r1w : r1x;
+		char *r2 = ins->is_32bit ? r2w : r2x;
 		size_t sz = ins->size;
+		bool is_32bit = ins->is_32bit;
 		int64_t imm = (int64_t)ins->imm;
 		switch(ins->type) {
 		case IR_INST_ZXT:
 			switch(ins->size) {
 			case 1:
-				fprintf(f, "\tuxtb w%d, w%d\n", r0, r1);
+				fprintf(f, "\tuxtb %s, %s\n", r0w, r1w);
 				break;
 			case 2:
-				fprintf(f, "\tuxth w%d, w%d\n", r0, r1);
+				fprintf(f, "\tuxth %s, %s\n", r0w, r1w);
 				break;
 			case 4:
 				/* this uses w registers don't misread it */
-				fprintf(f, "\tmov w%d, w%d\n", r0, r1);
+				fprintf(f, "\tmov %s, %s\n", r0w, r1w);
 				break;
 			case 8:
 			default:
 				if(r0 != r1) {
-					fprintf(f, "\tmov x%d, x%d\n", r0, r1);
+					fprintf(f, "\tmov %s, %s\n", r0, r1);
 				}
 				break;
 			}
@@ -369,25 +392,25 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_SXT:
 			switch(ins->size) {
 			case 1:
-				fprintf(f, "\tsxtb x%d, x%d\n", r0, r1);
+				fprintf(f, "\tsxtb %s, %s\n", r0, r1);
 				break;
 			case 2:
-				fprintf(f, "\tsxth x%d, x%d\n", r0, r1);
+				fprintf(f, "\tsxth %s, %s\n", r0, r1);
 				break;
 			case 4:
-				fprintf(f, "\tsxtw x%d, x%d\n", r0, r1);
+				fprintf(f, "\tsxtw %s, %s\n", r0, r1);
 				break;
 			case 8:
 			default:
 				if(r0 != r1) {
-					fprintf(f, "\tmov x%d, x%d\n", r0, r1);
+					fprintf(f, "\tmov %s, %s\n", r0, r1);
 				}
 				break;
 			}
 			break;
 		case IR_INST_CALL:
-			ir_ins_abi_call_aarch64(f, fn, blk, ins, ins->call_args, r0, r1,
-									r2);
+			ir_ins_abi_call_aarch64(f, fn, blk, ins, ins->call_args, r0i, r1i,
+									r2i);
 			break;
 		case IR_INST_BREQI:
 		case IR_INST_BRNEI:
@@ -399,7 +422,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_BRULEI:
 		case IR_INST_BRUGTI:
 		case IR_INST_BRUGEI:
-			fprintf(f, "\tcmp x%d, #%lld\n", r1, imm);
+			fprintf(f, "\tcmp %s, #%lld\n", r1, imm);
 			goto branch_cond;
 		case IR_INST_BREQ:
 		case IR_INST_BRNE:
@@ -411,7 +434,7 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		case IR_INST_BRULE:
 		case IR_INST_BRUGT:
 		case IR_INST_BRUGE:
-			fprintf(f, "\tcmp x%d, x%d\n", r1, r2);
+			fprintf(f, "\tcmp %s, %s\n", r1, r2);
 branch_cond:
 			switch(ins->type) {
 			default:
@@ -467,7 +490,7 @@ branch_cond:
 			fprintf(f, "\tb .BB%ld\n", ins->true_blk->num);
 			break;
 		case IR_INST_BR:
-			fprintf(f, "\tcbz x%d, .BB%ld\n", r1, ins->false_blk->num);
+			fprintf(f, "\tcbz %s, .BB%ld\n", r1, ins->false_blk->num);
 			/* big brain optimization */
 			/* fallthrough to true block if in front of us */
 			if(ins->true_blk->num == blk->num + 1) {
@@ -486,8 +509,12 @@ branch_cond:
 			fprintf(f, "\tb .BB%ld\n", ins->true_blk->num);
 			break;
 		case IR_INST_RET:
-			if(r1 != -1) {
-				fprintf(f, "\tmov x0, x%d\n", r1);
+			if(r1i != -1) {
+				if(is_32bit) {
+					fprintf(f, "\tsxtw x0, %s\n", r1x);
+				} else {
+					fprintf(f, "\tmov x0, %s\n", r1);
+				}
 			}
 			if(blk->num != last_i) {
 				fprintf(f, "\tb .L%s_ret\n", fn->name);
@@ -496,90 +523,96 @@ branch_cond:
 		case IR_INST_NOP:
 			break;
 		case IR_INST_MOV:
-			fprintf(f, "\tmov x%d, x%d\n", r0, r1);
+			fprintf(f, "\tmov %s, %s\n", r0, r1);
 			break;
 		case IR_INST_IMM:
-			load_imm(f, r0, ins->imm);
+			if(is_32bit) {
+				load_imm_w(f, r0, ins->imm);
+			} else {
+				load_imm(f, r0, ins->imm);
+			}
 			break;
 		case IR_INST_ADD:
-			fprintf(f, "\tadd x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\tadd %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_SUB:
-			fprintf(f, "\tsub x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\tsub %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_ADDI:
-			fprintf(f, "\tadd x%d, x%d, #%lld\n", r0, r1, imm);
+			fprintf(f, "\tadd %s, %s, #%lld\n", r0, r1, imm);
 			break;
 		case IR_INST_SUBI:
-			fprintf(f, "\tsub x%d, x%d, #%lld\n", r0, r1, imm);
+			fprintf(f, "\tsub %s, %s, #%lld\n", r0, r1, imm);
 			break;
 		case IR_INST_AND:
-			fprintf(f, "\tand x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\tand %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_OR:
-			fprintf(f, "\torr x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\torr %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_EOR:
-			fprintf(f, "\teor x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\teor %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_ANDI:
-			fprintf(f, "\tand x%d, x%d, #%lld\n", r0, r1, imm);
+			fprintf(f, "\tand %s, %s, #%lld\n", r0, r1, imm);
 			break;
 		case IR_INST_ORI:
-			fprintf(f, "\torr x%d, x%d, #%lld\n", r0, r1, imm);
+			fprintf(f, "\torr %s, %s, #%lld\n", r0, r1, imm);
 			break;
 		case IR_INST_EORI:
-			fprintf(f, "\teor x%d, x%d, #%lld\n", r0, r1, imm);
+			fprintf(f, "\teor %s, %s, #%lld\n", r0, r1, imm);
 			break;
 		case IR_INST_SHL:
-			fprintf(f, "\tlsl x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\tlsl %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_SHR:
-			fprintf(f, "\tlsr x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\tlsr %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_ASHR:
-			fprintf(f, "\tasr x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\tasr %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_SHLI:
-			fprintf(f, "\tlsl x%d, x%d, #%lld\n", r0, r1, imm);
+			fprintf(f, "\tlsl %s, %s, #%lld\n", r0, r1, imm);
 			break;
 		case IR_INST_SHRI:
-			fprintf(f, "\tlsr x%d, x%d, #%lld\n", r0, r1, imm);
+			fprintf(f, "\tlsr %s, %s, #%lld\n", r0, r1, imm);
 			break;
 		case IR_INST_ASHRI:
-			fprintf(f, "\tasr x%d, x%d, #%lld\n", r0, r1, imm);
+			fprintf(f, "\tasr %s, %s, #%lld\n", r0, r1, imm);
 			break;
 		case IR_INST_SMUL:
 		case IR_INST_UMUL:
-			fprintf(f, "\tmul x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\tmul %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_SDIV:
-			fprintf(f, "\tsdiv x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\tsdiv %s, %s, %s\n", r0, r1, r2);
 			break;
-		case IR_INST_SMOD:
-			fprintf(f, "\tsdiv x10, x%d, x%d\n", r1, r2);
-			fprintf(f, "\tmsub x%d, x10, x%d, x%d\n", r0, r2, r1);
-			break;
+		case IR_INST_SMOD: {
+			char *r10 = is_32bit ? "w10" : "x10";
+			fprintf(f, "\tsdiv %s, %s, %s\n", r10, r1, r2);
+			fprintf(f, "\tmsub %s, %s, %s, %s\n", r0, r10, r2, r1);
+		}; break;
 		case IR_INST_UDIV:
-			fprintf(f, "\tudiv x%d, x%d, x%d\n", r0, r1, r2);
+			fprintf(f, "\tudiv %s, %s, %s\n", r0, r1, r2);
 			break;
-		case IR_INST_UMOD:
-			fprintf(f, "\tudiv x10, x%d, x%d\n", r1, r2);
-			fprintf(f, "\tmsub x%d, x10, x%d, x%d\n", r0, r2, r1);
-			break;
+		case IR_INST_UMOD: {
+			char *r10 = is_32bit ? "w10" : "x10";
+			fprintf(f, "\tudiv %s, %s, %s\n", r10, r1, r2);
+			fprintf(f, "\tmsub %s, %s, %s, %s\n", r0, r10, r2, r1);
+		}; break;
 		case IR_INST_NOT:
-			fprintf(f, "\tmvn x%d, x%d\n", r0, r1);
+			fprintf(f, "\tmvn %s, %s\n", r0, r1);
 			break;
 		case IR_INST_MKBOOL:
-			fprintf(f, "\ttst x%d, x%d\n", r1, r1);
-			fprintf(f, "\tcset x%d, ne\n", r0);
+			fprintf(f, "\ttst %s, %s\n", r1, r1);
+			fprintf(f, "\tcset %s, ne\n", r0w);
 			break;
 		case IR_INST_NOTBOOL:
-			fprintf(f, "\ttst x%d, x%d\n", r1, r1);
-			fprintf(f, "\tcset x%d, eq\n", r0);
+			fprintf(f, "\ttst %s, %s\n", r1, r1);
+			fprintf(f, "\tcset %s, eq\n", r0w);
 			break;
 		case IR_INST_NEG:
-			fprintf(f, "\tneg x%d, x%d\n", r0, r1);
+			fprintf(f, "\tneg %s, %s\n", r0, r1);
 			break;
 		case IR_INST_EQI:
 		case IR_INST_NEI:
@@ -591,7 +624,7 @@ branch_cond:
 		case IR_INST_ULEI:
 		case IR_INST_UGTI:
 		case IR_INST_UGEI:
-			fprintf(f, "\tcmp x%d, #%lld\n", r1, imm);
+			fprintf(f, "\tcmp %s, #%lld\n", r1, imm);
 			goto set_cond;
 		case IR_INST_EQ:
 		case IR_INST_NE:
@@ -603,48 +636,48 @@ branch_cond:
 		case IR_INST_ULE:
 		case IR_INST_UGT:
 		case IR_INST_UGE:
-			fprintf(f, "\tcmp x%d, x%d\n", r1, r2);
+			fprintf(f, "\tcmp %s, %s\n", r1, r2);
 set_cond:
 			switch(ins->type) {
 			case IR_INST_EQ:
 			case IR_INST_EQI:
-				fprintf(f, "\tcset x%d, eq\n", r0);
+				fprintf(f, "\tcset %s, eq\n", r0w);
 				break;
 			case IR_INST_NE:
 			case IR_INST_NEI:
-				fprintf(f, "\tcset x%d, ne\n", r0);
+				fprintf(f, "\tcset %s, ne\n", r0w);
 				break;
 			case IR_INST_SLT:
 			case IR_INST_SLTI:
-				fprintf(f, "\tcset x%d, lt\n", r0);
+				fprintf(f, "\tcset %s, lt\n", r0w);
 				break;
 			case IR_INST_SLE:
 			case IR_INST_SLEI:
-				fprintf(f, "\tcset x%d, le\n", r0);
+				fprintf(f, "\tcset %s, le\n", r0w);
 				break;
 			case IR_INST_SGT:
 			case IR_INST_SGTI:
-				fprintf(f, "\tcset x%d, gt\n", r0);
+				fprintf(f, "\tcset %s, gt\n", r0w);
 				break;
 			case IR_INST_SGE:
 			case IR_INST_SGEI:
-				fprintf(f, "\tcset x%d, ge\n", r0);
+				fprintf(f, "\tcset %s, ge\n", r0w);
 				break;
 			case IR_INST_ULT:
 			case IR_INST_ULTI:
-				fprintf(f, "\tcset x%d, lo\n", r0);
+				fprintf(f, "\tcset %s, lo\n", r0w);
 				break;
 			case IR_INST_ULE:
 			case IR_INST_ULEI:
-				fprintf(f, "\tcset x%d, ls\n", r0);
+				fprintf(f, "\tcset %s, ls\n", r0w);
 				break;
 			case IR_INST_UGT:
 			case IR_INST_UGTI:
-				fprintf(f, "\tcset x%d, hi\n", r0);
+				fprintf(f, "\tcset %s, hi\n", r0w);
 				break;
 			case IR_INST_UGE:
 			case IR_INST_UGEI:
-				fprintf(f, "\tcset x%d, hs\n", r0);
+				fprintf(f, "\tcset %s, hs\n", r0w);
 				break;
 			default: /* wth? */
 				break;
@@ -652,50 +685,51 @@ set_cond:
 			break;
 		case IR_INST_LEAS:
 			if(load_fp_imm_x10(f, imm, false)) {
-				fprintf(f, "\tadd x%d, fp, x10\n", r0);
+				fprintf(f, "\tadd %s, fp, x10\n", r0x);
 			} else {
-				fprintf(f, "\tsub x%d, fp, #%lld\n", r0, imm);
+				fprintf(f, "\tsub %s, fp, #%lld\n", r0x, imm);
 			}
 			break;
 		case IR_INST_LEA:
-			fprintf(f, "\tadrp x%d, _%s@PAGE\n", r0, ins->label->name);
-			fprintf(f, "\tadd x%d, x%d, _%s@PAGEOFF\n", r0, r0,
+			fprintf(f, "\tadrp %s, _%s@PAGE\n", r0x, ins->label->name);
+			fprintf(f, "\tadd %s, %s, _%s@PAGEOFF\n", r0x, r0x,
 					ins->label->name);
 			break;
 		case IR_INST_LOAD:
-			load(f, sz, ins->sign_ext, r0, "[x%d]", r1);
+			load(f, sz, ins->sign_ext, r0i, is_32bit, "[%s]", r1x);
 			break;
 		case IR_INST_LOADS:
 			if(load_fp_imm_x10(f, imm, false)) {
-				load(f, sz, ins->sign_ext, r0, "[fp, x10]");
+				load(f, sz, ins->sign_ext, r0i, is_32bit, "[fp, x10]");
 			} else {
-				load(f, sz, ins->sign_ext, r0, "[fp, #%lld]", imm);
+				load(f, sz, ins->sign_ext, r0i, is_32bit, "[fp, #%lld]", imm);
 			}
 			break;
 		case IR_INST_LOADSS:
 			if(load_fp_imm_x10(f, imm, false)) {
-				load(f, sz, ins->sign_ext, r0, "[fp, x10]\t ; spilled load");
+				load(f, sz, ins->sign_ext, r0i, false,
+					 "[fp, x10]\t ; spilled load");
 			} else {
-				load(f, sz, ins->sign_ext, r0, "[fp, #%lld]\t ; spilled load",
-					 imm);
+				load(f, sz, ins->sign_ext, r0i, false,
+					 "[fp, #%lld]\t ; spilled load", imm);
 			}
 			break;
 
 		case IR_INST_STORE:
-			store(f, sz, r2, "[x%d]", r1);
+			store(f, sz, r2i, is_32bit, "[%s]", r1x);
 			break;
 		case IR_INST_STORES:
 			if(load_fp_imm_x10(f, imm, false)) {
-				store(f, sz, r1, "[fp, x10]");
+				store(f, sz, r1i, is_32bit, "[fp, x10]");
 			} else {
-				store(f, sz, r1, "[fp, #%lld]", imm);
+				store(f, sz, r1i, is_32bit, "[fp, #%lld]", imm);
 			}
 			break;
 		case IR_INST_STORESS:
 			if(load_fp_imm_x10(f, imm, false)) {
-				store(f, sz, r1, "[fp, x10]\t ; spilled store");
+				store(f, sz, r1i, false, "[fp, x10]\t ; spilled store");
 			} else {
-				store(f, sz, r1, "[fp, #%lld]\t ; spilled store", imm);
+				store(f, sz, r1i, false, "[fp, #%lld]\t ; spilled store", imm);
 			}
 			break;
 
@@ -725,7 +759,7 @@ static int ir_func_save_regs_callee(FILE *f, ir_func_t *fun)
 				reg1 = (int)i;
 			} else if(reg2 == -1) {
 				reg2 = (int)i;
-				fprintf(f, "\tstp x%d, x%d, [sp, #-16]!\n", arm_reg[reg1],
+				fprintf(f, "\tstp %s, %s, [sp, #-16]!\n", arm_reg[reg1],
 						arm_reg[reg2]);
 				used_copy[reg1] = used_copy[reg2] = 0;
 				reg1 = reg2 = -1;
@@ -739,7 +773,7 @@ static int ir_func_save_regs_callee(FILE *f, ir_func_t *fun)
 	for(size_t i = 0; i < arm_reg_count; i++) {
 		if(used_copy[i]) {
 			ret = i;
-			fprintf(f, "\tstr x%d, [sp, #-16]!\n", arm_reg[i]);
+			fprintf(f, "\tstr %s, [sp, #-16]!\n", arm_reg[i]);
 		}
 	}
 
@@ -751,7 +785,7 @@ static int ir_func_save_regs_callee(FILE *f, ir_func_t *fun)
 static void ir_func_restore_regs_callee(FILE *f, ir_func_t *fun, int save)
 {
 	if(save != -1) {
-		fprintf(f, "\tldr x%d, [sp], #16\n", arm_reg[save]);
+		fprintf(f, "\tldr %s, [sp], #16\n", arm_reg[save]);
 		fun->alloc_used[save] = 0;
 	}
 
@@ -765,7 +799,7 @@ static void ir_func_restore_regs_callee(FILE *f, ir_func_t *fun, int save)
 				reg2 = (int)i;
 			} else if(reg1 == -1) {
 				reg1 = (int)i;
-				fprintf(f, "\tldp x%d, x%d, [sp], #16\n", arm_reg[reg1],
+				fprintf(f, "\tldp %s, %s, [sp], #16\n", arm_reg[reg1],
 						arm_reg[reg2]);
 				fun->alloc_used[reg1] = fun->alloc_used[reg2] = 0;
 				reg1 = reg2 = -1;
@@ -811,24 +845,26 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 		callreg_t *arg = fun->args[i];
 		if(i < 8) {
 			if(load_fp_imm_x10(f, arg->r->off, false)) {
-				store(f, arg->size, i, "[fp, x10]");
+				store(f, arg->size, i + 11, false, "[fp, x10]");
 			} else {
-				store(f, arg->size, i, "[fp, #%lld]", (int64_t)arg->r->off);
+				store(f, arg->size, i + 11, false, "[fp, #%lld]",
+					  (int64_t)arg->r->off);
 			}
 		} else {
 			ENSURE(stack_indx >= 0, "negative stack index, somehow");
 
 			if(load_fp_imm_x10(f, -(int64_t)(stack_indx + stack_disp), false)) {
-				load(f, arg->size, false, 10, "[sp, x10]");
+				load(f, arg->size, false, 10, false, "[sp, x10]");
 			} else {
-				load(f, arg->size, false, 10, "[sp, #%zu]",
+				load(f, arg->size, false, 10, false, "[sp, #%zu]",
 					 stack_indx + stack_disp);
 			}
 
 			if(load_fp_imm_x10(f, arg->r->off, false)) {
-				store(f, arg->size, 10, "[fp, x10]");
+				store(f, arg->size, 10, false, "[fp, x10]");
 			} else {
-				store(f, arg->size, 10, "[fp, #%lld]", (int64_t)arg->r->off);
+				store(f, arg->size, 10, false, "[fp, #%lld]",
+					  (int64_t)arg->r->off);
 			}
 
 			stack_indx -= arg->size;
