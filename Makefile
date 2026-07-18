@@ -139,6 +139,7 @@ clean:
 	@echo "cleaning"
 	rm -rf $(BINDIR)
 	@make -C bird clean
+	@make -C zz clean
 	@echo "cleaned"
 
 # test app
