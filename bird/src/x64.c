@@ -600,7 +600,7 @@ branch_cond:
 		case IR_INST_RET:
 			if(r1 != NULL) {
 				if(is_32bit) {
-					fprintf(f, "\tmov eax,%s\n", r1);
+					fprintf(f, "\tmov eax, %s\n", r1);
 				} else {
 					fprintf(f, "\tmov rax, %s\n", r1);
 				}
