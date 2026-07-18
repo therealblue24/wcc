@@ -1,6 +1,6 @@
 # in the near future...
 # CC = ./bin/wcc
-CC ?= clang
+CC ?= cc
 # binary directory
 BINDIR = bin
 # app name

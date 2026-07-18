@@ -1,5 +1,5 @@
 # set this to your favorite compiler
-CC = clang
+CC ?= cc
 # binary directory
 BINDIR = bin
 # lib name
