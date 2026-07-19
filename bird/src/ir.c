@@ -866,7 +866,7 @@ void ir_dump(ir_func_t *fun, int mode)
 
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
 			int num = inst->is_32bit ? 32 : 64;
-			printf("i%d\t", num);
+			printf("(i%d)\t", num);
 			ir_print_inst(inst, mode);
 			putchar('\n');
 		}

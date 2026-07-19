@@ -102,8 +102,26 @@ void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound,
 				   inst->type == IR_INST_ASHR) {
 					inst->imm &= 63;
 				}
+				enum ins_type oldtype = inst->type;
 				inst->type = ir_inst_turn_imm(inst->type);
 				inst->r2 = NULL;
+
+				/* for add/sub, see if we can turn negative imm => positive */
+				if(inst->type == IR_INST_ADDI || inst->type == IR_INST_SUBI) {
+					int64_t imm = inst->imm;
+					/* only want <0 */
+					if(imm >= 0) {
+						continue;
+					}
+					int64_t neg = -imm;
+					if(can_fold(oldtype, neg, lower_bound, higher_bound,
+								arch)) {
+						/* do so */
+						inst->type = inst->type == IR_INST_ADDI ? IR_INST_SUBI :
+																  IR_INST_ADDI;
+						inst->imm = neg;
+					}
+				}
 			}
 		}
 	}
