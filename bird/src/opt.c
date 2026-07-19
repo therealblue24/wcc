@@ -3,6 +3,7 @@
 #include "ir.h"
 #include "liveness.h"
 #include "ssa.h"
+#include <stdint.h>
 
 extern int debug;
 
@@ -28,26 +29,6 @@ static int ins_has_imm(enum ins_type t)
 {
 	return t == IR_INST_IMM || t == IR_INST_LEAS || t == IR_INST_LOADS ||
 		   t == IR_INST_LOADSS || t == IR_INST_STORES || t == IR_INST_STORESS;
-}
-
-static bool regs_same(reg_t *a, reg_t *b)
-{
-	if(a == b) {
-		return true;
-	}
-	if(a->insty == IR_INST_LEA) {
-		return false;
-	}
-	if(a->insty != b->insty) {
-		return false;
-	}
-	if(ins_proves_live(a->insty) || a->insty == IR_INST_PHI) {
-		return false;
-	}
-
-	bool ok = ins_has_imm(a->insty) ? a->imm == b->imm : true;
-
-	return ok && a->lhs == b->lhs && a->rhs == b->rhs;
 }
 
 /* optimize
@@ -227,7 +208,24 @@ static uint64_t sxt(uint64_t x_, uint64_t size)
 	return r;
 }
 
-static void ir_fold_ins_unaryop(ir_inst_t *ins)
+static uint32_t zxt32(uint32_t x, uint32_t size)
+{
+	uint32_t m = (1 << size) - 1;
+	return x & m;
+}
+
+static uint32_t sxt32(uint32_t x_, uint32_t size)
+{
+	/* thank you https://graphics.stanford.edu/~seander/bithacks.html#FixedSignExtend */
+	int32_t x = x_;
+	int32_t r;
+	int32_t mask = 1 << (size - 1);
+	x = x & ((1 << size) - 1);
+	r = (x ^ mask) - mask;
+	return r;
+}
+
+static void ir_fold_ins_unaryop64(ir_inst_t *ins)
 {
 	uint64_t ua = ins->r1->imm;
 	int64_t sa = *((int64_t *)&ins->r1->imm);
@@ -267,7 +265,49 @@ static void ir_fold_ins_unaryop(ir_inst_t *ins)
 	return;
 }
 
-static void ir_fold_ins_binop(ir_inst_t *ins)
+static void ir_fold_ins_unaryop32(ir_inst_t *ins)
+{
+	uint32_t ua = ins->r1->imm & UINT32_MAX;
+	int32_t sa = *((int64_t *)&ua);
+	int32_t immres = 0;
+
+	ins->r1 = NULL;
+	ins->r2 = NULL;
+
+	switch(ins->type) {
+	case IR_INST_MOV:
+		immres = ua;
+		break;
+	case IR_INST_NEG:
+		immres = -sa;
+		break;
+	case IR_INST_NOT:
+		immres = ~ua;
+		break;
+	case IR_INST_MKBOOL:
+		immres = (ua != 0);
+		break;
+	case IR_INST_NOTBOOL:
+		immres = (ua == 0);
+		break;
+	case IR_INST_ZXT:
+		immres = zxt32(ua, ins->size * 8);
+		break;
+	case IR_INST_SXT:
+		immres = sxt32(ua, ins->size * 8);
+		break;
+	default:
+		break;
+	}
+
+	ins->imm = (int64_t)immres;
+	ins->type = IR_INST_IMM;
+	ins->r0->insty = IR_INST_IMM;
+	ins->r0->imm = ins->imm;
+	return;
+}
+
+static void ir_fold_ins_binop64(ir_inst_t *ins)
 {
 	uint64_t ua = ins->r1->imm;
 	uint64_t ub = ins->r2->imm;
@@ -371,6 +411,119 @@ static void ir_fold_ins_binop(ir_inst_t *ins)
 		break;
 	}
 
+	ins->type = IR_INST_IMM;
+	ins->r0->insty = IR_INST_IMM;
+	ins->r0->imm = ins->imm;
+
+	return;
+}
+
+static void ir_fold_ins_binop32(ir_inst_t *ins)
+{
+	uint32_t ua = ins->r1->imm & UINT32_MAX;
+	uint32_t ub = ins->r2->imm & UINT32_MAX;
+	int32_t sa = *((int32_t *)&ua);
+	int32_t sb = *((int32_t *)&ub);
+	int32_t immres = 0;
+
+	ins->r1 = NULL;
+	ins->r2 = NULL;
+
+	switch(ins->type) {
+	case IR_INST_ADD:
+		immres = ua + ub;
+		break;
+	case IR_INST_SUB:
+		immres = ua - ub;
+		break;
+	case IR_INST_SMUL:
+		immres = sa * sb;
+		break;
+	case IR_INST_UMUL:
+		immres = ua * ub;
+		break;
+	case IR_INST_SDIV:
+		if(sb == 0) {
+			immres = 0;
+		} else {
+			immres = sa / sb;
+		}
+		break;
+	case IR_INST_UDIV:
+		if(ub == 0) {
+			immres = 0;
+		} else {
+			immres = ua / ub;
+		}
+		break;
+	case IR_INST_SMOD:
+		if(sb == 0) {
+			immres = 0;
+		} else {
+			immres = sa % sb;
+		}
+		break;
+	case IR_INST_UMOD:
+		if(ub == 0) {
+			immres = 0;
+		} else {
+			immres = ua % ub;
+		}
+		break;
+	case IR_INST_AND:
+		immres = ua & ub;
+		break;
+	case IR_INST_OR:
+		immres = ua | ub;
+		break;
+	case IR_INST_EOR:
+		immres = ua ^ ub;
+		break;
+	case IR_INST_SHL:
+		immres = ua << (ub & 31);
+		break;
+	case IR_INST_SHR:
+		immres = ua >> (ub & 31);
+		break;
+	case IR_INST_ASHR:
+		immres = sa >> (sb & 31);
+		break;
+	case IR_INST_EQ:
+		immres = ua == ub;
+		break;
+	case IR_INST_NE:
+		immres = ua != ub;
+		break;
+	case IR_INST_SLT:
+		immres = sa < sb;
+		break;
+	case IR_INST_SLE:
+		immres = sa <= sb;
+		break;
+	case IR_INST_SGT:
+		immres = sa > sb;
+		break;
+	case IR_INST_SGE:
+		immres = sa >= sb;
+		break;
+	case IR_INST_ULT:
+		immres = ua < ub;
+		break;
+	case IR_INST_ULE:
+		immres = ua <= ub;
+		break;
+	case IR_INST_UGT:
+		immres = ua > ub;
+		break;
+	case IR_INST_UGE:
+		immres = ua >= ub;
+		break;
+
+	default:
+		break;
+	}
+
+	ins->imm = (int64_t)immres;
 	ins->type = IR_INST_IMM;
 	ins->r0->insty = IR_INST_IMM;
 	ins->r0->imm = ins->imm;
@@ -563,22 +716,25 @@ static UNUSEDA int ir_leas_arith_opt(ir_func_t *func)
 			}
 
 			change = 1;
+
 			ins->imm = -ins->r1->imm;
+
+			uint64_t imm = ins->imm;
 
 			switch(ins->type) {
 			case IR_INST_ADD:
-				ins->imm += ins->r2->imm;
+				ins->imm += imm;
 				break;
 			case IR_INST_SUB:
-				ins->imm -= ins->r2->imm;
+				ins->imm -= imm;
 				break;
 			case IR_INST_UMUL:
 			case IR_INST_SMUL:
-				ins->imm *= ins->r2->imm;
+				ins->imm *= imm;
 				break;
 			case IR_INST_UDIV:
 			case IR_INST_SDIV:
-				ins->imm /= ins->r2->imm;
+				ins->imm /= imm;
 				break;
 			default:
 				break;
@@ -599,19 +755,34 @@ static int ir_fold(ir_func_t *func)
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			if(ins->is_32bit) {
+				/* constant folding */
+				if(ir_inst_is_foldable(ins->type)) {
+					if(ins->r1 && ins->r2 && ins->r1->insty == IR_INST_IMM &&
+					   ins->r2->insty == IR_INST_IMM) {
+						ir_fold_ins_binop32(ins);
+						change = 1;
+					}
+
+					if(ir_inst_is_foldable(ins->type) && ins->r1 &&
+					   ins->r1->insty == IR_INST_IMM && !ins->r2) {
+						ir_fold_ins_unaryop32(ins);
+						change = 1;
+					}
+				}
+
 				continue;
 			}
 			/* constant folding */
 			if(ir_inst_is_foldable(ins->type)) {
 				if(ins->r1 && ins->r2 && ins->r1->insty == IR_INST_IMM &&
 				   ins->r2->insty == IR_INST_IMM) {
-					ir_fold_ins_binop(ins);
+					ir_fold_ins_binop64(ins);
 					change = 1;
 				}
 
 				if(ir_inst_is_foldable(ins->type) && ins->r1 &&
 				   ins->r1->insty == IR_INST_IMM && !ins->r2) {
-					ir_fold_ins_unaryop(ins);
+					ir_fold_ins_unaryop64(ins);
 					change = 1;
 				}
 			}
@@ -776,23 +947,14 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 		change = 1;
 	}
 
-	/* I have no idea why, but without the `ins->type != IR_INST_RET`
-	 * part, this just corrupts the return instruction sometimes somehow.
-	 * I don't know why. */
 	if(ins->is_32bit && ins->r1 && ins_is_ext(ins->r1->insty) &&
-	   ins->r1->size == 4 && ins->type != IR_INST_RET) {
+	   ins->r1->size == 4) {
 		ins->r1 = ins->r1->lhs;
 		change = 1;
 	}
 
-	/* elim of zero ext out of 32-bit op */
-	if(ins->type == IR_INST_ZXT && ins->r1->is_32bit && ins->size == 4) {
-		ins->type = IR_INST_MOV;
-		change = 1;
-	}
-
-	/* elim of longword sign ext of 32 bit op */
-	if(ins->type == IR_INST_SXT && ins->size == 4 && ins->r1->is_32bit) {
+	/* elim of ext out of 32-bit op */
+	if(ins_is_ext(ins->type) && ins->r1->is_32bit && ins->size == 4) {
 		ins->type = IR_INST_MOV;
 		change = 1;
 	}
@@ -983,7 +1145,7 @@ static int ir_simpleopt_ins_alg(ir_inst_t *ins)
 	 * %r3 = %r0
 	 */
 	if(ins->type == IR_INST_ADD && ins->r1->insty == IR_INST_SUB &&
-	   regs_same(ins->r1->rhs, ins->r2)) {
+	   ins->r1->rhs == ins->r2) {
 		nxt->type = IR_INST_MOV;
 		nxt->r2 = NULL;
 		nxt->r1 = ins->r1->lhs;
@@ -997,7 +1159,7 @@ static int ir_simpleopt_ins_alg(ir_inst_t *ins)
 	 * %r3 = %r0
 	 */
 	if(ins->type == IR_INST_SUB && ins->r1->insty == IR_INST_ADD &&
-	   regs_same(ins->r1->rhs, ins->r2)) {
+	   ins->r1->rhs == ins->r2) {
 		nxt->type = IR_INST_MOV;
 		nxt->r2 = NULL;
 		nxt->r1 = ins->r1->lhs;
@@ -1025,7 +1187,6 @@ static int ir_simpleopt(ir_func_t *func)
 
 	ir_nopremover(func);
 	ir_placemarks(func);
-
 	return changed;
 }
 
@@ -1448,7 +1609,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		TIMEIT("fold", {
 			change |= ir_fold(func);
 			ir_placemarks(func);
-			change |= ir_leas_arith_opt(func);
+			/* TODO: this doesn't work */
+			// change |= ir_leas_arith_opt(func);
 			ir_placemarks(func);
 			ir_fix_phis(func);
 		});
