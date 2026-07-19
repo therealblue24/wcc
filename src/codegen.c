@@ -162,6 +162,8 @@ static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
 	ir_inst_t *ins = ins_load(new_r0, r1);
 	if(typ->size < 8 && type_is_signed(typ)) {
 		ins->sign_ext = true;
+	} else {
+		ins->is_32bit = typ->size <= 4;
 	}
 	ins->size = typ->size;
 	ir_blk_add(outblk, ins);
