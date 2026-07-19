@@ -1,5 +1,6 @@
 #include "codegen.h"
 #include "bird/bird.h"
+#include "bird/buildr.h"
 #include "parse.h"
 #include "type.h"
 #include "zz/base.h"
@@ -11,6 +12,8 @@ static ir_func_t *fun;
 static obj_t *fun_obj;
 static long blk_num;
 static ir_blk_t *outblk;
+static ir_buildr_t buildr_val;
+static ir_buildr_t *build = &buildr_val;
 
 typedef struct flow {
 	ir_blk_t *break_to;
@@ -104,13 +107,13 @@ GEN_STORE(store);
 
 #undef GEN_STORE
 
-static UNUSEDA void emit_leas_var(reg_t *r0, long off, obj_t *var)
+static reg_t *emit_leas_var(ir_buildr_t *build, long off, obj_t *var)
 {
-	ir_inst_t *ins = ins_leas(r0, off);
+	ir_inst_t *ins = ins_leas(reg_make(), off);
 	/* absolutely horrid code, but it will work */
 	ins->r0->rhs = (reg_t *)var;
-	ir_blk_add(outblk, ins);
-	return;
+	ir_buildr_emit_ins(build, ins);
+	return ins->r0;
 }
 
 static UNUSEDA void emit_lea(reg_t *res, ir_global_t *glob)
@@ -142,6 +145,7 @@ static UNUSEDA void emit_lea(reg_t *res, ir_global_t *glob)
 
 static void blit(size_t size, reg_t *from, reg_t *to)
 {
+	outblk = build->insert_blk;
 	size_t ptr = 0;
 	reg_t *toaddr = reg_make(), *fromaddr = reg_make();
 	reg_t *data = reg_make();
@@ -155,43 +159,28 @@ static void blit(size_t size, reg_t *from, reg_t *to)
 	return;
 }
 
-static UNUSEDA void emit_load_sz(type_t *typ, reg_t *r0, reg_t *r1)
+static reg_t *emit_load_sz(type_t *typ, reg_t *addr)
 {
-	reg_t *new_r0 = reg_make();
-
-	ir_inst_t *ins = ins_load(new_r0, r1);
-	if(typ->size < 8 && type_is_signed(typ)) {
-		ins->sign_ext = true;
-	} else {
-		ins->is_32bit = typ->size <= 4;
-	}
-	ins->size = typ->size;
-	ir_blk_add(outblk, ins);
-
+	reg_t *res = ir_buildr_creat_load(
+		build, typ->size < 8 && type_is_signed(typ), typ->size, addr);
 	if(typ->kind == TYPE_BOOL) {
-		emit_mkbool(typ->size <= 4, r0, new_r0);
-	} else {
-		ins->r0 = r0;
+		res = ir_buildr_creat_bool(build, typ->size <= 4, res);
 	}
-	return;
+	return res;
 }
 
-static void emit_load_obj(type_t *typ, reg_t *val, reg_t *addr)
+static reg_t *emit_load_obj(type_t *typ, reg_t *addr)
 {
 	if(typ->kind == TYPE_ARRAY || typ->kind == TYPE_STRUCT) {
-		emit_mov(0, val, addr);
+		return ir_buildr_copy(build, addr);
 	} else {
-		emit_load_sz(typ, val, addr);
+		return emit_load_sz(typ, addr);
 	}
-	return;
 }
 
-static UNUSEDA void emit_store_sz(type_t *typ, reg_t *r1, reg_t *r2)
+static void emit_store_sz(type_t *typ, reg_t *r1, reg_t *r2)
 {
-	ir_inst_t *ins = ins_store(r1, r2);
-	ins->size = typ->size;
-	ins->is_32bit = typ->size <= 4;
-	ir_blk_add(outblk, ins);
+	ir_buildr_creat_store(build, typ->size, r1, r2);
 	return;
 }
 
@@ -245,50 +234,18 @@ DEF_INS(sxtl);
 #undef INSNAME2
 #undef DEF_INS
 
-/* odd one(s) out */
-static void emit_br(bool is_32bit, reg_t *on, ir_blk_t *trueblk,
-					ir_blk_t *falseblk)
-{
-	ir_inst_t *br = ins_br(on, falseblk, trueblk);
-	br->is_32bit = is_32bit;
-	ir_blk_add(outblk, br);
-	return;
-}
-
-static void emit_jmp(ir_blk_t *blk)
-{
-	ir_blk_add(outblk, ins_jmp(blk));
-	return;
-}
-
-static void emit_call(reg_t *res, char *fname, LIST(callreg_t *) args)
-{
-	ir_blk_add(outblk, ins_call(res, fname, args));
-	return;
-}
-
-static ir_blk_t *emit_blk(void)
-{
-	ir_blk_t *blk = ir_blk_make(NULL);
-	blk->num = blk_num++;
-	list_append(fun->blocks, blk);
-	return blk;
-}
-
 static reg_t *codegen_expr(node_t *node);
 
 /* calculates address of node `node` -- places it into register `reg` */
 static reg_t *calc_addr(node_t *node)
 {
 	if(node->kind == NODE_VAR) {
-		reg_t *addr = reg_make();
 		if(node->var->is_global) {
-			emit_lea(addr, node->var->glob);
+			return ir_buildr_creat_lea(build, node->var->glob);
 		} else {
 			long placement = -node->var->off;
-			emit_leas_var(addr, placement, node->var);
+			return emit_leas_var(build, placement, node->var);
 		}
-		return addr;
 	}
 	if(node->kind == NODE_DEREF) {
 		return codegen_expr(node->lhs);
@@ -300,10 +257,8 @@ static reg_t *calc_addr(node_t *node)
 		 * is only used inside those adds/memory. If yes, we can split the variable
 		 * out. */
 		reg_t *base = calc_addr(node->lhs);
-		reg_t *off = reg_make();
-		emit_imm(0, off, node->memb->loc);
-		reg_t *add = reg_make();
-		emit_add(0, add, base, off);
+		reg_t *off = ir_buildr_creat_imm64(build, node->memb->loc);
+		reg_t *add = ir_buildr_creat_add(build, 0, base, off);
 		return add;
 	}
 
@@ -331,14 +286,7 @@ static reg_t *codegen_cast(node_t *node, reg_t *r)
 		return r;
 	}
 
-	reg_t *res = reg_make();
-
-	ir_inst_t *ext =
-		ir_inst_make(to_unsignd ? IR_INST_ZXT : IR_INST_SXT, res, r, NULL, 0);
-	ext->size = to;
-
-	ir_blk_add(outblk, ext);
-
+	reg_t *res = ir_buildr_creat_ext(build, false, to_unsignd, to, r);
 	return res;
 }
 
@@ -355,34 +303,24 @@ reg_t *codegen_expr(node_t *node)
 	/* special cases */
 	switch(node->kind) {
 	case NODE_NUM: {
-		reg_t *imm = reg_make();
-		emit_imm(is32, imm, node->num);
-		return imm;
+		return ir_buildr_creat_imm(build, is32, node->num);
 	}
 	case NODE_NEG: {
 		reg_t *val = codegen_expr(node->lhs);
-		reg_t *neg = reg_make();
-		emit_neg(is32, neg, val);
-		return neg;
+		return ir_buildr_creat_neg(build, is32, val);
 	};
 	case NODE_NOT: {
 		reg_t *val = codegen_expr(node->lhs);
-		reg_t *not = reg_make();
-		emit_not(is32, not, val);
-		return not;
+		return ir_buildr_creat_not(build, is32, val);
 	};
 	case NODE_LOGNEG: {
 		reg_t *val = codegen_expr(node->lhs);
-		reg_t *logneg = reg_make();
-		emit_notbool(is32, logneg, val);
-		return logneg;
+		return ir_buildr_creat_invbool(build, is32, val);
 	};
 	case NODE_VAR:
 	case NODE_MEMBER: {
 		reg_t *addr = calc_addr(node);
-		reg_t *val = reg_make();
-		emit_load_obj(type, val, addr);
-		return val;
+		return emit_load_obj(type, addr);
 	};
 	case NODE_ADDR: {
 		node->lhs->var->addressed = true;
@@ -390,9 +328,7 @@ reg_t *codegen_expr(node_t *node)
 	}
 	case NODE_DEREF: {
 		reg_t *addr = codegen_expr(node->lhs);
-		reg_t *val = reg_make();
-		emit_load_obj(type, val, addr);
-		return val;
+		return emit_load_obj(type, addr);
 	}
 	case NODE_CAST: {
 		reg_t *val = codegen_expr(node->lhs);
@@ -409,22 +345,15 @@ reg_t *codegen_expr(node_t *node)
 		node_t *arg = node->fargs;
 		for(; arg; arg = arg->next) {
 			reg_t *argres = codegen_expr(arg);
-			reg_t *argres2 = argres;
 			if(arg->type->size != 8) {
-				argres2 = reg_make();
-				ir_inst_t *ext =
-					ir_inst_make(arg->type->unsignd ? IR_INST_ZXT : IR_INST_SXT,
-								 argres2, argres, NULL, 0);
-				ext->size = arg->type->size;
-				ir_blk_add(outblk, ext);
+				argres = ir_buildr_creat_ext(build, false, arg->type->unsignd,
+											 arg->type->size, argres);
 			}
 			callreg_t *callreg =
-				callreg_make(argres2, ARG_CLASS_INTEGER, arg->type->size);
+				callreg_make(argres, ARG_CLASS_INTEGER, arg->type->size);
 			list_append(callargs, callreg);
 		}
-		reg_t *res = reg_make();
-		emit_call(res, node->fname, callargs);
-		return res;
+		return ir_buildr_creat_call(build, node->fname, callargs);
 	};
 
 	case NODE_STMT_EXPR: {
@@ -441,123 +370,73 @@ reg_t *codegen_expr(node_t *node)
 
 	reg_t *lhs = codegen_expr(node->lhs);
 	reg_t *rhs = codegen_expr(node->rhs);
-	reg_t *res = reg_make();
 
 	switch(node->kind) {
 	default:
 		break;
 
 	case NODE_ADD:
-		emit_add(is32, res, lhs, rhs);
-		break;
+		return ir_buildr_creat_add(build, is32, lhs, rhs);
 	case NODE_SUB:
-		emit_sub(is32, res, lhs, rhs);
-		break;
+		return ir_buildr_creat_sub(build, is32, lhs, rhs);
 	case NODE_SHL:
-		emit_shl(is32, res, lhs, rhs);
-		break;
+		return ir_buildr_creat_shl(build, is32, lhs, rhs);
 	case NODE_SHR:
-		if(type->unsignd) {
-			emit_shr(is32, res, lhs, rhs);
-		} else {
-			emit_ashr(is32, res, lhs, rhs);
-		}
-		break;
+		return ir_buildr_creat_shr(build, is32, type->unsignd, lhs, rhs);
 	case NODE_AND:
-		emit_and(is32, res, lhs, rhs);
-		break;
+		return ir_buildr_creat_and(build, is32, lhs, rhs);
 	case NODE_OR:
-		emit_or(is32, res, lhs, rhs);
-		break;
+		return ir_buildr_creat_or(build, is32, lhs, rhs);
 	case NODE_EOR:
-		emit_eor(is32, res, lhs, rhs);
-		break;
+		return ir_buildr_creat_eor(build, is32, lhs, rhs);
 	case NODE_LOGAND: {
-		ir_blk_t *left_blk = emit_blk();
-		ir_blk_t *resume = emit_blk();
-		emit_imm(1, res, 0);
-		emit_br(is32, lhs, left_blk, resume);
-		outblk = left_blk;
-		emit_mkbool(is32, res, rhs);
-		emit_jmp(resume);
-		outblk = resume;
-		break;
+		ir_blk_t *left_blk = ir_buildr_make_blk(build);
+		ir_blk_t *resume = ir_buildr_make_blk(build);
+		reg_t *res = ir_buildr_creat_imm32(build, 0);
+		ir_buildr_creat_br(build, is32, lhs, left_blk, resume);
+		ir_buildr_set_insert_blk(build, left_blk);
+		ir_inst_t *ins = ins_mkbool(res, rhs);
+		ins->is_32bit = is32;
+		ir_buildr_emit_ins(build, ins);
+		ir_buildr_creat_jmp(build, resume);
+		ir_buildr_set_insert_blk(build, resume);
+		return res;
 	}
 	case NODE_LOGOR: {
-		ir_blk_t *right_blk = emit_blk();
-		ir_blk_t *resume = emit_blk();
+		ir_blk_t *right_blk = ir_buildr_make_blk(build);
+		ir_blk_t *resume = ir_buildr_make_blk(build);
 
-		emit_mkbool(is32, res, lhs);
-		emit_br(is32, lhs, resume, right_blk);
-		outblk = right_blk;
-		emit_mkbool(is32, res, rhs);
-		emit_jmp(resume);
-		outblk = resume;
-		break;
+		reg_t *res = ir_buildr_creat_bool(build, is32, lhs);
+		ir_buildr_creat_br(build, is32, lhs, resume, right_blk);
+		ir_buildr_set_insert_blk(build, right_blk);
+		ir_inst_t *ins = ins_mkbool(res, rhs);
+		ins->is_32bit = is32;
+		ir_buildr_emit_ins(build, ins);
+		ir_buildr_creat_jmp(build, resume);
+		ir_buildr_set_insert_blk(build, resume);
+		return res;
 	}
 	case NODE_MUL:
-		if(type->unsignd) {
-			emit_umul(is32, res, lhs, rhs);
-		} else {
-			emit_smul(is32, res, lhs, rhs);
-		}
-		break;
+		return ir_buildr_creat_mul(build, is32, type->unsignd, lhs, rhs);
 	case NODE_DIV:
-		if(type->unsignd) {
-			emit_udiv(is32, res, lhs, rhs);
-		} else {
-			emit_sdiv(is32, res, lhs, rhs);
-		}
-		break;
+		return ir_buildr_creat_div(build, is32, type->unsignd, lhs, rhs);
 	case NODE_MOD:
-		if(type->unsignd) {
-			emit_umod(is32, res, lhs, rhs);
-		} else {
-			emit_smod(is32, res, lhs, rhs);
-		}
-		break;
-	case NODE_VAR:
-		res = calc_addr(node);
-		break;
-	case NODE_ASSIGN:
-		break;
+		return ir_buildr_creat_mod(build, is32, type->unsignd, lhs, rhs);
 	case NODE_EQ:
-		emit_eq(is32, res, lhs, rhs);
-		break;
+		return ir_buildr_creat_cmp_eq(build, is32, lhs, rhs);
 	case NODE_NE:
-		emit_ne(is32, res, lhs, rhs);
-		break;
+		return ir_buildr_creat_cmp_ne(build, is32, lhs, rhs);
 	case NODE_LE:
-		if(type->unsignd) {
-			emit_ule(is32, res, lhs, rhs);
-		} else {
-			emit_sle(is32, res, lhs, rhs);
-		}
-		break;
+		return ir_buildr_creat_cmp_le(build, is32, type->unsignd, lhs, rhs);
 	case NODE_LT:
-		if(type->unsignd) {
-			emit_ult(is32, res, lhs, rhs);
-		} else {
-			emit_slt(is32, res, lhs, rhs);
-		}
-		break;
+		return ir_buildr_creat_cmp_lt(build, is32, type->unsignd, lhs, rhs);
 	case NODE_GE:
-		if(type->unsignd) {
-			emit_uge(is32, res, lhs, rhs);
-		} else {
-			emit_sge(is32, res, lhs, rhs);
-		}
-		break;
+		return ir_buildr_creat_cmp_ge(build, is32, type->unsignd, lhs, rhs);
 	case NODE_GT:
-		if(type->unsignd) {
-			emit_ugt(is32, res, lhs, rhs);
-		} else {
-			emit_sgt(is32, res, lhs, rhs);
-		}
-		break;
+		return ir_buildr_creat_cmp_gt(build, is32, type->unsignd, lhs, rhs);
 	}
 
-	return res;
+	return NULL;
 }
 
 void codegen_stmt(node_t *node)
@@ -570,30 +449,30 @@ void codegen_stmt(node_t *node)
 	/* reuse case_blk for gotos, because why not? */
 	case NODE_GOTO:
 		if(!node->label_node->case_blk) {
-			node->label_node->case_blk = emit_blk();
+			node->label_node->case_blk = ir_buildr_make_blk(build);
 		}
-		emit_jmp(node->label_node->case_blk);
+		ir_buildr_creat_jmp(build, node->label_node->case_blk);
 		break;
 
 	case NODE_LABEL:
 		if(!node->case_blk) {
-			node->case_blk = emit_blk();
+			node->case_blk = ir_buildr_make_blk(build);
 		}
-		emit_jmp(node->case_blk);
-		outblk = node->case_blk;
+		ir_buildr_creat_jmp(build, node->case_blk);
+		ir_buildr_set_insert_blk(build, node->case_blk);
 		codegen_stmt(node->then);
 		break;
 
 	case NODE_CASE:
 	case NODE_DEFAULT:
-		emit_jmp(node->case_blk);
-		outblk = node->case_blk;
+		ir_buildr_creat_jmp(build, node->case_blk);
+		ir_buildr_set_insert_blk(build, node->case_blk);
 		codegen_stmt(node->then);
 		break;
 
 	case NODE_SWITCH: {
-		ir_blk_t *top = emit_blk(); /* for continue */
-		ir_blk_t *resume = emit_blk();
+		ir_blk_t *top = ir_buildr_make_blk(build); /* for continue */
+		ir_blk_t *resume = ir_buildr_make_blk(build);
 		list_append(break_stack,
 					((flow_t){ .break_to = resume, .continue_to = top }));
 		ir_blk_t *chain;
@@ -603,7 +482,7 @@ void codegen_stmt(node_t *node)
 		for(node_t *b = node->then->body; b; b = b->next) {
 			/* default is exception */
 			if(b->kind == NODE_DEFAULT) {
-				def_blk = emit_blk();
+				def_blk = ir_buildr_make_blk(build);
 				b->case_blk = def_blk;
 				continue;
 			}
@@ -613,8 +492,8 @@ void codegen_stmt(node_t *node)
 				continue;
 			}
 
-			b->case_blk = emit_blk();
-			chain = emit_blk();
+			b->case_blk = ir_buildr_make_blk(build);
+			chain = ir_buildr_make_blk(build);
 
 			/* chain1: %r = cmp.eq %ctrl, #case
 			 *         br %r, case_blk, chain2
@@ -623,18 +502,17 @@ void codegen_stmt(node_t *node)
 			 * basically what we are doing
 			 */
 
-			reg_t *casenum = reg_make();
-			emit_imm(is32, casenum, b->cond->num); /* %casenum = imm #num */
-			reg_t *cmpres = reg_make();
-			emit_eq(is32, cmpres, ctrl,
-					casenum); /* %cmpres = cmp.eq %ctrl, %casenum */
-			emit_br(is32, cmpres, b->case_blk,
-					chain); /* br %cmpres, case_blk, chain */
-			outblk = chain;
+			/* %casenum = imm #num */
+			reg_t *casenum = ir_buildr_creat_imm(build, is32, b->cond->num);
+			/* %cmpres = cmp.eq %ctrl, %casenum */
+			reg_t *cmpres = ir_buildr_creat_cmp_eq(build, is32, ctrl, casenum);
+			/* br %cmpres, case_blk, chain */
+			ir_buildr_creat_br(build, is32, cmpres, b->case_blk, chain);
+			ir_buildr_set_insert_blk(build, chain);
 		}
 
 		/* if there is no default break out of the switch */
-		emit_jmp(def_blk ? def_blk : resume);
+		ir_buildr_creat_jmp(build, def_blk ? def_blk : resume);
 
 		/* now handle all stmts in the switch */
 		for(node_t *b = node->then->body; b; b = b->next) {
@@ -642,8 +520,8 @@ void codegen_stmt(node_t *node)
 		}
 
 		/* since we don't know where we are, make sure we are at `resume` */
-		emit_jmp(resume);
-		outblk = resume;
+		ir_buildr_creat_jmp(build, resume);
+		ir_buildr_set_insert_blk(build, resume);
 
 		list_back(break_stack);
 	}; break;
@@ -653,7 +531,7 @@ void codegen_stmt(node_t *node)
 			compile_err_node(node, "nothing to break to");
 		}
 		flow_t f = list_peek(break_stack);
-		emit_jmp(f.break_to);
+		ir_buildr_creat_jmp(build, f.break_to);
 	}; break;
 
 	case NODE_CONTINUE: {
@@ -661,7 +539,7 @@ void codegen_stmt(node_t *node)
 			compile_err_node(node, "nothing to continue to");
 		}
 		flow_t f = list_peek(break_stack);
-		emit_jmp(f.continue_to);
+		ir_buildr_creat_jmp(build, f.continue_to);
 	}; break;
 
 	case NODE_RET: {
@@ -670,15 +548,12 @@ void codegen_stmt(node_t *node)
 		if(node->lhs && rettype->kind != TYPE_VOID) {
 			bool is32 = node->lhs->type->size <= 4;
 			reg_t *retval = codegen_expr(node->lhs);
-			reg_t *ext = reg_make();
-			ir_inst_t *ins = ins_sxtl(ext, retval);
-			ins->size = node->lhs->type->size;
-			ins->type = node->lhs->type->unsignd ? IR_INST_ZXT : IR_INST_SXT;
-			ins->is_32bit = is32;
-			ir_blk_add(outblk, ins);
-			emit_ret(is32, ext);
+			reg_t *ext = ir_buildr_creat_ext(build, is32,
+											 node->lhs->type->unsignd,
+											 node->lhs->type->size, retval);
+			ir_buildr_creat_ret(build, is32, ext);
 		} else if(!node->lhs && rettype->kind == TYPE_VOID) {
-			emit_ret(0, NULL);
+			ir_buildr_creat_ret(build, false, NULL);
 		} else if(node->lhs && rettype->kind == TYPE_VOID) {
 			compile_err(node->tok->loc, "function cannot return something");
 		} else if(!node->lhs && rettype->kind != TYPE_VOID) {
@@ -693,112 +568,111 @@ void codegen_stmt(node_t *node)
 	}; break;
 	case NODE_DOWHILE: {
 		/* a `while` but we check afterwards */
-		ir_blk_t *then = emit_blk();
-		ir_blk_t *resume = emit_blk();
-		ir_blk_t *condchk = emit_blk();
+		ir_blk_t *then = ir_buildr_make_blk(build);
+		ir_blk_t *resume = ir_buildr_make_blk(build);
+		ir_blk_t *condchk = ir_buildr_make_blk(build);
 		list_append(break_stack,
 					((flow_t){ .break_to = resume, .continue_to = condchk }));
-		emit_jmp(then);
-		outblk = then;
+		ir_buildr_creat_jmp(build, then);
+		ir_buildr_set_insert_blk(build, then);
 		codegen_stmt(node->then);
-		emit_jmp(condchk);
-		outblk = condchk;
+		ir_buildr_creat_jmp(build, condchk);
+		ir_buildr_set_insert_blk(build, condchk);
 		reg_t *cond = codegen_expr(node->cond);
 		bool is32 = node->cond->type->size <= 4;
-		emit_br(is32, cond, then, resume);
-		outblk = resume;
+		ir_buildr_creat_br(build, is32, cond, then, resume);
+		ir_buildr_set_insert_blk(build, resume);
 		list_back(break_stack);
 	}; break;
 	case NODE_WHILE: {
 		/* a `do`/`while` but we check beforewards */
-		ir_blk_t *condchk = emit_blk();
-		ir_blk_t *loop = emit_blk();
-		ir_blk_t *resume = emit_blk();
-
+		ir_blk_t *condchk = ir_buildr_make_blk(build);
+		ir_blk_t *loop = ir_buildr_make_blk(build);
+		ir_blk_t *resume = ir_buildr_make_blk(build);
 		list_append(break_stack,
 					((flow_t){ .break_to = resume, .continue_to = condchk }));
 
-		emit_jmp(condchk);
-
-		outblk = condchk;
+		ir_buildr_creat_jmp(build, condchk);
+		ir_buildr_set_insert_blk(build, condchk);
 		reg_t *cond = codegen_expr(node->cond);
 		bool is32 = node->cond->type->size <= 4;
-		emit_br(is32, cond, loop, resume);
+		ir_buildr_creat_br(build, is32, cond, loop, resume);
+		ir_buildr_set_insert_blk(build, loop);
 
-		outblk = loop;
 		codegen_stmt(node->then);
-		emit_jmp(condchk);
-		outblk = resume;
+		ir_buildr_creat_jmp(build, condchk);
+		ir_buildr_set_insert_blk(build, resume);
 		list_back(break_stack);
 	}; break;
 	case NODE_FOR: {
 		/* initializer */
 		codegen_stmt(node->init);
 
-		ir_blk_t *condchk = emit_blk(); /* check if need to go loop or resume */
-		ir_blk_t *then = emit_blk();
+		ir_blk_t *condchk =
+			ir_buildr_make_blk(build); /* check if need to go loop or resume */
+		ir_blk_t *then = ir_buildr_make_blk(build);
 		ir_blk_t *inc = then;
-		ir_blk_t *resume = emit_blk();
+		ir_blk_t *resume = ir_buildr_make_blk(build);
 
 		if(node->inc) {
-			inc = emit_blk();
+			inc = ir_buildr_make_blk(build);
 		}
 
 		list_append(break_stack,
 					((flow_t){ .break_to = resume,
 							   .continue_to = node->inc ? inc : condchk }));
 
-		emit_jmp(condchk);
+		ir_buildr_creat_jmp(build, condchk);
+		ir_buildr_set_insert_blk(build, condchk);
 
-		outblk = condchk;
 		reg_t *cond;
 		if(node->cond) {
 			cond = codegen_expr(node->cond);
 		} else {
-			cond = reg_make();
-			emit_imm(1, cond, 1);
+			cond = ir_buildr_creat_imm32(build, 1);
 		}
 
 		bool is32 = node->cond->type->size <= 4;
-		emit_br(is32, cond, then, resume);
+		ir_buildr_creat_br(build, is32, cond, then, resume);
 
-		outblk = then;
+		ir_buildr_set_insert_blk(build, then);
 		codegen_stmt(node->then);
 
 		if(node->inc) {
-			emit_jmp(inc);
-			outblk = inc;
+			ir_buildr_creat_jmp(build, inc);
+			ir_buildr_set_insert_blk(build, inc);
 			UNUSED(codegen_expr(node->inc));
 		}
 
-		emit_jmp(condchk);
-		outblk = resume;
+		ir_buildr_creat_jmp(build, condchk);
+		ir_buildr_set_insert_blk(build, resume);
 		list_back(break_stack);
 	} break;
 	case NODE_IF: {
 		reg_t *cond = codegen_expr(node->cond);
 
-		ir_blk_t *then = emit_blk(), *elze = emit_blk();
+		ir_blk_t *then = ir_buildr_make_blk(build),
+				 *elze = ir_buildr_make_blk(build);
 		ir_blk_t *resume;
 
 		if(node->elze == NULL) {
 			resume = elze;
 		} else {
-			resume = emit_blk();
+			resume = ir_buildr_make_blk(build);
 		}
 
 		bool is32 = node->cond->type->size <= 4;
-		emit_br(is32, cond, then, elze);
-		outblk = then;
+		ir_buildr_creat_br(build, is32, cond, then, elze);
+		ir_buildr_set_insert_blk(build, then);
 		codegen_stmt(node->then);
-		emit_jmp(resume);
+		ir_buildr_creat_jmp(build, resume);
 		if(node->elze) {
-			outblk = elze;
+			ir_buildr_set_insert_blk(build, elze);
 			codegen_stmt(node->elze);
-			emit_jmp(resume);
+			ir_buildr_creat_jmp(build, resume);
 		}
 
-		outblk = resume;
+		ir_buildr_set_insert_blk(build, resume);
 
 	}; break;
 	default:
@@ -1013,12 +887,11 @@ cant:
 void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 				  enum ir_arch backend)
 {
-	ir_prog_t prog = { 0 };
-	prog.globs = list_make(ir_global_t *);
-	prog.funcs = list_make(ir_func_t *);
+	ir_buildr_make(build);
 	blk_num = 0;
 
 	assign_globals(globals);
+	reg_reset_counter();
 
 	break_stack = list_make(flow_t);
 
@@ -1027,7 +900,7 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		obj_t *cur_fn = globals[i];
 
 		if(cur_fn && cur_fn->is_global) {
-			list_append(prog.globs, cur_fn->glob);
+			ir_buildr_add_glob(build, cur_fn->glob);
 			continue;
 		}
 
@@ -1036,14 +909,12 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		}
 
 		ENSURE(cur_fn->is_func, "tried to generate code for a variable");
-		reg_reset_counter();
-		ir_func_t *func = ir_func_make(cur_fn->name);
+		ir_func_t *func = ir_buildr_make_func(build, cur_fn->name);
 		fun = func;
 		fun_obj = cur_fn;
 		func->args = list_make(callreg_t *);
 
-		ir_blk_t *blk = emit_blk();
-		outblk = blk;
+		outblk = build->insert_blk;
 
 		(void)calc_stack_needed(cur_fn, backend);
 
@@ -1087,18 +958,11 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		fun->align_needed = align_to(max_align, 16);
 
-		list_append(prog.funcs, fun);
+		ir_buildr_end_func(build);
 	}
 
-	TIMEIT("ir", { ir_prog_compile(f, &prog, backend, opt_level); });
-	for(size_t i = 0; i < list_len(prog.funcs); i++) {
-		ir_func_delete(prog.funcs[i]);
-	}
-	for(size_t i = 0; i < list_len(prog.globs); i++) {
-		ir_glob_delete(prog.globs[i]);
-	}
-	list_delete(prog.funcs);
-	list_delete(prog.globs);
+	TIMEIT("ir", { ir_prog_compile(f, &build->prog, backend, opt_level); });
 	list_delete(break_stack);
+	ir_buildr_delete(build);
 	return;
 }

@@ -9,5 +9,6 @@
 #include "x64.h"
 #include "ssa.h"
 #include "immfold.h"
+#include "buildr.h"
 
 #endif /* BIRD_H_ */

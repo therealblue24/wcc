@@ -268,7 +268,7 @@ static void ir_fold_ins_unaryop64(ir_inst_t *ins)
 static void ir_fold_ins_unaryop32(ir_inst_t *ins)
 {
 	uint32_t ua = ins->r1->imm & UINT32_MAX;
-	int32_t sa = *((int64_t *)&ua);
+	int32_t sa = *((int32_t *)&ua);
 	int32_t immres = 0;
 
 	ins->r1 = NULL;
