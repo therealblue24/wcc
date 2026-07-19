@@ -393,13 +393,11 @@ reg_t *codegen_expr(node_t *node)
 		ir_blk_t *left_blk = ir_buildr_make_blk(build);
 		ir_blk_t *resume = ir_buildr_make_blk(build);
 		reg_t *res = ir_buildr_creat_imm32(build, 0);
-		ir_buildr_creat_br(build, is32, lhs, left_blk, resume);
-		ir_buildr_set_insert_blk(build, left_blk);
+		ir_buildr_creat_br_set(build, is32, lhs, left_blk, resume, left_blk);
 		ir_inst_t *ins = ins_mkbool(res, rhs);
 		ins->is_32bit = is32;
 		ir_buildr_emit_ins(build, ins);
-		ir_buildr_creat_jmp(build, resume);
-		ir_buildr_set_insert_blk(build, resume);
+		ir_buildr_creat_jmp_set(build, resume);
 		return res;
 	}
 	case NODE_LOGOR: {
@@ -407,13 +405,11 @@ reg_t *codegen_expr(node_t *node)
 		ir_blk_t *resume = ir_buildr_make_blk(build);
 
 		reg_t *res = ir_buildr_creat_bool(build, is32, lhs);
-		ir_buildr_creat_br(build, is32, lhs, resume, right_blk);
-		ir_buildr_set_insert_blk(build, right_blk);
+		ir_buildr_creat_br_set(build, is32, lhs, resume, right_blk, right_blk);
 		ir_inst_t *ins = ins_mkbool(res, rhs);
 		ins->is_32bit = is32;
 		ir_buildr_emit_ins(build, ins);
-		ir_buildr_creat_jmp(build, resume);
-		ir_buildr_set_insert_blk(build, resume);
+		ir_buildr_creat_jmp_set(build, resume);
 		return res;
 	}
 	case NODE_MUL:
@@ -458,15 +454,13 @@ void codegen_stmt(node_t *node)
 		if(!node->case_blk) {
 			node->case_blk = ir_buildr_make_blk(build);
 		}
-		ir_buildr_creat_jmp(build, node->case_blk);
-		ir_buildr_set_insert_blk(build, node->case_blk);
+		ir_buildr_creat_jmp_set(build, node->case_blk);
 		codegen_stmt(node->then);
 		break;
 
 	case NODE_CASE:
 	case NODE_DEFAULT:
-		ir_buildr_creat_jmp(build, node->case_blk);
-		ir_buildr_set_insert_blk(build, node->case_blk);
+		ir_buildr_creat_jmp_set(build, node->case_blk);
 		codegen_stmt(node->then);
 		break;
 
@@ -520,8 +514,7 @@ void codegen_stmt(node_t *node)
 		}
 
 		/* since we don't know where we are, make sure we are at `resume` */
-		ir_buildr_creat_jmp(build, resume);
-		ir_buildr_set_insert_blk(build, resume);
+		ir_buildr_creat_jmp_set(build, resume);
 
 		list_back(break_stack);
 	}; break;
@@ -573,15 +566,12 @@ void codegen_stmt(node_t *node)
 		ir_blk_t *condchk = ir_buildr_make_blk(build);
 		list_append(break_stack,
 					((flow_t){ .break_to = resume, .continue_to = condchk }));
-		ir_buildr_creat_jmp(build, then);
-		ir_buildr_set_insert_blk(build, then);
+		ir_buildr_creat_jmp_set(build, then);
 		codegen_stmt(node->then);
-		ir_buildr_creat_jmp(build, condchk);
-		ir_buildr_set_insert_blk(build, condchk);
+		ir_buildr_creat_jmp_set(build, condchk);
 		reg_t *cond = codegen_expr(node->cond);
 		bool is32 = node->cond->type->size <= 4;
-		ir_buildr_creat_br(build, is32, cond, then, resume);
-		ir_buildr_set_insert_blk(build, resume);
+		ir_buildr_creat_br_set(build, is32, cond, then, resume, resume);
 		list_back(break_stack);
 	}; break;
 	case NODE_WHILE: {
@@ -592,12 +582,10 @@ void codegen_stmt(node_t *node)
 		list_append(break_stack,
 					((flow_t){ .break_to = resume, .continue_to = condchk }));
 
-		ir_buildr_creat_jmp(build, condchk);
-		ir_buildr_set_insert_blk(build, condchk);
+		ir_buildr_creat_jmp_set(build, condchk);
 		reg_t *cond = codegen_expr(node->cond);
 		bool is32 = node->cond->type->size <= 4;
-		ir_buildr_creat_br(build, is32, cond, loop, resume);
-		ir_buildr_set_insert_blk(build, loop);
+		ir_buildr_creat_br_set(build, is32, cond, loop, resume, loop);
 
 		codegen_stmt(node->then);
 		ir_buildr_creat_jmp(build, condchk);
@@ -622,8 +610,7 @@ void codegen_stmt(node_t *node)
 					((flow_t){ .break_to = resume,
 							   .continue_to = node->inc ? inc : condchk }));
 
-		ir_buildr_creat_jmp(build, condchk);
-		ir_buildr_set_insert_blk(build, condchk);
+		ir_buildr_creat_jmp_set(build, condchk);
 
 		reg_t *cond;
 		if(node->cond) {
@@ -633,14 +620,12 @@ void codegen_stmt(node_t *node)
 		}
 
 		bool is32 = node->cond->type->size <= 4;
-		ir_buildr_creat_br(build, is32, cond, then, resume);
+		ir_buildr_creat_br_set(build, is32, cond, then, resume, then);
 
-		ir_buildr_set_insert_blk(build, then);
 		codegen_stmt(node->then);
 
 		if(node->inc) {
-			ir_buildr_creat_jmp(build, inc);
-			ir_buildr_set_insert_blk(build, inc);
+			ir_buildr_creat_jmp_set(build, inc);
 			UNUSED(codegen_expr(node->inc));
 		}
 
@@ -662,8 +647,7 @@ void codegen_stmt(node_t *node)
 		}
 
 		bool is32 = node->cond->type->size <= 4;
-		ir_buildr_creat_br(build, is32, cond, then, elze);
-		ir_buildr_set_insert_blk(build, then);
+		ir_buildr_creat_br_set(build, is32, cond, then, elze, then);
 		codegen_stmt(node->then);
 		ir_buildr_creat_jmp(build, resume);
 		if(node->elze) {
