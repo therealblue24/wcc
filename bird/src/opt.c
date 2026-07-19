@@ -791,8 +791,8 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 		change = 1;
 	}
 
-	/* elim of longword zero ext of 32 bit op */
-	if(ins->type == IR_INST_ZXT && ins->size == 4 && ins->r1->is_32bit) {
+	/* elim of longword sign ext of 32 bit op */
+	if(ins->type == IR_INST_SXT && ins->size == 4 && ins->r1->is_32bit) {
 		ins->type = IR_INST_MOV;
 		change = 1;
 	}

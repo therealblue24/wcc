@@ -323,6 +323,15 @@ static void store(FILE *f, size_t size, int reg_to, bool is_32bit,
 	return;
 }
 
+/* produces results in (r/e)ax, (r/e)dx */
+static void handle_div(FILE *f, bool is_32bit, bool unsignd, char *r1, char *r2)
+{
+	fprintf(f, "\tmov %s, %s\n\t", is_32bit ? "eax" : "rax", r1);
+	fprintf(f, unsignd ? "xor edx, edx" : (is_32bit ? "cdq" : "cqo"));
+	fprintf(f, "\n\t%sdiv %s\n", unsignd ? "" : "i", r2);
+	return;
+}
+
 static const char *arg_reg[6] = { "rdi", "rsi", "rdx", "rcx", "r8", "r9" };
 int x64_arg_reg_map[6] = { 6, 5, 12, 13, 10, 9 };
 
@@ -650,20 +659,10 @@ branch_cond:
 			fprintf(f, "\timul %s, %s\n", r0, r2);
 			break;
 		case IR_INST_SDIV:
-			// fprintf(f, "\tpush rdx\n");
-			fprintf(f, "\tmov rax, %s\n", r1);
-			fprintf(f, "\tcqo\n");
-			fprintf(f, "\tidiv %s\n", r2);
-			// fprintf(f, "\tpop rdx\n");
-			fprintf(f, "\tmov %s, rax\n", r0);
-			break;
 		case IR_INST_UDIV:
-			// fprintf(f, "\tpush rdx\n");
-			fprintf(f, "\tmov rax, %s\n", r1);
-			fprintf(f, "\txor edx, edx\n");
-			fprintf(f, "\tdiv %s\n", r2);
-			// fprintf(f, "\tpop rdx\n");
-			fprintf(f, "\tmov %s, rax\n", r0);
+			handle_div(f, is_32bit, ins->type == IR_INST_UDIV, (char *)r1,
+					   (char *)r2);
+			fprintf(f, "\tmov %s, %s\n", r0, is_32bit ? "eax" : "rax");
 			break;
 		case IR_INST_AND:
 			fprintf(f, "\tand %s, %s\n", r0, r2);
@@ -716,18 +715,12 @@ branch_cond:
 			break;
 
 		case IR_INST_SMOD:
-			fprintf(f, "\tmov rax, %s\n", r1);
-			fprintf(f, "\tcqo\n");
-			fprintf(f, "\tidiv %s\n", r2);
-			fprintf(f, "\tmov %s, rdx\n", r0);
+		case IR_INST_UMOD:
+			handle_div(f, is_32bit, ins->type == IR_INST_UMOD, (char *)r1,
+					   (char *)r2);
+			fprintf(f, "\tmov %s, %s\n", r0, is_32bit ? "edx" : "rdx");
 			break;
 
-		case IR_INST_UMOD:
-			fprintf(f, "\tmov rax, %s\n", r1);
-			fprintf(f, "\txor edx, edx\n");
-			fprintf(f, "\tdiv %s\n", r2);
-			fprintf(f, "\tmov %s, rdx\n", r0);
-			break;
 		case IR_INST_NOT:
 			fprintf(f, "\tnot %s\n", r0);
 			break;
