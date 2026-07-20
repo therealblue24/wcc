@@ -1,6 +1,5 @@
-#include "codegen.h"
 #include "bird/bird.h"
-#include "bird/buildr.h"
+#include "codegen.h"
 #include "parse.h"
 #include "type.h"
 #include "zz/base.h"
@@ -26,86 +25,20 @@ static LIST(flow_t) break_stack;
 
 #define INSNAME(name) emit_##name
 
-#define DEF_INS(name, name2, r0, r1, r2, imm, ...)                 \
-	static UNUSEDA void INSNAME(name)(bool is_32bit __VA_OPT__(, ) \
-										  __VA_ARGS__)             \
-	{                                                              \
-		ir_inst_t *ins = MAKE(name2, r0, r1, r2, imm);             \
-		ins->is_32bit = is_32bit;                                  \
-		ir_blk_add(outblk, ins);                                   \
-		return;                                                    \
+#define DEF_INS(name, name2, r0, r1, r2, imm, ...)                      \
+	static void INSNAME(name)(bool is_32bit __VA_OPT__(, ) __VA_ARGS__) \
+	{                                                                   \
+		ir_inst_t *ins = MAKE(name2, r0, r1, r2, imm);                  \
+		ins->is_32bit = is_32bit;                                       \
+		ir_blk_add(outblk, ins);                                        \
+		return;                                                         \
 	}
 
-DEF_INS(nop, NOP, NULL, NULL, NULL, 0);
-DEF_INS(mov, MOV, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(imm, IMM, r0, NULL, NULL, imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, ADD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(sub, SUB, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(shl, SHL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(shr, SHR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(ashr, ASHR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(and, AND, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(or, OR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(eor, EOR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(smul, SMUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(sdiv, SDIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(smod, SMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(udiv, UDIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(umul, UMUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(umod, UMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-
-DEF_INS(eq, EQ, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(ne, NE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(slt, SLT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(sle, SLE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(sgt, SGT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(sge, SGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(ult, ULT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(ule, ULE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(ugt, UGT, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(uge, UGE, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(neg, NEG, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
-DEF_INS(not, NOT, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
-DEF_INS(notbool, NOTBOOL, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
-DEF_INS(mkbool, MKBOOL, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
-DEF_INS(leas, LEAS, r0, NULL, NULL, imm, reg_t *r0, long imm);
-DEF_INS(ret, RET, NULL, r1, NULL, 0, reg_t *r1);
 
 #undef DEF_INS
 #undef MAKE
-
-#define INSNAME2(x) ins_##x
-#define GEN_LOAD(name)                                                     \
-	static UNUSEDA void INSNAME(name)(bool is_32bit, reg_t *r0, reg_t *r1) \
-	{                                                                      \
-		ir_inst_t *inst = INSNAME2(name)(r0, r1);                          \
-		inst->is_32bit = is_32bit;                                         \
-		ir_blk_add(outblk, inst);                                          \
-		return;                                                            \
-	}
-
-GEN_LOAD(loadb);
-GEN_LOAD(loadw);
-GEN_LOAD(loadl);
-GEN_LOAD(load);
-
-#undef GEN_LOAD
-
-#define GEN_STORE(name)                                                    \
-	static UNUSEDA void INSNAME(name)(bool is_32bit, reg_t *r1, reg_t *r2) \
-	{                                                                      \
-		ir_inst_t *inst = INSNAME2(name)(r1, r2);                          \
-		inst->is_32bit = is_32bit;                                         \
-		ir_blk_add(outblk, inst);                                          \
-		return;                                                            \
-	}
-
-GEN_STORE(storeb);
-GEN_STORE(storew);
-GEN_STORE(storel);
-GEN_STORE(store);
-
-#undef GEN_STORE
 
 static reg_t *emit_leas_var(ir_buildr_t *build, long off, obj_t *var)
 {
@@ -114,13 +47,6 @@ static reg_t *emit_leas_var(ir_buildr_t *build, long off, obj_t *var)
 	ins->r0->rhs = (reg_t *)var;
 	ir_buildr_emit_ins(build, ins);
 	return ins->r0;
-}
-
-static UNUSEDA void emit_lea(reg_t *res, ir_global_t *glob)
-{
-	ir_inst_t *ins = ins_lea(res, glob);
-	ir_blk_add(outblk, ins);
-	return;
 }
 
 #define LOOPSZ(num)                                      \
@@ -193,46 +119,6 @@ static void emit_store_obj(type_t *typ, reg_t *val, reg_t *addr)
 	}
 	return;
 }
-
-#define GEN_BRCMP(c, name)                                              \
-	static UNUSEDA void emit_##name(reg_t *r1, reg_t *r2, ir_blk_t *fb, \
-									ir_blk_t *tb)                       \
-	{                                                                   \
-		ir_blk_add(outblk, ins_##name(r1, r2, fb, tb));                 \
-		return;                                                         \
-	}
-
-GEN_BRCMP(IR_INST_BREQ, breq);
-GEN_BRCMP(IR_INST_BRNE, brne);
-GEN_BRCMP(IR_INST_BRSLT, brslt);
-GEN_BRCMP(IR_INST_BRSLE, brsle);
-GEN_BRCMP(IR_INST_BRSGT, brsgt);
-GEN_BRCMP(IR_INST_BRSGE, brsge);
-
-GEN_BRCMP(IR_INST_BRULT, brult);
-GEN_BRCMP(IR_INST_BRULE, brule);
-GEN_BRCMP(IR_INST_BRUGT, brugt);
-GEN_BRCMP(IR_INST_BRUGE, bruge);
-
-#define DEF_INS(name)                                         \
-	static UNUSEDA void INSNAME(name)(reg_t * r0, reg_t * r1) \
-	{                                                         \
-		ir_inst_t *ins = INSNAME2(name)(r0, r1);              \
-		ir_blk_add(outblk, ins);                              \
-		return;                                               \
-	}
-
-DEF_INS(zxtb);
-DEF_INS(sxtb);
-DEF_INS(zxtw);
-DEF_INS(sxtw);
-DEF_INS(zxtl);
-DEF_INS(sxtl);
-
-#undef GEN_BRCMP
-#undef INSNAME
-#undef INSNAME2
-#undef DEF_INS
 
 static reg_t *codegen_expr(node_t *node);
 
@@ -680,7 +566,7 @@ void codegen_stmt(node_t *node)
 }
 
 /* assign globals */
-static UNUSEDA void assign_globals(LIST(obj_t *) globals)
+static void assign_globals(LIST(obj_t *) globals)
 {
 	for(size_t i = 0; i < list_len(globals); i++) {
 		obj_t *glob = globals[i];
