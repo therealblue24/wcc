@@ -501,8 +501,8 @@ void codegen_stmt(node_t *node)
 			/* %cmpres = cmp.eq %ctrl, %casenum */
 			reg_t *cmpres = ir_buildr_creat_cmp_eq(build, is32, ctrl, casenum);
 			/* br %cmpres, case_blk, chain */
-			ir_buildr_creat_br(build, is32, cmpres, b->case_blk, chain);
-			ir_buildr_set_insert_blk(build, chain);
+			ir_buildr_creat_br_set(build, is32, cmpres, b->case_blk, chain,
+								   chain);
 		}
 
 		/* if there is no default break out of the switch */

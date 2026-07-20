@@ -719,7 +719,10 @@ static UNUSEDA int ir_leas_arith_opt(ir_func_t *func)
 
 			ins->imm = -ins->r1->imm;
 
-			uint64_t imm = ins->imm;
+			uint64_t imm = ins->r2->imm;
+			if(ins->r2->is_32bit) {
+				imm = (int32_t)imm;
+			}
 
 			switch(ins->type) {
 			case IR_INST_ADD:
@@ -928,6 +931,82 @@ static bool ins_is_ext(enum ins_type t)
 	return t == IR_INST_ZXT || t == IR_INST_SXT;
 }
 
+static bool is_pow2(uint64_t v)
+{
+	/* thank you https://graphics.stanford.edu/~seander/bithacks.html#DetermineIfPowerOf2 */
+	return v && !(v & (v - 1));
+}
+
+static uint64_t pow_log2(uint64_t v)
+{
+#ifdef __wcc__
+	/* thank you https://graphics.stanford.edu/~seander/bithacks.html#IntegerLog */
+	static const uint64_t b[6] = { 0xaaaaaaaa, 0xcccccccc, 0xf0f0f0f0,
+								   0xff00ff00, 0xffff0000, 0xffffffff00000000 };
+	uint64_t r = (v & b[0]) != 0;
+	for(int i = 5; i > 0; i--) {
+		r |= ((v & b[i]) != 0) << i;
+	}
+	return r;
+#else
+	return __builtin_ffs(v) - 1;
+#endif
+}
+
+static int ir_muldiv_opt(ir_func_t *func)
+{
+	int change = 0;
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		/* append NOPs */
+		ir_inst_t *nop = ins_nop();
+		nop->next = blk->insts;
+		blk->insts = nop;
+		ir_inst_t *prev = nop;
+		for(ir_inst_t *inst = blk->insts->next; inst; inst = inst->next) {
+			if(!inst->r2 ||
+			   (inst->type != IR_INST_UDIV && inst->type != IR_INST_UMUL &&
+				inst->type != IR_INST_SMUL) ||
+			   inst->r2->insty != IR_INST_IMM) {
+				goto next;
+			}
+
+			uint64_t imm = inst->r2->imm &
+						   (inst->r2->is_32bit ? UINT32_MAX : UINT64_MAX);
+			if(!is_pow2(imm)) {
+				goto next;
+			}
+
+			/* %r0 = udiv/umul/smul %r1, #pow2
+			 * ->
+			 * %imm = #log(pow2)
+			 * %r0 = shr/shl/shl %r1, %imm
+			 */
+
+			ir_inst_t *imml = ins_imm(reg_make(), pow_log2(imm));
+			imml->is_32bit = inst->is_32bit;
+			prev->next = imml;
+			imml->next = inst;
+			inst->r2 = imml->r0;
+			prev = imml;
+			if(inst->type == IR_INST_UDIV) {
+				inst->type = IR_INST_SHR;
+			} else if(inst->type == IR_INST_UMUL ||
+					  inst->type == IR_INST_SMUL) {
+				inst->type = IR_INST_SHL;
+			}
+
+			change = 1;
+
+next:
+			prev = inst;
+		}
+	}
+
+	return change;
+}
+
 static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 {
 	int change = 0;
@@ -968,6 +1047,57 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 		ins->type = IR_INST_MOV;
 		change = 1;
 	}
+
+	/* %r0 = and %r1, #power-2-minus-1
+	 * ->
+	 * %r0 = zero_ext.(log) %r1
+	 */
+	if(ins->type == IR_INST_AND) {
+		int r1_imm = ins->r1->insty == IR_INST_IMM;
+		int r2_imm = ins->r2->insty == IR_INST_IMM;
+		if((r1_imm + r2_imm) == 1) {
+			/* reorder so that imm is in r2 */
+			if(r1_imm) {
+				reg_t *tmp = ins->r2;
+				ins->r2 = ins->r1;
+				ins->r1 = tmp;
+			}
+
+			/* if imm is 0, replace ins with imm #0 */
+			if(ins->r2->imm == 0) {
+				ins->type = IR_INST_IMM;
+				ins->imm = 0;
+				change = 1;
+				goto exit;
+			}
+
+			/* options to extend:
+			 * all 64 bits set: this is just a move
+			 * low 32 bits set: zero_ext.i32
+			 * low 16 bits set: zero_ext.i16
+			 * low  8 bits set: zero_ext.i8
+			 */
+			uint64_t imm = ins->r2->imm &
+						   (ins->is_32bit ? UINT32_MAX : UINT64_MAX);
+			if(imm == UINT64_MAX) {
+				ins->type = IR_INST_MOV;
+				change = 1;
+			} else if(imm == UINT32_MAX) {
+				ins->type = IR_INST_ZXT;
+				ins->size = 4;
+				change = 1;
+			} else if(imm == UINT16_MAX) {
+				ins->type = IR_INST_ZXT;
+				ins->size = 2;
+				change = 1;
+			} else if(imm == UINT8_MAX) {
+				ins->type = IR_INST_ZXT;
+				ins->size = 1;
+				change = 1;
+			}
+		}
+	}
+exit:
 
 	/* %r0 = eor/sub/sdiv/udiv/smod/umod %r1, %r1
 	 * ->
@@ -1184,6 +1314,8 @@ static int ir_simpleopt(ir_func_t *func)
 			changed |= ir_simpleopt_ins_alg(ins);
 		}
 	}
+
+	changed |= ir_muldiv_opt(func);
 
 	ir_nopremover(func);
 	ir_placemarks(func);
