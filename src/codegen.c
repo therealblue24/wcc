@@ -343,15 +343,21 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_FUNCALL: {
 		LIST(callreg_t *) callargs = list_make(reg_t *);
 		node_t *arg = node->fargs;
+		int arg_count = 0;
 		for(; arg; arg = arg->next) {
 			reg_t *argres = codegen_expr(arg);
-			if(arg->type->size != 8) {
+			/* TODO: hack */
+			if(type_is_int(arg->type) && arg->type->size != 8) {
 				argres = ir_buildr_creat_ext(build, false, arg->type->unsignd,
 											 arg->type->size, argres);
+				if(arg_count >= 8) {
+					arg->type->size = 8;
+				}
 			}
 			callreg_t *callreg =
 				callreg_make(argres, ARG_CLASS_INTEGER, arg->type->size);
 			list_append(callargs, callreg);
+			arg_count++;
 		}
 		return ir_buildr_creat_call(build, node->fname, callargs);
 	};
@@ -363,6 +369,35 @@ reg_t *codegen_expr(node_t *node)
 		}
 		return codegen_expr(nod->lhs);
 	}; break;
+
+	case NODE_LOGAND: {
+		reg_t *lhs = codegen_expr(node->lhs);
+		ir_blk_t *left_blk = ir_buildr_make_blk(build);
+		ir_blk_t *resume = ir_buildr_make_blk(build);
+		reg_t *res = ir_buildr_creat_imm32(build, 0);
+		ir_buildr_creat_br_set(build, is32, lhs, left_blk, resume, left_blk);
+		reg_t *rhs = codegen_expr(node->rhs);
+		ir_inst_t *ins = ins_mkbool(res, rhs);
+		ins->is_32bit = is32;
+		ir_buildr_emit_ins(build, ins);
+		ir_buildr_creat_jmp_set(build, resume);
+		return res;
+	}
+
+	case NODE_LOGOR: {
+		reg_t *lhs = codegen_expr(node->lhs);
+		ir_blk_t *right_blk = ir_buildr_make_blk(build);
+		ir_blk_t *resume = ir_buildr_make_blk(build);
+
+		reg_t *res = ir_buildr_creat_bool(build, is32, lhs);
+		ir_buildr_creat_br_set(build, is32, lhs, resume, right_blk, right_blk);
+		reg_t *rhs = codegen_expr(node->rhs);
+		ir_inst_t *ins = ins_mkbool(res, rhs);
+		ins->is_32bit = is32;
+		ir_buildr_emit_ins(build, ins);
+		ir_buildr_creat_jmp_set(build, resume);
+		return res;
+	}
 
 	default:
 		break;
@@ -389,29 +424,6 @@ reg_t *codegen_expr(node_t *node)
 		return ir_buildr_creat_or(build, is32, lhs, rhs);
 	case NODE_EOR:
 		return ir_buildr_creat_eor(build, is32, lhs, rhs);
-	case NODE_LOGAND: {
-		ir_blk_t *left_blk = ir_buildr_make_blk(build);
-		ir_blk_t *resume = ir_buildr_make_blk(build);
-		reg_t *res = ir_buildr_creat_imm32(build, 0);
-		ir_buildr_creat_br_set(build, is32, lhs, left_blk, resume, left_blk);
-		ir_inst_t *ins = ins_mkbool(res, rhs);
-		ins->is_32bit = is32;
-		ir_buildr_emit_ins(build, ins);
-		ir_buildr_creat_jmp_set(build, resume);
-		return res;
-	}
-	case NODE_LOGOR: {
-		ir_blk_t *right_blk = ir_buildr_make_blk(build);
-		ir_blk_t *resume = ir_buildr_make_blk(build);
-
-		reg_t *res = ir_buildr_creat_bool(build, is32, lhs);
-		ir_buildr_creat_br_set(build, is32, lhs, resume, right_blk, right_blk);
-		ir_inst_t *ins = ins_mkbool(res, rhs);
-		ins->is_32bit = is32;
-		ir_buildr_emit_ins(build, ins);
-		ir_buildr_creat_jmp_set(build, resume);
-		return res;
-	}
 	case NODE_MUL:
 		return ir_buildr_creat_mul(build, is32, type->unsignd, lhs, rhs);
 	case NODE_DIV:

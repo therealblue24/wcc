@@ -253,13 +253,6 @@ void type_propagate(node_t *node)
 		break;
 
 	case NODE_FUNCALL:;
-		/* temporary: promotion of ints->long in calls */
-		for(node_t *a = node->fargs; a; a = a->next) {
-			if(type_is_int(a->type)) {
-				a->type = type_clone(a->type);
-				a->type->size = 8;
-			}
-		}
 		obj_t **fn = strmap_get(known_funcs, node->fname);
 		if(!fn) {
 			compile_err_node(node, "unknown function '%s'", node->fname);

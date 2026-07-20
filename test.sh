@@ -37,6 +37,7 @@ assert() {
   fi
 }
 assert 0 "helloworld.c"
+assert 0 "short_circuit.c"
 assert 0 "null_stmt.c"
 assert 0 "ret0.c"
 assert 1 "sub.c"

@@ -562,6 +562,11 @@ static void ir_fix_ins(ir_inst_t *ins)
 		ins->size = 4;
 		ins->type = IR_INST_ZXT;
 	}
+
+	if((ins->type == IR_INST_ZXT || ins->type == IR_INST_SXT) &&
+	   !ins->is_32bit && ins->size == 8) {
+		ins->type = IR_INST_MOV;
+	}
 }
 
 /* fixes IR function */

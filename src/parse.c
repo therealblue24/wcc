@@ -1779,6 +1779,7 @@ static int cmp_order(const void *a, const void *b)
 /* does the parsing */
 parse_res_t parse_do(token_t *toks)
 {
+	scope_push();
 	token_t *tok = toks;
 	globals = strmap_make(obj_t *);
 	global_order = 0;
@@ -1786,6 +1787,10 @@ parse_res_t parse_do(token_t *toks)
 	known_funcs = strmap_make(obj_t *);
 	while(tok->kind != TOK_END) {
 		type_t *declspec = parse_declspec(tok, &tok);
+		/* struct def */
+		if(token_eat(&tok, ";")) {
+			continue;
+		}
 		type_t *decl = parse_declarator(declspec, tok, &tok);
 
 		obj_t *obj = NULL;
@@ -1816,6 +1821,7 @@ out:
 		strmap_delete(locals);
 		locals = NULL;
 	}
+	scope_pop();
 
 	/* collect globals */
 
