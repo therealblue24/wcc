@@ -1897,7 +1897,7 @@ parse_res_t parse_do(token_t *toks)
 	known_funcs = strmap_make(obj_t *);
 	while(tok->kind != TOK_END) {
 		type_t *declspec = parse_declspec(tok, &tok);
-		/* struct def */
+		/* struct def or typedef */
 		if(token_eat(&tok, ";")) {
 			continue;
 		}

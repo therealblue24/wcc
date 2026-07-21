@@ -1,8 +1,8 @@
+typedef int cool_type;
+typedef long cooler_type;
+
 int main()
 {
-	typedef int cool_type;
-	typedef long cooler_type;
-
 	cool_type my_int = 5;
 
 	typedef struct cool_struct {
