@@ -1,5 +1,6 @@
 #include "parse.h"
 #include "zz/base.h"
+#include "zz/list.h"
 #include "zz/strmap.h"
 #include "zz/arena.h"
 #include "lex.h"
@@ -8,6 +9,7 @@
 static arena_t obj_arena;
 static arena_t node_arena;
 static arena_t memb_arena;
+static arena_t scope_arena;
 static LIST(scope_t) scopes;
 
 /* makes parsing arenas */
@@ -19,6 +21,8 @@ void parse_make_arenas(void)
 		   "failed to create AST node arena");
 	ENSURE(arena_make(&memb_arena, ARENA_DEFAULT_SIZE) == 0,
 		   "failed to create struct member arena");
+	ENSURE(arena_make(&scope_arena, ARENA_DEFAULT_SIZE) == 0,
+		   "failed to create scope arena");
 	scopes = list_make(obj_t *);
 	return;
 }
@@ -29,6 +33,7 @@ void parse_delete_arenas(void)
 	arena_delete(&obj_arena);
 	arena_delete(&node_arena);
 	arena_delete(&memb_arena);
+	arena_delete(&scope_arena);
 	list_delete(scopes);
 	return;
 }
@@ -72,8 +77,34 @@ static void scope_pop()
 /* add var to current scope (& "global" locals) */
 static void scope_add_var(obj_t *var)
 {
-	strmap_put(list_peek(scopes).vars, var->name, var);
+	if(strmap_has(list_peek(scopes).vars, var->name)) {
+		scope_el_t *e = *strmap_get(list_peek(scopes).vars, var->name);
+		if(e->is_type) {
+			compile_err(NULL, "redefinition of '%s' as variable", var->name);
+		}
+	}
+	scope_el_t *elem = arena_alloc(&scope_arena, sizeof(scope_el_t));
+	elem->is_type = false;
+	elem->var = var;
+	strmap_put(list_peek(scopes).vars, var->name, elem);
 	strmap_put(locals, var->name, var);
+	return;
+}
+
+/* add type to current scope */
+static void scope_add_type(char *name, type_t *typ)
+{
+	if(strmap_has(list_peek(scopes).vars, name)) {
+		scope_el_t *e = *strmap_get(list_peek(scopes).vars, name);
+		if(!e->is_type) {
+			compile_err(NULL, "redefinition of '%s' as type",
+						typ->ident->content);
+		}
+	}
+	scope_el_t *elem = arena_alloc(&scope_arena, sizeof(scope_el_t));
+	elem->is_type = true;
+	elem->type = typ;
+	strmap_put(list_peek(scopes).vars, name, elem);
 	return;
 }
 
@@ -254,6 +285,29 @@ obj_t *obj_make_anon(type_t *type)
 	return obj;
 }
 
+/* finds a type given name */
+static type_t *find_type(token_t *tok)
+{
+	char *content = tok->content;
+
+	/* traverse scope */
+	if(list_len(scopes)) {
+		for(size_t i = list_len(scopes) - 1; i >= 0; i--) {
+			scope_t sc = scopes[i];
+			scope_el_t **found = strmap_get(sc.vars, content);
+			if(found && (*found)->is_type) {
+				return (*found)->type;
+			}
+
+			if(i == 0) {
+				break;
+			}
+		}
+	}
+
+	return NULL;
+}
+
 /* finds a struct type (tag) given name */
 static type_t *find_tag(token_t *tok)
 {
@@ -286,10 +340,10 @@ static obj_t *find_var(token_t *tok)
 	if(list_len(scopes)) {
 		for(size_t i = list_len(scopes) - 1; i >= 0; i--) {
 			scope_t sc = scopes[i];
-			obj_t **found = strmap_get(sc.vars, str);
-			if(found) {
+			scope_el_t **found = strmap_get(sc.vars, str);
+			if(found && !(*found)->is_type) {
 				free(str);
-				return *found;
+				return (*found)->var;
 			}
 
 			if(i == 0) {
@@ -378,7 +432,8 @@ static bool is_declspec(token_t *tok)
 	   token_eq(tok, "char") || token_eq(tok, "short") ||
 	   token_eq(tok, "long") || token_eq(tok, "int") ||
 	   token_eq(tok, "signed") || token_eq(tok, "unsigned") ||
-	   token_eq(tok, "_Alignas") || token_eq(tok, "struct")) {
+	   token_eq(tok, "_Alignas") || token_eq(tok, "struct") ||
+	   token_eq(tok, "typedef") || find_type(tok)) {
 		return true;
 	}
 	return false;
@@ -467,6 +522,17 @@ static type_t *parse_struct(token_t *tok, token_t **rest)
 	return struc;
 }
 
+static type_t *parse_typedef(token_t *tok, token_t **rest)
+{
+	tok = tok->next; /* skip `typedef` */
+	type_t *ty = parse_type_name(tok, &tok);
+	char *name = tok->content;
+	scope_add_type(name, ty);
+	tok = tok->next;
+	*rest = tok;
+	return ty;
+}
+
 static type_t *parse_declspec(token_t *tok, token_t **rest)
 {
 	uint64_t align = 0;
@@ -475,6 +541,10 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 
 	if(token_eq(tok, "struct")) {
 		return parse_struct(tok->next, rest);
+	}
+
+	if(token_eq(tok, "typedef")) {
+		return parse_typedef(tok, rest);
 	}
 
 	while(is_declspec(tok)) {
@@ -550,6 +620,13 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 			continue;
 		}
 
+		type_t *found = find_type(tok);
+		if(found) {
+			tok = tok->next;
+			res = found;
+			break;
+		}
+
 		compile_err(tok->loc, "invalid declaration specifier type '%.*s'",
 					tok->len, tok->loc);
 	}
@@ -564,6 +641,7 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 
 	res->unsignd = unsign;
 
+	*rest = tok;
 	return res;
 }
 

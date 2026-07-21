@@ -88,8 +88,15 @@ typedef struct member {
 } member_t;
 
 /* scope (single element, not stack) */
+
+typedef struct scope_el {
+	bool is_type; /* is this a type or var? */
+	obj_t *var;
+	type_t *type;
+} scope_el_t;
+
 typedef struct scope {
-	STRMAP(obj_t *) vars;
+	STRMAP(scope_el_t *) vars;
 	STRMAP(type_t *) types;
 } scope_t;
 

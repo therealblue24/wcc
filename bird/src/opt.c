@@ -1624,6 +1624,7 @@ static int ir_dce_opt(ir_func_t *func)
 			}
 
 			/* todo: this might break in some scenarios */
+			/* TODO: is the above claim correct? */
 			if(ins->r0->def == ins->r0->last_use) {
 				change = 1;
 				if(ins->type == IR_INST_CALL) {
@@ -1721,7 +1722,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			change |= ir_mov_elim(func);
 		});
 
-		TIMEIT("mark", { ir_placemarks(func); });
+		ir_placemarks(func);
 
 		/* peephole opts */
 		TIMEIT("peep", {
@@ -1729,7 +1730,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			ir_fix_phis(func);
 		});
 
-		TIMEIT("mark", { ir_placemarks(func); });
+		ir_placemarks(func);
 
 		/* memory optimization */
 		TIMEIT("mem", {
