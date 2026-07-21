@@ -433,16 +433,57 @@ static bool is_declspec(token_t *tok)
 	   token_eq(tok, "long") || token_eq(tok, "int") ||
 	   token_eq(tok, "signed") || token_eq(tok, "unsigned") ||
 	   token_eq(tok, "_Alignas") || token_eq(tok, "struct") ||
-	   token_eq(tok, "typedef") || find_type(tok)) {
+	   token_eq(tok, "union") || token_eq(tok, "typedef") || find_type(tok)) {
 		return true;
 	}
 	return false;
 }
 
-static type_t *parse_struct(token_t *tok, token_t **rest)
+static void compute_struct_member_pos(type_t *struc)
 {
-	/* we are at point where we skipped the `struct` keyword */
+	size_t align = 0;
+	size_t pos = 0;
+	for(size_t i = 0; i < list_len(struc->membs); i++) {
+		member_t *mem = struc->membs[i];
+		pos = align_to(pos, mem->type->align);
+		mem->loc = pos;
+		pos += mem->type->size;
+		if(mem->type->align > align) {
+			align = mem->type->align;
+		}
+	}
 
+	struc->size = align_to(pos, align);
+	struc->align = align;
+	return;
+}
+
+static void compute_union_member_pos(type_t *struc)
+{
+	/* TODO: possibly deduplicate this? I don't know if in
+	 * the future this will change further, so I'm going to keep
+	 * it for a while. */
+	size_t align = 0;
+	size_t pos = 0;
+	for(size_t i = 0; i < list_len(struc->membs); i++) {
+		member_t *mem = struc->membs[i];
+		pos = align_to(pos, mem->type->align);
+		mem->loc = 0;
+		pos += mem->type->size;
+		if(mem->type->align > align) {
+			align = mem->type->align;
+		}
+	}
+
+	struc->size = align_to(pos, align);
+	struc->align = align;
+	return;
+}
+
+static type_t *parse_struct_or_union(token_t *tok, token_t **rest)
+{
+	token_t *marker = tok;
+	tok = tok->next;
 	/* we have a name if no { */
 	char *tag = NULL;
 	type_t *tag_ty = NULL;
@@ -472,7 +513,7 @@ static type_t *parse_struct(token_t *tok, token_t **rest)
 	/* if no { members }, then it is a use of a struct */
 	if(!token_eq(tok, "{")) {
 		if(!tag_ty) {
-			compile_err(tok->loc, "empty struct");
+			compile_err(tok->loc, "empty %s", marker->content);
 		}
 		*rest = tok;
 		return tag_ty;
@@ -484,7 +525,7 @@ static type_t *parse_struct(token_t *tok, token_t **rest)
 		compile_err(tok->loc, "redefinition of '%s'", tag);
 	}
 
-	struc->kind = TYPE_STRUCT;
+	struc->kind = token_eq(marker, "struct") ? TYPE_STRUCT : TYPE_UNION;
 	struc->membs = list_make(member_t *);
 
 	while(!token_eq(tok, "}")) {
@@ -497,21 +538,12 @@ static type_t *parse_struct(token_t *tok, token_t **rest)
 	tok = token_skip(tok, "}");
 
 	/* assign offsets, find max align */
-
-	size_t align = 0;
-	size_t pos = 0;
-	for(size_t i = 0; i < list_len(struc->membs); i++) {
-		member_t *mem = struc->membs[i];
-		pos = align_to(pos, mem->type->align);
-		mem->loc = pos;
-		pos += mem->type->size;
-		if(mem->type->align > align) {
-			align = mem->type->align;
-		}
+	if(struc->kind == TYPE_STRUCT) {
+		compute_struct_member_pos(struc);
+	} else {
+		compute_union_member_pos(struc);
 	}
 
-	struc->size = align_to(pos, align);
-	struc->align = align;
 	*rest = tok;
 
 	/* if this struct is named, push it into the scope */
@@ -539,8 +571,8 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 	type_t *res = NULL;
 	bool unsign = false;
 
-	if(token_eq(tok, "struct")) {
-		return parse_struct(tok->next, rest);
+	if(token_eq(tok, "struct") || token_eq(tok, "union")) {
+		return parse_struct_or_union(tok, rest);
 	}
 
 	if(token_eq(tok, "typedef")) {
@@ -1529,8 +1561,8 @@ memb_parse:;
 			compile_err(tok->loc, "expected an identifer");
 		}
 
-		if(v->type->kind != TYPE_STRUCT) {
-			compile_err(tok->loc, "expected a struct");
+		if(v->type->kind != TYPE_STRUCT && v->type->kind != TYPE_UNION) {
+			compile_err(tok->loc, "expected a struct or union");
 		}
 
 		/* find the member */
@@ -1548,8 +1580,8 @@ memb_parse:;
 		}
 
 		if(!found) {
-			compile_err(tok->loc, "'%.*s' is not a member of struct", tok->len,
-						tok->loc);
+			compile_err(tok->loc, "'%.*s' is not a member of struct or union",
+						tok->len, tok->loc);
 		}
 
 		prim->memb = v->type->membs[i];

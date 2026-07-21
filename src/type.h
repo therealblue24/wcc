@@ -14,6 +14,7 @@ enum type_kind {
 	TYPE_LONG, /* long */
 	TYPE_PTR, /* a pointer */
 	TYPE_STRUCT, /* a struct {} */
+	TYPE_UNION, /* a union {} */
 	TYPE_FUNC, /* a function */
 	TYPE_ARRAY, /* an array */
 };
