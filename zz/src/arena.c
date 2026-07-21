@@ -179,6 +179,15 @@ void *scr_alloc(size_t size)
 	return mem;
 }
 
+char *scr_strdup(char *str)
+{
+	size_t len = strlen(str);
+	void *mem = scr_alloc(len + 1);
+	wipe(mem, len + 1);
+	memcpy(mem, str, len);
+	return mem;
+}
+
 void *scr_alloc_aligned(size_t size, size_t align)
 {
 	void *mem = arena_alloc_aligned(&scratch, size, align);

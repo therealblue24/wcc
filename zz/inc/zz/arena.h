@@ -59,6 +59,7 @@ int scr_init(void);
 void scr_cleanup(void);
 
 void *scr_alloc(size_t size);
+char *scr_strdup(char *str);
 void *scr_alloc_aligned(size_t size, size_t align);
 
 void *scr_realloc(void *ptr, size_t new_size);
