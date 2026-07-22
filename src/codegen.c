@@ -230,6 +230,12 @@ reg_t *codegen_expr(node_t *node)
 		LIST(callreg_t *) callargs = list_make(reg_t *);
 		node_t *arg = node->fargs;
 		for(; arg; arg = arg->next) {
+			if(arg->type->kind == TYPE_STRUCT ||
+			   arg->type->kind == TYPE_UNION) {
+				compile_err_node(
+					arg,
+					"ABI for structs and unions are not implemented yet, pass by refrence please");
+			}
 			reg_t *argres = codegen_expr(arg);
 			callreg_t *callreg =
 				callreg_make(argres, ARG_CLASS_INTEGER, arg->type->size);
