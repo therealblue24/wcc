@@ -44,6 +44,16 @@ STRMAP(obj_t *) known_funcs = NULL;
 long local_order = 0;
 long global_order = 0;
 
+/* straight from type.c */
+/* can't miss the naming opportunity */
+static void fastcast(node_t **node, type_t *to)
+{
+	node_t *cast = node_unary(NODE_CAST, *node, (*node)->tok);
+	cast->type = to;
+	*node = cast;
+	return;
+}
+
 /* ron's universal number kounter */
 /* very important, critical piece of code */
 static long runk(int reset)
@@ -1483,17 +1493,23 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 				compile_err(tok->loc, "unknown function '%s'", fun->fname);
 			}
 
+			obj_t *fn = *strmap_get(known_funcs, fun->fname);
+
 			tok = tok->next;
 			tok = token_skip(tok, "(");
 
 			node_t head = {};
 			node_t *cur = &head;
+			obj_t *farg = fn->args;
 
 			while(!token_eq(tok, ")")) {
 				if(cur != &head)
 					tok = token_skip(tok, ",");
-				cur->next = parse_assign(tok, &tok);
+				node_t *arg = parse_assign(tok, &tok);
+				fastcast(&arg, farg->type);
+				cur->next = arg;
 				cur = cur->next;
+				farg = farg->next;
 			}
 
 			fun->fargs = head.next;

@@ -229,21 +229,11 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_FUNCALL: {
 		LIST(callreg_t *) callargs = list_make(reg_t *);
 		node_t *arg = node->fargs;
-		int arg_count = 0;
 		for(; arg; arg = arg->next) {
 			reg_t *argres = codegen_expr(arg);
-			/* TODO: hack */
-			if(type_is_int(arg->type) && arg->type->size != 8) {
-				argres = ir_buildr_creat_ext(build, false, arg->type->unsignd,
-											 arg->type->size, argres);
-				if(arg_count >= 8) {
-					arg->type->size = 8;
-				}
-			}
 			callreg_t *callreg =
 				callreg_make(argres, ARG_CLASS_INTEGER, arg->type->size);
 			list_append(callargs, callreg);
-			arg_count++;
 		}
 		return ir_buildr_creat_call(build, node->fname, callargs);
 	};

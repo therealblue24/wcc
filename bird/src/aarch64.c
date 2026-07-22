@@ -325,22 +325,39 @@ static void ir_ins_abi_call_aarch64(FILE *f, ir_func_t *func, ir_blk_t *blk,
 	}
 
 	for(size_t i = 0; i < alen; i++) {
-		reg_t *reg = args[i]->r;
-		char *arg = arm_reg[reg->rr];
+		callreg_t *ca = args[i];
+		reg_t *reg = ca->r;
+		int arg = reg->rr;
+
 		if(reg->spilld2) {
-			arg = arm_reg[10];
+			arg = 10;
 			if(load_fp_imm_x10(f, reg->off, false)) {
-				fprintf(f, "\tldr %s, [fp, x10]\n", arg);
+				fprintf(f, "\tldr x%d, [fp, x10]\n", arg);
 			} else {
-				fprintf(f, "\tldr %s, [fp, #%ld]\n", arg, reg->off);
+				fprintf(f, "\tldr x%d, [fp, #%ld]\n", arg, reg->off);
 			}
 		}
 
 		if(i <= 7) {
-			fprintf(f, "\tmov x%zu, %s\n", i, arg);
+			switch(ca->size) {
+			case 8:
+			default:
+				fprintf(f, "\tmov x%zu, %s\n", i, arm_reg[arg]);
+				break;
+			case 4:
+				fprintf(f, "\tmov w%zu, %s\n", i, arm_reg32[arg]);
+				break;
+			case 2:
+				fprintf(f, "\tuxth w%zu, %s\n", i, arm_reg32[arg]);
+				break;
+			case 1:
+				fprintf(f, "\tuxtb w%zu, %s\n", i, arm_reg32[arg]);
+				break;
+			}
 		} else {
 			ENSURE(stack_indx >= 0, "negative stack index, somehow");
-			fprintf(f, "\tstr %s, [sp, #%zu]\n", arg, stack_indx);
+
+			store(f, ca->size, arg, ca->size <= 4, "[sp, #%zu]", stack_indx);
 			stack_indx -= args[i]->size;
 		}
 	}

@@ -252,14 +252,14 @@ void type_propagate(node_t *node)
 		node->type = infer_type(node->num);
 		break;
 
-	case NODE_FUNCALL:;
-		obj_t **fn = strmap_get(known_funcs, node->fname);
-		if(!fn) {
+	case NODE_FUNCALL: {
+		obj_t **fnptr = strmap_get(known_funcs, node->fname);
+		if(!fnptr) {
 			compile_err_node(node, "unknown function '%s'", node->fname);
-		} else {
-			node->type = (*fn)->type->to;
 		}
-		break;
+		obj_t *fn = *fnptr;
+		node->type = fn->type->to;
+	} break;
 
 	case NODE_EQ:
 	case NODE_LE:

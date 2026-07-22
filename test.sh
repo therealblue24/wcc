@@ -4,7 +4,7 @@ passing=1
 
 ./bin/wcc test/one_impl.c -o test/one.s -O3
 clang -c test/one.s -o one.o
-# cc -c -o one.o test/one_impl.c
+cc -c -o cc.o test/cc.c -O3
 
 ./bin/wcc --internal-test-strmap
 
@@ -25,7 +25,7 @@ assert() {
   fi
 
   cp prog.s asm/$actual
-  cc -o prog prog.s one.o && ./prog
+  cc -o prog prog.s one.o cc.o && ./prog
   status="$?"
   rm prog prog.s
   
@@ -74,6 +74,7 @@ assert 120 "union.c"
 assert 7 "ref_deref.c"
 assert 1 "call.c"
 assert 156 "call_many.c"
+assert 156 "call_many_int.c"
 assert 2 "types.c"
 assert 3 "funs.c"
 assert 1 "div.c"
