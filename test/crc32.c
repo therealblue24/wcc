@@ -33,6 +33,7 @@ int strlen(char *n);
 
 int main()
 {
+	print_num((1L << 32) + 1);
 	char *str = "Hello, World!\n";
 	int len = strlen(str);
 	unsigned int chksum = crc32_do((unsigned char *)str, len);

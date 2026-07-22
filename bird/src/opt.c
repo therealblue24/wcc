@@ -129,6 +129,7 @@ static int ir_branchopt(ir_func_t *func)
 				ins->r1 = cmp->lhs;
 				ins->r2 = cmp->rhs;
 				ins->imm = cmp->imm;
+				ins->is_32bit = cmp->is_32bit;
 				changed = 1;
 			}
 		}
@@ -661,6 +662,48 @@ static int ir_memopt_ins(ir_inst_t *ins)
 		ins->type = IR_INST_NOP;
 		change = 1;
 	}
+
+	/* rewrite
+	 * %r0 = load.(spec) %r1
+	 * ..
+	 * %r2 = ext.(spec) %r0
+	 * ->
+	 * %r0 = load.(spec) %r1
+	 * %r2 = %r0
+	 */
+	if((ins->type == IR_INST_ZXT || ins->type == IR_INST_SXT) &&
+	   (ins->r1->insty == IR_INST_LOAD || ins->r1->insty == IR_INST_LOADS)) {
+		reg_t *r = ins->r1;
+		if(r->is_32bit == ins->is_32bit && r->size == ins->size) {
+			ins->type = IR_INST_MOV;
+			change = 1;
+		}
+	}
+
+	/* rewrite
+	 * store(SIZE) %adr, %r0
+	 * where
+	 * %r0 = sign_ext/zero_ext.(SIZE) %r1
+	 * ->
+	 * store(SIZE) %adr, %r1
+	 */
+	if(ins->type == IR_INST_STORE || ins->type == IR_INST_STORES) {
+		reg_t *data = ins->type == IR_INST_STORE ? ins->r2 : ins->r1;
+		if((data->insty == IR_INST_SXT || data->insty == IR_INST_ZXT) &&
+		   data->size == ins->size) {
+			if(data->size == 8 && data->is_32bit != ins->is_32bit) {
+				goto out;
+			}
+			data = data->lhs;
+			change = 1;
+		}
+		if(ins->type == IR_INST_STORE) {
+			ins->r2 = data;
+		} else {
+			ins->r1 = data;
+		}
+	}
+out:
 
 	return change;
 }
@@ -1424,6 +1467,51 @@ static int ir_mov_elim(ir_func_t *func)
 }
 #undef REPLACE
 
+static int possible_to_elim32(reg_t *r)
+{
+	return r->is_32bit && r->size == 4 &&
+		   (r->insty == IR_INST_ZXT || r->insty == IR_INST_SXT);
+}
+
+/* 32 bit move elimination - does move elim for
+ * %r0 = i32 sign_ext/zero_ext.i32 %r1
+ */
+static int ir_mov_elim32(ir_func_t *func)
+{
+	int change = 0;
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(!inst->r0 || (inst->r0 && !possible_to_elim32(inst->r0))) {
+				continue;
+			}
+
+			if(inst->r0->phi_related) {
+				/* don't elim */
+				inst->r0->insty = IR_INST_NOP;
+			}
+		}
+	}
+
+#define REPLACE(x)                       \
+	if((x) && possible_to_elim32((x))) { \
+		(x) = (x)->lhs;                  \
+	}
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			REPLACE(inst->r1);
+			REPLACE(inst->r2);
+		}
+	}
+
+#undef REPLACE
+
+	return change;
+}
+
 static int ins_is_same(ir_inst_t *a, ir_inst_t *b)
 {
 	/* general case */
@@ -1721,6 +1809,10 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			change |= ir_imm_elim(func);
 			change |= ir_mov_elim(func);
 		});
+
+		ir_placemarks(func);
+
+		TIMEIT("movelim", { change |= ir_mov_elim32(func); });
 
 		ir_placemarks(func);
 
