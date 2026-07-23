@@ -764,7 +764,8 @@ static UNUSEDA int ir_leas_arith_opt(ir_func_t *func)
 
 			uint64_t imm = ins->r2->imm;
 			if(ins->r2->is_32bit) {
-				imm = (int32_t)imm;
+				uint32_t low = imm & UINT32_MAX;
+				imm = *(int32_t *)(&low);
 			}
 
 			switch(ins->type) {
@@ -816,20 +817,20 @@ static int ir_fold(ir_func_t *func)
 					}
 				}
 
-				continue;
-			}
-			/* constant folding */
-			if(ir_inst_is_foldable(ins->type)) {
-				if(ins->r1 && ins->r2 && ins->r1->insty == IR_INST_IMM &&
-				   ins->r2->insty == IR_INST_IMM) {
-					ir_fold_ins_binop64(ins);
-					change = 1;
-				}
+			} else {
+				/* constant folding */
+				if(ir_inst_is_foldable(ins->type)) {
+					if(ins->r1 && ins->r2 && ins->r1->insty == IR_INST_IMM &&
+					   ins->r2->insty == IR_INST_IMM) {
+						ir_fold_ins_binop64(ins);
+						change = 1;
+					}
 
-				if(ir_inst_is_foldable(ins->type) && ins->r1 &&
-				   ins->r1->insty == IR_INST_IMM && !ins->r2) {
-					ir_fold_ins_unaryop64(ins);
-					change = 1;
+					if(ir_inst_is_foldable(ins->type) && ins->r1 &&
+					   ins->r1->insty == IR_INST_IMM && !ins->r2) {
+						ir_fold_ins_unaryop64(ins);
+						change = 1;
+					}
 				}
 			}
 
@@ -840,7 +841,12 @@ static int ir_fold(ir_func_t *func)
 				ir_blk_t *falseblk = ins->false_blk;
 				ir_blk_t *lostblk = falseblk;
 
-				if(!ins->r1->imm) {
+				uint64_t imm = ins->r1->imm;
+				if(ins->is_32bit) {
+					imm &= UINT32_MAX;
+				}
+
+				if(!imm) {
 					ins->true_blk = falseblk;
 					lostblk = trueblk;
 				}
@@ -851,13 +857,74 @@ static int ir_fold(ir_func_t *func)
 				change = 1;
 			}
 
-			if(ins->type != IR_INST_BR && ir_inst_is_br(ins->type) &&
-			   ins->r1->insty == IR_INST_IMM && ins->r2->insty == IR_INST_IMM) {
+			if(!ins->is_32bit && ins->type != IR_INST_BR &&
+			   ir_inst_is_br(ins->type) && ins->r1->insty == IR_INST_IMM &&
+			   ins->r2->insty == IR_INST_IMM) {
 				int cond;
 				uint64_t ua = ins->r1->imm;
 				uint64_t ub = ins->r2->imm;
 				int64_t sa = *((int64_t *)&ins->r1->imm);
 				int64_t sb = *((int64_t *)&ins->r2->imm);
+				switch(ins->type) {
+				case IR_INST_BREQ:
+					cond = ua == ub;
+					break;
+				case IR_INST_BRNE:
+					cond = ua != ub;
+					break;
+				case IR_INST_BRSLT:
+					cond = sa < sb;
+					break;
+				case IR_INST_BRSLE:
+					cond = sa <= sb;
+					break;
+				case IR_INST_BRSGT:
+					cond = sa > sb;
+					break;
+				case IR_INST_BRSGE:
+					cond = sa >= sb;
+					break;
+				case IR_INST_BRULT:
+					cond = ua < ub;
+					break;
+				case IR_INST_BRULE:
+					cond = ua <= ub;
+					break;
+				case IR_INST_BRUGT:
+					cond = ua > ub;
+					break;
+				case IR_INST_BRUGE:
+					cond = ua >= ub;
+					break;
+				default:
+					cond = 0;
+					break;
+				}
+
+				ir_blk_t *trueblk = ins->true_blk;
+				ir_blk_t *falseblk = ins->false_blk;
+				ir_blk_t *lostblk = falseblk;
+
+				ins->type = IR_INST_JMP;
+				if(!cond) {
+					ins->true_blk = ins->false_blk;
+					lostblk = trueblk;
+				}
+				ins->false_blk = NULL;
+
+				ir_remove_pred(lostblk, blk);
+
+				change = 1;
+			}
+
+			if(ins->is_32bit && ins->type != IR_INST_BR &&
+			   ir_inst_is_br(ins->type) && ins->r1->insty == IR_INST_IMM &&
+			   ins->r2->insty == IR_INST_IMM) {
+				int cond;
+				uint32_t ua = ins->r1->imm & UINT32_MAX;
+				uint32_t ub = ins->r2->imm & UINT32_MAX;
+				int32_t sa = *((int32_t *)&ins->r1->imm);
+				int32_t sb = *((int32_t *)&ins->r2->imm);
 				switch(ins->type) {
 				case IR_INST_BREQ:
 					cond = ua == ub;
@@ -931,7 +998,9 @@ static int ir_fold(ir_func_t *func)
 			 * %r0 = ... whatever it evaluates to ...
 			 */
 			if(ir_inst_is_foldable(ins->type) && ins->r1 && ins->r2 &&
-			   ins->r2->insty == IR_INST_IMM && ins->r2->imm == 0) {
+			   ins->r2->insty == IR_INST_IMM &&
+			   (ins->r2->imm & (ins->is_32bit ? UINT32_MAX : UINT64_MAX)) ==
+				   0) {
 				ir_zeroopt(ins);
 				change = 1;
 			}
@@ -943,25 +1012,11 @@ static int ir_fold(ir_func_t *func)
 			 * %r0 = sub %r1, %r3
 			 */
 			if((ins->type == IR_INST_ADD || ins->type == IR_INST_SUB) &&
-			   ins->r2->insty == IR_INST_NEG) {
+			   ins->r2->insty == IR_INST_NEG &&
+			   ins->is_32bit == ins->r2->is_32bit) {
 				ins->type = ins->type == IR_INST_ADD ? IR_INST_SUB :
 													   IR_INST_ADD;
 				ins->r2 = ins->r2->lhs;
-				change = 1;
-			}
-
-			/* turn
-			 * %r1 = neg %r3
-			 * %r0 = add %r1, %r2
-			 * ->
-			 * %r0 = sub %r2, %r3
-			 */
-			if(ins->type == IR_INST_ADD && ins->r1->insty == IR_INST_NEG) {
-				ins->type = IR_INST_SUB;
-				reg_t *r1 = ins->r1;
-				reg_t *r2 = ins->r2;
-				ins->r2 = r1->lhs;
-				ins->r1 = r2;
 				change = 1;
 			}
 		}
@@ -1161,6 +1216,15 @@ exit:
 	if((ins->type == IR_INST_AND || ins->type == IR_INST_OR) &&
 	   ins->r1 == ins->r2) {
 		ins->type = IR_INST_MOV;
+		change = 1;
+	}
+
+	/* %r0 = i64 imm #x (x fits in 32 bits)
+	 * ->
+	 * %r0 = i32 imm #x
+	 */
+	if(ins->type == IR_INST_IMM && (ins->imm & UINT32_MAX) == ins->imm) {
+		ins->is_32bit = true;
 		change = 1;
 	}
 
