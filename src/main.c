@@ -19,6 +19,7 @@
 int debug = 0;
 int opt_level = 0;
 int do_profile = 0;
+int print_ast = 0;
 
 char *next_arg(int max, int *argc, char *argv[])
 {
@@ -49,6 +50,7 @@ static void help(char *pname)
 	printf("                  \tonly aarch64-apple, x64-sysv are supported.\n");
 	printf("  -d:\t\t\tenable debug IR printing\n");
 	printf("  -p:\t\t\tenable profiling\n");
+	printf("  -a:\t\t\tprint AST\n");
 	printf("  -O0/1/2/3:\t\toptimization level (default: 0)\n");
 	printf("  -?, --help:\t\tthis page\n");
 	return;
@@ -267,6 +269,11 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
+		if(strcmp(arg, "-a") == 0) {
+			print_ast = 1;
+			continue;
+		}
+
 		if(strcmp(arg, "--internal-test-strmap") == 0) {
 			test_strmap();
 			printf("OK\n");
@@ -327,6 +334,10 @@ int main(int argc, char *argv[])
 			obj_t *glob = res.globals[i];
 			if(glob->is_func) {
 				sema_do(glob->body);
+				if(print_ast) {
+					printf("AST for function %s:\n", glob->name);
+					ast_print(glob->body);
+				}
 			}
 		}
 	});

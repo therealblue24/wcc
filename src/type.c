@@ -218,8 +218,10 @@ promote:
 static void usual_arith_conv(node_t **lhs, node_t **rhs)
 {
 	type_t *promote_to = usual_arith_conv_type((*lhs)->type, (*rhs)->type);
-	fastcast(lhs, promote_to);
-	fastcast(rhs, promote_to);
+	if((*lhs)->type != promote_to)
+		fastcast(lhs, promote_to);
+	if((*rhs)->type != promote_to)
+		fastcast(rhs, promote_to);
 	return;
 }
 
