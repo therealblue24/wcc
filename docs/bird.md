@@ -8,14 +8,14 @@ A function is a list of blocks (`ir_blk_t*`).
 
 A block is a list of instructions (`ir_inst_t*`). A block ***always*** ends with a terminating instruction, which can be a branch, jump, or return. A block can have multiple (or no) predeccesors and can only have 0 (if it returns), 1, or 2 successors.
 
-The IR which the frontend emits does ***not*** have to be SSA. The IR is converted to and from SSA for you. Do note however that currently the mem2reg (or `varopt`) pass is not built into the IR and you have to implement that yourself.
+The IR which the frontend emits does ***not*** have to be SSA. (In fact, the IR cannot be SSA, as it cannot have phi functions in the frontend. See more later.) The IR is converted to and from SSA for you. Do note however that currently the mem2reg (or `varopt`) pass is not built into the IR and you have to implement that yourself. (I plan to fix this soon!)
 
 The IR is also a three-address-code IR. Instructions have a maximum of 2 source arguments (with exceptions for `phi`, `call`, and `pmov`) and can only have 1 destination argument (or none). The IR also is flag-less, the only instructions that have side effects are the memory instructions and `call`.
 
-The IR does not have immediates as of now (Jun 27).
+The IR does have immediates, but the frontend cannot use them. Just generate `%r0 = imm #x` instructions and use the register instead. This approach is the best of both worlds for the frontend and optimizer.
 
 You can create/delete functions/blocks/programs using `ir_*_make` and `ir_*_delete`.
-Building the IR is trivial from there. In order to actually compile the IR into assembly, there is the following handy function to do all the steps for you:
+Building the IR is trivial from there. (Use the IR builder interface.) In order to actually compile the IR into assembly, there is the following handy function to do all the steps for you:
 
 ```
 /* generates code for an IR program */
@@ -25,7 +25,7 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt);
 
 which emits assembly into the file `f`, given an IR program `prog`, for architecture `arch` and optimization level `opt`.
 
-There are 4 optimization levels (0, 1, 2, and 3) and they determine how much optimization passes are done over the IR code (the amount of passes being 0, 1, 16, and 256, respectively). Note that the IR is always converted in and out of SSA regardless of optimization level.
+There are 4 optimization levels (0, 1, 2, and 3) and they determine how much optimization passes are done over the IR code (the amount of passes being 0, 1, 16, and 64, respectively). Note that the IR is always converted in and out of SSA regardless of optimization level.
 
 There are 2 supported "architectures" (backends) as of now:
 - `IR_ARCH_AARCH64_APPLE`: aarch64 assembly, apple ABI
@@ -68,6 +68,7 @@ Subtracts `%r1` and `%r2` and stores the result in `%r0`.
 
 (Unsigned) Multiplies `%r1` and `%r2` and stores the result in `%r0`.
 
+**NOTE**: on x86_64, this is the same as `IR_INST_SMUL`.
 
 ### `IR_INST_SDIV`: `%r0 = sdiv %r1, %r2`
 
@@ -227,6 +228,8 @@ Note that this instruction is not 100% finished because the whole ABI of both x8
 Calls a function with the arguments specified, and stores the return value in `%r0` if not `NULL`.
 
 ## SSA instructions (not recommended to use)
+
+Do note that your frontend should NOT emit SSA instructions if you are using `ir_prog_compile`! The SSA entering pass assumes the IR is a typical 3AC without phis and parallel moves. Use `ir_ssa_exit` then compile the program.
 
 ### `IR_INST_PHI`: `%r0 = phi [pred1, %a1], [pred2, %a2], ...`
 

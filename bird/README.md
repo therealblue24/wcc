@@ -1,9 +1,7 @@
 # `bIRd` - `Best IR backenD`
 IR backend for `wcc`. The IR is not 100% complete but almost everything is in place.
 
-May need a refactor for floats.
-
-The register allocation algorithm was inspired by 9cc's.
+The register allocation algorithm was inspired by 9cc's, with improvements from [Improvements to Linear Scan register allocation](https://llvm.org/ProjectsWithLLVM/2004-Fall-CS426-LS.pdf).
 
 Depends on `zz` in [`../zz`](../zz).
 
