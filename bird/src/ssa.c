@@ -698,6 +698,9 @@ static void deparallelize_pmovs(ir_func_t *fun)
 			for(size_t i = 0; i < list_len(seq); i++) {
 				reg_pmov_t pmov1 = seq[i];
 				ir_inst_t *mov = ins_mov(pmov1.dst, pmov1.src);
+				if(pmov1.src->is_32bit || pmov1.dst->is_32bit) {
+					mov->is_32bit = true;
+				}
 				movs[i] = mov;
 			}
 			for(size_t i = 0; i < list_len(seq) - 1; i++) {

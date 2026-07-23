@@ -167,6 +167,15 @@ static int inverse_brcmp(enum ins_type ty)
 
 static void ir_placemarks(ir_func_t *func)
 {
+	/* initial pass - promote all regs to non-phi-related */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->r0)
+				inst->r0->phi_related = false;
+		}
+	}
+
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
@@ -187,6 +196,21 @@ static void ir_placemarks(ir_func_t *func)
 				}
 				/* do we need this? */
 				/* inst->r0->phi_related = true; */
+			}
+		}
+	}
+
+	/* mark 32 bit phis */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_PHI) {
+				continue;
+			}
+
+			inst->is_32bit = true;
+			for(size_t i = 0; i < list_len(inst->phi_args); i++) {
+				inst->is_32bit &= inst->phi_args[i]->is_32bit;
 			}
 		}
 	}
@@ -1962,6 +1986,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	});
 
 	TIMEIT("exit", {
+		ir_placemarks(func);
 		ir_ssa_exit(func);
 		ir_nopremover(func);
 	});
