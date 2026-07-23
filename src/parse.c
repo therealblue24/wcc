@@ -1453,7 +1453,7 @@ static node_t *parse_expr(token_t *tok, token_t **rest)
 	node_t *node = parse_assign(tok, &tok);
 parse:
 	if(token_eq(tok, ",")) {
-		node = node_bin(NODE_COMMA, parse_assign(tok->next, &tok), node, tok);
+		node = node_bin(NODE_COMMA, node, parse_assign(tok->next, &tok), tok);
 		goto parse;
 	}
 	*rest = tok;
