@@ -6,3 +6,5 @@
 - preprocessor
 - performance...
 - use dynamic arrays instead of linked lists if appropiate. i am tired of linked lists
+- struct, union ABI
+    - requires type information to be passed to IR calls

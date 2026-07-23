@@ -321,6 +321,7 @@ static void ir_ins_abi_call_aarch64(FILE *f, ir_func_t *func, ir_blk_t *blk,
 			stack_indx = space_needed;
 			space_needed += args[i]->size;
 		}
+		space_needed = align_to(space_needed, 16);
 		fprintf(f, "\tsub sp, sp, #%zu\n", space_needed);
 	}
 
@@ -361,6 +362,7 @@ static void ir_ins_abi_call_aarch64(FILE *f, ir_func_t *func, ir_blk_t *blk,
 			stack_indx -= args[i]->size;
 		}
 	}
+
 	fprintf(f, "\tbl _%s\n", ins->fname);
 	if(ins->r0) {
 		if(ins->is_32bit) {
