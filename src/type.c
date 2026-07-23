@@ -272,6 +272,10 @@ void type_propagate(node_t *node)
 		node->type = node->lhs->type->unsignd ? TY_UINT : TY_INT;
 		break;
 
+	case NODE_COMMA:
+		node->type = node->rhs->type;
+		break;
+
 	case NODE_VAR:
 		node->type = node->var->type;
 		if(node->var->type->kind == TYPE_VOID) {

@@ -198,6 +198,8 @@ static void ast_visit(node_t *n, int tab)
 		out("Less");
 	case NODE_LE:
 		out("LessEqual");
+	case NODE_COMMA:
+		out("Comma");
 	case NODE_EXPR_STMT:
 		out("ExprStmt");
 	case NODE_RET:

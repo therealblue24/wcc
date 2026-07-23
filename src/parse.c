@@ -689,7 +689,7 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 
 static node_t *parse_initializer(token_t *tok, token_t **rest)
 {
-	return parse_expr(tok, rest);
+	return parse_assign(tok, rest);
 }
 
 static type_t *parse_direct_declarator(type_t *root, token_t *tok,
@@ -1450,7 +1450,14 @@ parse:
 
 static node_t *parse_expr(token_t *tok, token_t **rest)
 {
-	return parse_assign(tok, rest);
+	node_t *node = parse_assign(tok, &tok);
+parse:
+	if(token_eq(tok, ",")) {
+		node = node_bin(NODE_COMMA, node, parse_assign(tok->next, &tok), tok);
+		goto parse;
+	}
+	*rest = tok;
+	return node;
 }
 
 static node_t *parse_stmt_expr(token_t *tok, token_t **rest)

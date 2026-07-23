@@ -34,6 +34,7 @@ enum node_kind {
 	NODE_GE, /* greater than or equal to >= */
 	NODE_LT, /* less than < */
 	NODE_LE, /* less than or equal to <= */
+	NODE_COMMA, /* comma , */
 	NODE_EXPR_STMT, /* expression statement */
 	NODE_RET, /* return stmt */
 	NODE_BLOCK, /* block of stmts */

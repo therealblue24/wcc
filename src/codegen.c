@@ -226,6 +226,10 @@ reg_t *codegen_expr(node_t *node)
 		emit_store_obj(type, lval, rval);
 		return rval;
 	};
+	case NODE_COMMA: {
+		(void)codegen_expr(node->lhs);
+		return codegen_expr(node->rhs);
+	};
 	case NODE_FUNCALL: {
 		LIST(callreg_t *) callargs = list_make(reg_t *);
 		node_t *arg = node->fargs;
