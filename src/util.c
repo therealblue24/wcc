@@ -245,6 +245,10 @@ static void ast_visit(node_t *n, int tab)
 		indent(tab + 1);
 		printf("%s\n", n->var->name);
 	}
+	if(n->kind == NODE_MEMBER) {
+		indent(tab + 1);
+		printf("%s\n", n->memb->ident->content);
+	}
 	if(n->kind == NODE_NUM) {
 		indent(tab + 1);
 		printf("%lld\n", n->num);
