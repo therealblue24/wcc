@@ -18,14 +18,33 @@ static void dealloc_stuff()
 	strmap_delete(defines);
 }
 
-static void add_define(char *name, token_t *toks)
+static void rem_define(char *name)
 {
 	if(strmap_has(defines, name)) {
 		token_delete_all(*strmap_get(defines, name));
 		strmap_del(defines, name);
 	}
+}
 
+static void add_define(char *name, token_t *toks)
+{
+	rem_define(name);
 	strmap_put(defines, name, toks);
+	return;
+}
+
+/* assumes content is 1 token */
+static void add_builtin_define(char *name, char *content, enum token_kind k)
+{
+	char *cpy = scr_strdup(content);
+	token_t *tok = token_make(k, cpy, cpy + strlen(content));
+	if(k == TOK_NUM) {
+		tok->num = atol(content);
+	}
+	token_t *end =
+		token_make(TOK_END, cpy + strlen(content), cpy + strlen(content));
+	tok->next = end;
+	add_define(name, tok);
 	return;
 }
 
@@ -37,6 +56,8 @@ static int change = 1;
 token_t *preproc_do(token_t *toks_in)
 {
 	alloc_stuff();
+	add_builtin_define("__wcc__", "1", TOK_NUM);
+	add_builtin_define("__STDC_VERSION__", "201112", TOK_NUM);
 
 	token_t *toks = toks_in;
 	while(change) {
@@ -69,6 +90,19 @@ static token_t *preproc_handle_directive(token_t **prev, token_t *dir)
 		token_delete(dir);
 
 		return end;
+	}
+	if(token_eat(&nxt, "undef")) {
+		if(nxt->kind != TOK_IDENT) {
+			compile_err(nxt->loc, "expected an identifier");
+		}
+		char *ident = nxt->content;
+		nxt = nxt->next;
+		rem_define(ident);
+		token_delete(dir->next->next); /* nameident */
+		token_delete(dir->next); /* undef */
+		token_delete(dir); /* # */
+		(*prev)->next = nxt;
+		return nxt;
 	}
 	if(token_eat(&nxt, "define")) {
 		token_t *save;
@@ -131,7 +165,7 @@ static token_t *duplicate(token_t *tok, token_t **last)
 {
 	token_t *chain = NULL;
 	token_t *chain_start = NULL;
-	while(tok->kind != TOK_END) {
+	while(tok && tok->kind != TOK_END) {
 		token_t *copy = token_make(TOK_END, NULL, NULL);
 		memcpy(copy, tok, sizeof(token_t));
 		if(copy->str)
