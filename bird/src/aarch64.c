@@ -181,6 +181,28 @@ static void emit_str(FILE *f, const char *str, size_t len)
 	fprintf(f, "\"\n");
 }
 
+static int common_case_glob(FILE *f, ir_global_t *glob)
+{
+	if(glob->size == 1) {
+		fprintf(f, "\t.byte %hhu\n", glob->data[0]);
+		return 0;
+	} else if(glob->size == 2) {
+		uint16_t *data = (uint16_t *)glob->data;
+		fprintf(f, "\t.short %hu\n", data[0]);
+		return 0;
+	} else if(glob->size == 4) {
+		uint32_t *data = (uint32_t *)glob->data;
+		fprintf(f, "\t.long %u\n", data[0]);
+		return 0;
+	} else if(glob->size == 8) {
+		uint64_t *data = (uint64_t *)glob->data;
+		fprintf(f, "\t.quad %llu\n", data[0]);
+		return 0;
+	}
+
+	return 1;
+}
+
 void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
 {
 	if(!glob->is_anon) {
@@ -195,8 +217,10 @@ void ir_glob_emit_aarch64_apple(FILE *f, ir_global_t *glob)
 		if(glob->is_str) {
 			emit_str(f, (const char *)glob->data, glob->size);
 		} else {
-			for(size_t i = 0; i < glob->size; i++) {
-				fprintf(f, "\t.byte %hhu\n", glob->data[i]);
+			if(common_case_glob(f, glob)) {
+				for(size_t i = 0; i < glob->size; i++) {
+					fprintf(f, "\t.byte %hhu\n", glob->data[i]);
+				}
 			}
 		}
 	}
