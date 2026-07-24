@@ -1,8 +1,4 @@
 #include "bird.h"
-#include "immfold.h"
-#include "ir.h"
-#include "liveness.h"
-#include "ssa.h"
 #include <stdint.h>
 
 extern int debug;

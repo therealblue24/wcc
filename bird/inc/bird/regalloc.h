@@ -3,7 +3,7 @@
 #define IR_REGALLOC_H_
 
 #include "ir.h"
-#include "liveness.h"
+#include "live.h"
 #include <stdbool.h>
 
 /* do the register allocation for `amount` of registers */
