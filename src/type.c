@@ -221,16 +221,16 @@ static bool quick_type_same_chk(type_t *left, type_t *right)
 		return true;
 	}
 
+	if(memcmp(left, right, sizeof(type_t)) == 0) {
+		return true;
+	}
+
 	if(left->unsignd == right->unsignd && left->kind == right->kind &&
 	   left->align == right->align) {
 		enum type_kind k = left->kind;
 		if(k == TYPE_VOID || type_is_int(left) || k == TYPE_PTR) {
 			return true;
 		}
-	}
-
-	if(memcmp(left, right, sizeof(type_t)) == 0) {
-		return true;
 	}
 
 	return false;

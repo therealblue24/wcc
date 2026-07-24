@@ -188,6 +188,7 @@ struct ir_global;
 /* an IR instruction. is a linked list */
 typedef struct ir_inst {
 	struct ir_inst *next; /* next ins */
+	struct ir_inst *next_mem; /* next memory instruction: used for optimizer */
 	enum ins_type type; /* instruction type */
 	reg_t *r0, *r1, *r2; /* instruction args */
 	uint64_t imm; /* immediate, if needed */

@@ -598,22 +598,49 @@ static void ir_zeroopt(ir_inst_t *inst)
 	return;
 }
 
+static int ins_is_mem(enum ins_type t)
+{
+	return t == IR_INST_LOAD || t == IR_INST_LOADS || t == IR_INST_STORE ||
+		   t == IR_INST_STORES;
+}
+
+static void build_next_mem_ins(ir_func_t *func)
+{
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		ir_inst_t *prev = NULL;
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(!prev && ins_is_mem(inst->type)) {
+				prev = inst;
+				continue;
+			}
+
+			if(ins_is_mem(inst->type)) {
+				prev->next_mem = inst;
+			} else {
+				continue;
+			}
+
+			prev = inst;
+		}
+	}
+}
+
 static int ir_memopt_ins(ir_inst_t *ins)
 {
 	int change = 0;
-	ir_inst_t *nxt = ins->next;
+	ir_inst_t *nxt = ins->next_mem;
 
 	/* rewrite
 	 * %r0 = load %adr
 	 * store %adr, %r0
 	 * ->
 	 * nop
-	 * nop
+	 * store %adr, %r0
 	 */
 	if(nxt && ins->type == IR_INST_LOAD && nxt->type == IR_INST_STORE &&
 	   ins->r0 == nxt->r2 && ins->r1 == nxt->r1 && ins->size == nxt->size) {
 		ins->type = IR_INST_NOP;
-		nxt->type = IR_INST_NOP;
 		change = 1;
 	}
 
@@ -736,6 +763,7 @@ static int ir_memopt(ir_func_t *func)
 {
 	int change = 0;
 
+	build_next_mem_ins(func);
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
@@ -1877,7 +1905,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		change = 0;
 
 		TIMEIT("info", {
-			TIMEIT("use", { ir_blk_reguse(func); });
+			/* currently unused */
+			// TIMEIT("use", { ir_blk_reguse(func); });
 			TIMEIT("live", { ir_blk_liveness(func); });
 			TIMEIT("mark", { ir_placemarks(func); });
 		});

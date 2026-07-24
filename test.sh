@@ -4,7 +4,7 @@ passing=1
 
 ./bin/wcc test/one_impl.c -o test/one.s -O3
 clang -c test/one.s -o one.o
-cc -c -o cc.o test/cc.c -O3
+clang -c -o cc.o test/cc.c -O3
 
 ./bin/wcc --internal-test-strmap
 
