@@ -71,8 +71,8 @@ typedef struct obj {
 	type_t *type; /* type of this var */
 	bool addressed; /* is this variable addressed? (used for optimization) */
 	bool skip; /* has this variable been turned into a register? */
-
-	bool is_func; /* is this object af function? */
+	bool is_func; /* is this object a function? */
+	bool is_static; /* is this object static? */
 	struct node *body; /* body of the function */
 	LIST(struct obj *) vars; /* variables of the function */
 	struct obj *args; /* arguments to function */

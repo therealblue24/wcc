@@ -859,7 +859,9 @@ static void ir_func_restore_regs_callee(FILE *f, ir_func_t *fun, int save)
 
 void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 {
-	fprintf(f, "\t.globl _%s\n", fun->name);
+	if(!fun->is_local) {
+		fprintf(f, "\t.globl _%s\n", fun->name);
+	}
 	fprintf(f, "\t.text\n");
 	fprintf(f, "_%s:\n", fun->name);
 	/* enter stack frame */

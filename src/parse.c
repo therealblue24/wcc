@@ -443,7 +443,8 @@ static bool is_declspec(token_t *tok)
 	   token_eq(tok, "long") || token_eq(tok, "int") ||
 	   token_eq(tok, "signed") || token_eq(tok, "unsigned") ||
 	   token_eq(tok, "_Alignas") || token_eq(tok, "struct") ||
-	   token_eq(tok, "union") || token_eq(tok, "typedef") || find_type(tok)) {
+	   token_eq(tok, "static") || token_eq(tok, "union") ||
+	   token_eq(tok, "typedef") || find_type(tok)) {
 		return true;
 	}
 	return false;
@@ -580,6 +581,7 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 	uint64_t align = 0;
 	type_t *res = NULL;
 	bool unsign = false;
+	bool is_static = false;
 
 	if(token_eq(tok, "struct") || token_eq(tok, "union")) {
 		return parse_struct_or_union(tok, rest);
@@ -590,6 +592,11 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 	}
 
 	while(is_declspec(tok)) {
+		if(token_eat(&tok, "static")) {
+			is_static = true;
+			continue;
+		}
+
 		if(token_eq(tok, "long")) {
 			tok = token_skip(tok, "long");
 			*rest = tok;
@@ -680,6 +687,8 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 	if(align) {
 		res->align = align;
 	}
+
+	res->is_static = is_static;
 
 	res->unsignd = unsign;
 
@@ -1793,27 +1802,48 @@ static type_t *parse_parameter_declaration(token_t *tok, token_t **rest)
 
 static void parse_global_var(type_t *decltype, token_t *tok, token_t **rest)
 {
-	obj_t *found = NULL;
+	obj_t *var = NULL;
 
-	if(!(found = find_var(decltype->ident))) {
-		(void)obj_make_global(mystrndup(decltype->ident->loc,
+	if(!(var = find_var(decltype->ident))) {
+		var = obj_make_global(mystrndup(decltype->ident->loc,
 										decltype->ident->len),
 							  decltype, false);
+		var->is_static = decltype->is_static;
+		/* handle initalizer */
+		if(token_eat(&tok, "=")) {
+			node_t *init = parse_initializer(tok, &tok);
+			type_propagate(init);
+			/* assumes little endian */
+			uint64_t *cpy = scr_alloc(8);
+			*cpy = init->num;
+			var->data = (uint8_t *)cpy;
+			var->data_size = init->type->size;
+		}
 	}
 
 	while(token_eq(tok, ",")) {
 		tok = token_skip(tok, ",");
-		if(!(found = find_var(decltype->ident))) {
-			(void)obj_make_global(mystrndup(decltype->ident->loc,
-											decltype->ident->len),
-								  decltype, false);
+		if(!(var = find_var(tok))) {
+			var =
+				obj_make_global(mystrndup(tok->loc, tok->len), decltype, false);
+			var->is_static = decltype->is_static;
+			tok = tok->next;
+		}
+		/* handle initalizer */
+		if(token_eat(&tok, "=")) {
+			node_t *init = parse_initializer(tok, &tok);
+			type_propagate(init);
+			/* assumes little endian */
+			uint64_t *cpy = scr_alloc(8);
+			*cpy = init->num;
+			var->data = (uint8_t *)cpy;
+			var->data_size = init->type->size;
 		}
 	}
 
-	if(!token_eq(tok, ";")) {
+	if(!token_eat(&tok, ";")) {
 		compile_err(tok->loc, "expected a semicolon");
 	}
-	tok = token_skip(tok, ";");
 
 	*rest = tok;
 	return;
@@ -1834,6 +1864,7 @@ static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 	} else {
 		func = obj_make_noadd(name, type_func_to(decltype), true);
 		func->order = local_order++;
+		func->is_static = decltype->is_static;
 	}
 
 	scope_push();

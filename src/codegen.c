@@ -582,6 +582,9 @@ static void assign_globals(LIST(obj_t *) globals)
 		}
 
 		glob->glob->is_anon = glob->is_anon;
+		if(glob->is_static) {
+			glob->glob->is_anon = true;
+		}
 	}
 	return;
 }
@@ -792,6 +795,7 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 
 		ENSURE(cur_fn->is_func, "tried to generate code for a variable");
 		ir_func_t *func = ir_buildr_make_func(build, cur_fn->name);
+		func->is_local = cur_fn->is_static;
 		fun = func;
 		fun_obj = cur_fn;
 		func->args = list_make(callreg_t *);

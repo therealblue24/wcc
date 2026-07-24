@@ -82,6 +82,7 @@ void ir_prog_begin_x64_sysv(FILE *f, ir_prog_t *prog)
 	fprintf(f, "\t.text\n");
 
 	fprintf(f, "\t.align 16\n");
+	/* correct syntax */
 	fprintf(f, "\t.intel_syntax noprefix\n");
 	return;
 }
@@ -889,8 +890,9 @@ static void ir_func_restore_regs(FILE *f, ir_func_t *fun)
 void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 {
 	char *name = fun->name;
-	/* correct syntax */
-	fprintf(f, "\t.global %s\n", name);
+	if(!fun->is_local) {
+		fprintf(f, "\t.global %s\n", name);
+	}
 	fprintf(f, "\t.text\n");
 	fprintf(f, "%s:\n", name);
 

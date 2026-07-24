@@ -29,6 +29,7 @@ typedef struct type {
 	token_t *ident; /* identifier of type */
 	size_t alen; /* array length */
 	bool unsignd; /* is this type unsigned? */
+	bool is_static; /* is this type static? */
 } type_t;
 
 extern type_t *TY_VOID;

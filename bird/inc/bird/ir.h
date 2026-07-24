@@ -240,6 +240,7 @@ typedef struct ir_func {
 	bool alloc_strat; /* false = prefer caller-save first, true = prefer callee-save first */
 	bool *alloc_used; /* used registers for allocation (for push-ing/pop-ing) */
 	LIST(callreg_t *) args; /* arguments to this function */
+	bool is_local; /* is this function local (static)? */
 } ir_func_t;
 
 /* global variable */
