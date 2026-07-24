@@ -1928,6 +1928,26 @@ end:
 
 	func->body = parse_compound_stmt(tok, &tok);
 
+	/* add return 0; to end of main */
+	if(strcmp(func->name, "main") == 0) {
+		node_t *last = func->body->body;
+		for(; last->next; last = last->next)
+			;
+		if(last->kind != NODE_RET) {
+			last->next = node_unary(NODE_RET, node_num(0, NULL), NULL);
+			type_propagate(last->next);
+		}
+	} else if(func->type->to->kind == TYPE_VOID) {
+		/* add return; to end of any void func */
+		node_t *last = func->body->body;
+		for(; last->next; last = last->next)
+			;
+		if(last->kind != NODE_RET) {
+			last->next = node_unary(NODE_RET, NULL, NULL);
+			type_propagate(last->next);
+		}
+	}
+
 	scope_pop();
 	*rest = tok;
 	return func;

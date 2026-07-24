@@ -7,6 +7,7 @@
 #include "zz/prof.h"
 #include <stdlib.h>
 
+static int did_ret = 0;
 static ir_func_t *fun;
 static obj_t *fun_obj;
 static long blk_num;
@@ -434,6 +435,7 @@ void codegen_stmt(node_t *node)
 	}; break;
 
 	case NODE_RET: {
+		did_ret = 1;
 		type_t *rettype = fun_obj->type->to;
 
 		if(node->lhs && rettype->kind != TYPE_VOID) {
@@ -815,6 +817,11 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 
 		fun->stack_needed = align_to(cur_fn->stack_size, 16);
 		codegen_stmt(cur_fn->body);
+		if(cur_fn->type->to->kind != TYPE_VOID && !did_ret &&
+		   strcmp(cur_fn->name, "main") != 0) {
+			compile_err_node(cur_fn->body, "function must return something");
+		}
+		did_ret = 0;
 		list_hdr(break_stack)->size = 0;
 
 		varopt(func);
