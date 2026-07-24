@@ -52,6 +52,10 @@ static void load_imm(FILE *f, char *reg, uint64_t imm_)
 		return;
 	}
 
+	if(imms >= -65535 && imms < 0) {
+		fprintf(f, "\tmovn %s, #%lld\n", reg, -imms);
+	}
+
 	/* load into w reg instead */
 	if((imm & 0xffffffff) == imm) {
 		load_imm_w(f, reg, imm);
@@ -70,9 +74,6 @@ static void load_imm(FILE *f, char *reg, uint64_t imm_)
 
 static int load_fp_imm_x10(FILE *f, long off, bool save)
 {
-	if((-off) >= 65535) {
-		ERROR("cannot emit code: stack size larger than 64K");
-	}
 	if((-off) < 255) {
 		return 0;
 	}
@@ -81,7 +82,7 @@ static int load_fp_imm_x10(FILE *f, long off, bool save)
 		fprintf(f, "\tstr x10, [sp, #-16]!\n");
 	}
 
-	fprintf(f, "\tmovn x10, #%llu\n", (uint64_t)(-off));
+	load_imm(f, "x10", off);
 	return 1;
 }
 
@@ -727,7 +728,7 @@ set_cond:
 			}
 			break;
 		case IR_INST_LEAS:
-			if(load_fp_imm_x10(f, imm, false)) {
+			if(load_fp_imm_x10(f, -imm, false)) {
 				fprintf(f, "\tadd %s, fp, x10\n", r0x);
 			} else {
 				fprintf(f, "\tsub %s, fp, #%lld\n", r0x, imm);
@@ -915,7 +916,17 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 	}
 
 	if(alignd) {
-		fprintf(f, "\tsub sp, sp, #%zu\n", alignd);
+		size_t alignd2 = alignd;
+		int count = 0;
+		while(alignd2) {
+			fprintf(f, "\tsub sp, sp, #%zu", alignd2 & 4095);
+			if(count) {
+				fprintf(f, ", lsl #%d", count);
+			}
+			fprintf(f, "\n");
+			count += 12;
+			alignd2 >>= 12;
+		}
 	}
 
 	size_t len = list_len(fun->blocks);
