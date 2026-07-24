@@ -215,12 +215,33 @@ promote:
 	return promote_to;
 }
 
+static bool quick_type_same_chk(type_t *left, type_t *right)
+{
+	if(left == right) {
+		return true;
+	}
+
+	if(left->unsignd == right->unsignd && left->kind == right->kind &&
+	   left->align == right->align) {
+		enum type_kind k = left->kind;
+		if(k == TYPE_VOID || type_is_int(left) || k == TYPE_PTR) {
+			return true;
+		}
+	}
+
+	if(memcmp(left, right, sizeof(type_t)) == 0) {
+		return true;
+	}
+
+	return false;
+}
+
 static void usual_arith_conv(node_t **lhs, node_t **rhs)
 {
 	type_t *promote_to = usual_arith_conv_type((*lhs)->type, (*rhs)->type);
-	if((*lhs)->type != promote_to)
+	if(!quick_type_same_chk((*lhs)->type, promote_to))
 		fastcast(lhs, promote_to);
-	if((*rhs)->type != promote_to)
+	if(!quick_type_same_chk((*rhs)->type, promote_to))
 		fastcast(rhs, promote_to);
 	return;
 }
@@ -230,6 +251,10 @@ void type_propagate(node_t *node)
 	if(!node) {
 		return;
 	}
+	if(node->visited) {
+		return;
+	}
+	node->visited = true;
 
 	type_propagate(node->lhs);
 	type_propagate(node->rhs);
