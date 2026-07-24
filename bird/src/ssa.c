@@ -2,7 +2,6 @@
 
 #include "bird.h"
 #include "ir.h"
-#include "liveness.h"
 #include <stdint.h>
 
 static void find_before_last_term_ins(ir_blk_t *blk)

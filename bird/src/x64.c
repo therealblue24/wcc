@@ -1,6 +1,5 @@
 #include "bird.h"
 #include "ir.h"
-#include "liveness.h"
 #include <inttypes.h>
 #include <ctype.h>
 
