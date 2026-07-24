@@ -131,6 +131,7 @@ typedef struct node {
 	char *label;
 	struct node *label_node;
 	bool visited;
+	bool typed; /* is this node already typed? */
 
 	char *fname; /* function name, for NODE_FUNCALL */
 	struct node *fargs; /* function arguments, for NODE_FUNCALL */

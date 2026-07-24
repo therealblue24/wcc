@@ -29,30 +29,6 @@ static void sema_visit(node_t *node)
 	return;
 }
 
-static void unvisit(node_t *node)
-{
-	if(!node) {
-		return;
-	}
-	node->visited = false;
-	unvisit(node->lhs);
-	unvisit(node->rhs);
-	unvisit(node->next);
-	unvisit(node->cond);
-	unvisit(node->then);
-	unvisit(node->elze);
-	unvisit(node->init);
-	unvisit(node->inc);
-
-	for(node_t *b = node->body; b; b = b->next) {
-		unvisit(b);
-	}
-	for(node_t *b = node->fargs; b; b = b->next) {
-		unvisit(b);
-	}
-	return;
-}
-
 static void map_labels(node_t *node)
 {
 	if(!node) {
@@ -123,7 +99,6 @@ static void sema_visit_core(node_t *node)
 void sema_do(node_t *prog)
 {
 	goto_labels = strmap_make(node_t *);
-	TIMEIT("unvisit", { unvisit(prog); });
 	TIMEIT("map", { map_labels(prog); });
 	TIMEIT("core", { sema_visit(prog); });
 	strmap_delete(goto_labels);

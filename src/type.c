@@ -251,10 +251,10 @@ void type_propagate(node_t *node)
 	if(!node) {
 		return;
 	}
-	if(node->visited) {
+	if(node->typed) {
 		return;
 	}
-	node->visited = true;
+	node->typed = true;
 
 	type_propagate(node->lhs);
 	type_propagate(node->rhs);
