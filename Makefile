@@ -131,7 +131,7 @@ link: build-zz build-bird build
 	@cp bird/bin/libbird.a $(BINDIR)/libbird.a
 	@cp zz/bin/libzz.a $(BINDIR)/libzz.a
 	@echo "linking $(APP)"
-	@$(CC) -o $(BINDIR)/$(APP) $(LDFLAGS) $(OBJ)
+	@$(CC) -o $(BINDIR)/$(APP) $(OBJ) $(LDFLAGS) 
 	@echo "made $(APP)"
 
 # remove bins
