@@ -913,7 +913,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	if(alen > 6) {
 		for(size_t i = 6; i < alen; i++) {
 			stack_indx = space_needed;
-			space_needed += fun->args[i]->size;
+			space_needed += 8;
 		}
 	}
 	/* setup function frame */
