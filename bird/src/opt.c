@@ -655,6 +655,33 @@ static int ir_memopt_ins(ir_inst_t *ins)
 	}
 
 	/* rewrite
+	 * %r0 = loads #adr
+	 * stores #adr, %r0
+	 * ->
+	 * nop
+	 * stores #adr, %r0
+	 */
+	if(nxt && ins->type == IR_INST_LOADS && nxt->type == IR_INST_STORES &&
+	   ins->r0 == nxt->r1 && ins->imm == nxt->imm && ins->size == nxt->size) {
+		ins->type = IR_INST_NOP;
+		change = 1;
+	}
+
+	/* rewrite
+	 * stores #adr, %r0
+	 * %r1 = loads #adr
+	 * ->
+	 * stores #adr, %r0
+	 * %r1 = %r0
+	 */
+	if(nxt && ins->type == IR_INST_STORES && nxt->type == IR_INST_LOADS &&
+	   ins->imm == nxt->imm && ins->size == nxt->size) {
+		nxt->type = IR_INST_MOV;
+		nxt->r1 = ins->r1;
+		change = 1;
+	}
+
+	/* rewrite
 	 * %r1 = loads #adr
 	 * %r2 = loads #adr
 	 * ->

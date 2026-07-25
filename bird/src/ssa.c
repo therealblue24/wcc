@@ -433,8 +433,10 @@ static void assemble_pmov(edge_t edge, int where)
 		reg_t *dst = inst->r0;
 		for(size_t j = 0; j < list_len(inst->phi_args); j++) {
 			if(inst->phi_preds[j] == edge.from) {
-				reg_pmov_t mov = { .dst = dst, .src = inst->phi_args[j] };
-				list_append(pmov->pmov_args, mov);
+				if(dst != inst->phi_args[j]) {
+					reg_pmov_t mov = { .dst = dst, .src = inst->phi_args[j] };
+					list_append(pmov->pmov_args, mov);
+				}
 				goto cont;
 			}
 		}
