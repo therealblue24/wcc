@@ -446,7 +446,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			}
 			p--;
 
-			for(size_t i = list_len(ins->call_args); i >= 6; i--) {
+			for(size_t i = list_len(ins->call_args) - 1; i >= 6; i--) {
 				int arg = ins->call_args[i]->r->rr;
 				if(ins->call_args[i]->r->spilld2) {
 					arg = 7;
@@ -930,7 +930,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 			store(f, arg->size, 14, false, "[rbp - %lld]",
 				  i64abs((int64_t)arg->r->off));
 
-			stack_indx -= arg->size;
+			stack_indx -= 8;
 		}
 	}
 
