@@ -1991,6 +1991,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 		/* branch opts */
 		TIMEIT("bropt", {
+			ir_placemarks(func);
 			change |= ir_branchopt(func);
 			ir_nopremover(func);
 			ir_fix(func);

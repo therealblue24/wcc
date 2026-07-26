@@ -703,6 +703,26 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("%%r%ld = cmp.ugt %%r%ld, %%r%ld", r0, r1, r2);
 	case IR_INST_UGE:
 		out("%%r%ld = cmp.uge %%r%ld, %%r%ld", r0, r1, r2);
+	case IR_INST_EQI:
+		out("%%r%ld = cmpi.eq %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_NEI:
+		out("%%r%ld = cmpi.ne %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_SLTI:
+		out("%%r%ld = cmpi.slt %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_SLEI:
+		out("%%r%ld = cmpi.sle %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_SGTI:
+		out("%%r%ld = cmpi.sgt %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_SGEI:
+		out("%%r%ld = cmpi.sge %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_ULTI:
+		out("%%r%ld = cmpi.ult %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_ULEI:
+		out("%%r%ld = cmpi.ule %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_UGTI:
+		out("%%r%ld = cmpi.ugt %%r%ld, #%lld", r0, r1, imm);
+	case IR_INST_UGEI:
+		out("%%r%ld = cmpi.uge %%r%ld, #%lld", r0, r1, imm);
 	case IR_INST_LOAD:
 		out("%%r%ld = load%s%s %%r%ld", r0, suf, ext, r1);
 	case IR_INST_STORE:
@@ -784,8 +804,43 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	case IR_INST_BRUGE:
 		out("br.uge %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
-	case IR_INST_RET:
-		out("ret %%r%ld", r1);
+	case IR_INST_BREQI:
+		out("br.eqi %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRNEI:
+		out("br.nei %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRSLTI:
+		out("br.slti %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRSLEI:
+		out("br.slei %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRSGTI:
+		out("br.sgti %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRSGEI:
+		out("br.sgei %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRULTI:
+		out("br.ulti %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRULEI:
+		out("br.ulei %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRUGTI:
+		out("br.ugti %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_BRUGEI:
+		out("br.ugei %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+			ins->false_blk->num);
+	case IR_INST_RET: {
+		if(ins->r1) {
+			out("ret %%r%ld", r1);
+		} else {
+			out("ret");
+		}
+	}
 	case IR_INST_LEAS:
 		out("%%r%ld = leas #%ld", r0, (long)imm);
 	case IR_INST_LEA:
