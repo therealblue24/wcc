@@ -315,6 +315,9 @@ void ir_replace_reg(ir_func_t *fun, reg_t *from, reg_t *to)
 #define intersect ir_intersect
 bool ir_intersect(reg_t *a, reg_t *b)
 {
+	if(a == b) {
+		return true;
+	}
 	/* thx https://stackoverflow.com/a/1558990 */
 	return !((USE(a->last_use) < DEF(b->def)) ||
 			 (USE(b->last_use) < DEF(a->def)));
@@ -401,6 +404,7 @@ void ir_coalesce(ir_func_t *fun)
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		fun->blocks[i]->visited = false;
 	}
+	return;
 }
 
 /* calculates register defs & last use for all blocks in `fun` */

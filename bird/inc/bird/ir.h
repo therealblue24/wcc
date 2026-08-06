@@ -147,6 +147,7 @@ typedef struct reg {
 	enum ins_type insty;
 	struct reg *lhs;
 	struct reg *rhs;
+	struct reg *uf; /* union find set */
 	struct ir_inst *from; /* NOT meant to be used for any pass except phiopt! */
 	size_t size; /* instruction size of register */
 	bool is_32bit;
@@ -216,7 +217,11 @@ typedef struct ir_blk {
 
 	/* register allocation stuff */
 	bool visited;
+	bool active;
 	uint64_t loop_order; /* how much times this block is reached when visited */
+	uint64_t loop_index; /* index of loop */
+	uint64_t loop_depth; /* depth of loop */
+	uint64_t incoming; /* how much incoming edges into this block? */
 	LIST(struct ir_blk *) succ; /* block's successors */
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */
@@ -241,6 +246,7 @@ typedef struct ir_func {
 	bool *alloc_used; /* used registers for allocation (for push-ing/pop-ing) */
 	LIST(callreg_t *) args; /* arguments to this function */
 	bool is_local; /* is this function local (static)? */
+	bool need_frame; /* does this function need a stack frame? */
 } ir_func_t;
 
 /* global variable */
@@ -423,5 +429,15 @@ ir_global_t *ir_glob_make(char *name, size_t size, size_t align, uint8_t *data);
 
 /* delete a global variable */
 void ir_glob_delete(ir_global_t *glob);
+
+/* -- union find mechanism -- */
+/* dst = src; */
+void ir_union(reg_t *dst, reg_t *src);
+
+/* return (val of src); */
+reg_t *ir_find(reg_t *src);
+
+/* rewrites whole function via ir_find */
+void ir_rewrite(ir_func_t *fun);
 
 #endif /* IR_H_ */

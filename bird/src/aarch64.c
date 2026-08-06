@@ -890,9 +890,13 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 	fprintf(f, "_%s:\n", fun->name);
 	/* enter stack frame */
 	size_t alignd = align_to(fun->stack_needed, 16);
-	fprintf(f, "\tstp fp, lr, [sp, #-16]!\n");
+	if(fun->need_frame) {
+		fprintf(f, "\tstp fp, lr, [sp, #-16]!\n");
+	}
 	int save = ir_func_save_regs_callee(f, fun);
-	fprintf(f, "\tmov fp, sp\n");
+	if(fun->need_frame) {
+		fprintf(f, "\tmov fp, sp\n");
+	}
 
 	size_t alen = list_len(fun->args);
 	size_t stack_indx = 0;
@@ -941,7 +945,7 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 		}
 	}
 
-	if(alignd) {
+	if(alignd && fun->need_frame) {
 		size_t alignd2 = alignd;
 		int count = 0;
 		while(alignd2) {
@@ -963,11 +967,14 @@ void ir_func_emit_aarch64_apple(FILE *f, ir_func_t *fun)
 
 	/* leave stack frame */
 	fprintf(f, ".L%s_ret:\n", fun->name);
-	fprintf(f, "\tmov sp, fp\n");
+	if(fun->need_frame) {
+		fprintf(f, "\tmov sp, fp\n");
+	}
 	ir_func_restore_regs_callee(f, fun, save);
-	fprintf(f, "\tldp fp, lr, [sp], #16\n");
-	fprintf(f, "\tret\n");
-	fprintf(f, "\n");
+	if(fun->need_frame) {
+		fprintf(f, "\tldp fp, lr, [sp], #16\n");
+	}
+	fprintf(f, "\tret\n\n");
 
 	return;
 }

@@ -581,5 +581,27 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 
 	(void)ir_choose_alloc_strat(fun, amount, callee_cost, caller_cost);
 
+	/* determine if function needs frame */
+
+	if(list_len(fun->args)) {
+		fun->need_frame = true;
+		return;
+	}
+
+	if(fun->stack_needed) {
+		fun->need_frame = true;
+		return;
+	}
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type == IR_INST_CALL) {
+				fun->need_frame = true;
+				return;
+			}
+		}
+	}
+
 	return;
 }

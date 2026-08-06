@@ -449,16 +449,18 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			}
 			p--;
 
-			for(size_t i = list_len(ins->call_args) - 1; i >= 6; i--) {
-				int arg = ins->call_args[i]->r->rr;
-				if(ins->call_args[i]->r->spilld2) {
-					arg = 7;
-					fprintf(f, "\tmov %s, [rbp - %lld]\n", x64_reg[arg],
-							i64abs(ins->call_args[i]->r->off));
-				}
+			if(list_len(ins->call_args)) {
+				for(size_t i = list_len(ins->call_args) - 1; i >= 6; i--) {
+					int arg = ins->call_args[i]->r->rr;
+					if(ins->call_args[i]->r->spilld2) {
+						arg = 7;
+						fprintf(f, "\tmov %s, [rbp - %lld]\n", x64_reg[arg],
+								i64abs(ins->call_args[i]->r->off));
+					}
 
-				fprintf(f, "\tpush %s\n", x64_reg[arg]);
-				stack_used += 8;
+					fprintf(f, "\tpush %s\n", x64_reg[arg]);
+					stack_used += 8;
+				}
 			}
 
 			for(int i = 0; i < 16; i++) {
@@ -900,10 +902,14 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 
 	/* enter stack frame */
 	size_t alignd = align_to(fun->stack_needed, 16);
-	fprintf(f, "\tpush rbp\n");
+	if(fun->need_frame) {
+		fprintf(f, "\tpush rbp\n");
+	}
 	ir_func_save_regs(f, fun);
 
-	fprintf(f, "\tmov rbp, rsp\n");
+	if(fun->need_frame) {
+		fprintf(f, "\tmov rbp, rsp\n");
+	}
 	size_t alen = list_len(fun->args);
 	size_t stack_indx = 0;
 	size_t space_needed = 0;
@@ -937,7 +943,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 		}
 	}
 
-	if(alignd) {
+	if(alignd && fun->need_frame) {
 		fprintf(f, "\tsub rsp, %zu\n", alignd);
 	}
 
@@ -949,12 +955,15 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 
 	/* leave stack frame */
 	fprintf(f, "%s_ret:\n", name);
-
-	fprintf(f, "\tmov rsp, rbp\n");
+	if(fun->need_frame) {
+		fprintf(f, "\tmov rsp, rbp\n");
+	}
 	ir_func_restore_regs(f, fun);
-	fprintf(f, "\tpop rbp\n");
-	fprintf(f, "\tret\n");
-	fprintf(f, "\n");
+	if(fun->need_frame) {
+		fprintf(f, "\tpop rbp\n");
+	}
+
+	fprintf(f, "\tret\n\n");
 
 	return;
 }

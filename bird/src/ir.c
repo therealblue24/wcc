@@ -585,7 +585,78 @@ void ir_fix(ir_func_t *func)
 	return;
 }
 
-char size_suf[9] = { [1] = 'b', [2] = 'w', [4] = 'l', [8] = 'q' };
+/* -- union find mechanism -- */
+/* dst = src; */
+void ir_union(reg_t *dst, reg_t *src)
+{
+	dst->uf = src;
+	return;
+}
+
+/* return (val of src); */
+reg_t *ir_find(reg_t *src)
+{
+	reg_t *cur = src;
+	while(cur->uf) {
+		cur = cur->uf;
+	}
+	return cur;
+}
+
+#define REPLACE(x)              \
+	do {                        \
+		if((x)) {               \
+			(x) = ir_find((x)); \
+		}                       \
+	} while(0)
+
+/* rewrites whole function via ir_uf_find */
+void ir_rewrite(ir_func_t *fun)
+{
+#define APPLY                                                           \
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {                 \
+		ir_blk_t *blk = fun->blocks[i];                                 \
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {    \
+			REPLACE(inst->r0);                                          \
+			REPLACE(inst->r1);                                          \
+			REPLACE(inst->r2);                                          \
+			if(inst->type == IR_INST_CALL) {                            \
+				for(size_t j = 0; j < list_len(inst->call_args); j++) { \
+					REPLACE(inst->call_args[j]->r);                     \
+				}                                                       \
+			}                                                           \
+			if(inst->type == IR_INST_PHI) {                             \
+				for(size_t j = 0; j < list_len(inst->phi_args); j++) {  \
+					REPLACE(inst->phi_args[j]);                         \
+				}                                                       \
+			}                                                           \
+			if(inst->type == IR_INST_PMOV) {                            \
+				for(size_t j = 0; j < list_len(inst->pmov_args); j++) { \
+					REPLACE(inst->pmov_args[j].dst);                    \
+					REPLACE(inst->pmov_args[j].src);                    \
+				}                                                       \
+			}                                                           \
+		}                                                               \
+	}
+
+	/* rewrite function */
+	APPLY;
+
+#undef REPLACE
+#define REPLACE(x)          \
+	do {                    \
+		if((x)) {           \
+			(x)->uf = NULL; \
+		}                   \
+	} while(0)
+
+	/* clear union find */
+	APPLY;
+
+#undef APPLY
+#undef REPLACE
+	return;
+}
 
 static void print_phiarg(ir_inst_t *phi, int indx, int mode)
 {
