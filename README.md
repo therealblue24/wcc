@@ -1,15 +1,26 @@
 # `wcc` - the `Wonderful C compiler`
-C Compiler, largely based on `chibicc` (used as a tutorial). The IR register allocation is also inspired off of `9cc`.
+C Compiler, largely based on `chibicc` (used as a tutorial).
 
-Curently the "version" of C it can compile is Turing Complete and has functions, types, arrays, etc.
+It uses its own optimizing SSA IR backend, [`bird`](bird/).
 
-Generates code for aarch64 & x86_64. I have not tested if the x86_64 backend works on the latest commit because I don't have an x86 machine.
+The IR register allocation is also inspired off of `9cc`.
 
-You can also check out the IR backend, `bIRd` in `bird`, which can probably be ported to other projects.
-
+Generates code for aarch64 & x86_64 (hopefully).
 
 ## Usage
 
+To build:
+
+```sh
+$ make
+```
+
+To test:
+```sh
+$ make test
+```
+
+The actual compiler itself:
 ```
 wcc version 0.0.2 build Jul 23 2026
 Usage: ./bin/wcc <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/--help]
@@ -23,7 +34,6 @@ Usage: ./bin/wcc <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/
   -?, --help:           this page
 ```
 
-
 ## Credits
 
 - `chibbicc`, `9cc`
@@ -31,27 +41,3 @@ Usage: ./bin/wcc <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/
 - RandomProgrammerOnTheInternet - advice, x64-sysv backend tester
 - epic-coder-64 - advice, x64-sysv backend tester
 
-## Build
-
-```sh
-$ make
-```
-
-## Test
-
-```sh
-$ make test
-```
-
-## Help
-
-```sh
-$ make help  
-```
-
-## Calculate Swag Points
-
-```sh
-$ make count
-```
-Swag Point Counter: `9349`
