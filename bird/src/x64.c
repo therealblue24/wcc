@@ -438,16 +438,23 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 		}; break;
 		case IR_INST_CALL: {
 			size_t stack_used = 0;
+			size_t caller_save_count = 0;
 			int v[16] = { 0 };
 			int p = 0;
 			int retval = ins->r0 ? ins->r0->rr : -1;
 			for(int i = 5; i < x64_reg_count; i++) {
 				if(fn->alloc_used[i] && i != retval) {
 					fprintf(f, "\tpush %s\n", x64_reg[i]);
+					caller_save_count++;
 					v[i] = p++;
 				}
 			}
 			p--;
+
+			/* Dummy stack push */
+			if(caller_save_count & 1) {
+				fprintf(f, "\tpush rcx\n");
+			}
 
 			if(list_len(ins->call_args)) {
 				for(size_t i = list_len(ins->call_args) - 1; i >= 6; i--) {
@@ -508,6 +515,9 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			}
 			if(stack_used) {
 				fprintf(f, "\tsub rsp, %zu\n", stack_used);
+			}
+			if(caller_save_count & 1) {
+				fprintf(f, "\tpop rcx\n");
 			}
 			for(int i = x64_reg_count - 1; i >= 5; i--) {
 				if(fn->alloc_used[i] && i != retval) {
@@ -866,19 +876,50 @@ set_cond:
 	return;
 }
 
-static void ir_func_save_regs(FILE *f, ir_func_t *fun)
+static int ir_func_save_regs(FILE *f, ir_func_t *fun)
 {
 	/* luckily x86_64 is CISC, ez */
+	size_t pushd = 0;
 	for(size_t i = 0; i < 5; i++) {
 		if(fun->alloc_used[i]) {
 			fprintf(f, "\tpush %s\n", x64_reg[i]);
+			pushd++;
 		}
 	}
-	return;
+
+	/* Because the x86 `call` instruction pushes an 8 byte entry on the stack,
+	 * the stack is unaligned on function entry. So if we have a function frame
+	 * then we need to push a dummy entry in order to keep the stack alignment.
+	 * Why does System-V not make it so that on `call` the stack is unaligned?
+	 * I don't know. */
+	/* The choice of `rcx` is mostly random here. You can't use `rax`,
+	 * so what comes after `rax`... */
+	if(fun->need_frame && (pushd & 1)) {
+		fprintf(f, "\tpush rcx\n");
+	}
+
+	return fun->need_frame && (pushd & 1);
 }
 
-static void ir_func_restore_regs(FILE *f, ir_func_t *fun)
+static int ir_func_restore_regs(FILE *f, ir_func_t *fun)
 {
+	/* count */
+	size_t pushd = 0;
+	for(size_t i = 4; i >= 0; i--) {
+		if(fun->alloc_used[i]) {
+			pushd++;
+		}
+
+		if(i == 0) {
+			break;
+		}
+	}
+
+	/* Read comment above. */
+	if(fun->need_frame && (pushd & 1)) {
+		fprintf(f, "\tpop rcx\n");
+	}
+
 	for(size_t i = 4; i >= 0; i--) {
 		if(fun->alloc_used[i]) {
 			fprintf(f, "\tpop %s\n", x64_reg[i]);
@@ -888,7 +929,7 @@ static void ir_func_restore_regs(FILE *f, ir_func_t *fun)
 			break;
 		}
 	}
-	return;
+	return fun->need_frame && (pushd & 1);
 }
 
 void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
@@ -905,7 +946,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	if(fun->need_frame) {
 		fprintf(f, "\tpush rbp\n");
 	}
-	ir_func_save_regs(f, fun);
+	int dummy = ir_func_save_regs(f, fun);
 
 	if(fun->need_frame) {
 		fprintf(f, "\tmov rbp, rsp\n");
@@ -913,7 +954,7 @@ void ir_func_emit_x64_sysv(FILE *f, ir_func_t *fun)
 	size_t alen = list_len(fun->args);
 	size_t stack_indx = 0;
 	size_t space_needed = 0;
-	size_t stack_disp = 16;
+	size_t stack_disp = 16 + (dummy * 8);
 	for(size_t i = 0; i < x64_reg_count; i++) {
 		if(fun->alloc_used[i]) {
 			stack_disp += 8;
