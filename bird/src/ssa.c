@@ -2,6 +2,8 @@
 
 #include "bird.h"
 #include "ir.h"
+#include "live.h"
+#include "zz/list.h"
 #include <stdint.h>
 
 static void find_before_last_term_ins(ir_blk_t *blk)
@@ -415,127 +417,6 @@ static bool has_edge(LIST(edge_t) list, edge_t want)
 	return false;
 }
 
-/* where=0: put at end of `edge.from`
- * where=1: put at start of `edge.to`
- * where=2: put at start of `edge.from`
- */
-static void assemble_pmov(edge_t edge, int where)
-{
-	/* want to collect phis from `edge.to` where we sel
-	 * pred as `edge.from`. */
-	ir_inst_t *pmov = ir_inst_make(IR_INST_PMOV, NULL, NULL, NULL, 0);
-	pmov->pmov_args = list_make(reg_pmov_t);
-
-	for(ir_inst_t *inst = edge.to->insts; inst; inst = inst->next) {
-		if(inst->type != IR_INST_PHI) {
-			continue;
-		}
-		reg_t *dst = inst->r0;
-		for(size_t j = 0; j < list_len(inst->phi_args); j++) {
-			if(inst->phi_preds[j] == edge.from) {
-				if(dst != inst->phi_args[j]) {
-					reg_pmov_t mov = { .dst = dst, .src = inst->phi_args[j] };
-					list_append(pmov->pmov_args, mov);
-				}
-				goto cont;
-			}
-		}
-cont:;
-	}
-
-	switch(where) {
-	case 2: /* start of `edge.from` (critical) */
-		pmov->next = edge.from->insts->next;
-		edge.from->insts->next = pmov;
-		break;
-	case 1: /* start of `edge.to` */
-		pmov->next = edge.to->insts->next;
-		edge.to->insts->next = pmov;
-		break;
-	case 0: /* end of `edge.from` */
-		pmov->next = edge.from->tailprev->next;
-		edge.from->tailprev->next = pmov;
-		break;
-	default: /* unreachable */
-		break;
-	}
-
-	return;
-}
-
-/* tries to coalesce phi arguments */
-static void coalesce_phis(ir_func_t *fun)
-{
-	ir_blk_liveness(fun);
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->type != IR_INST_PHI) {
-				continue;
-			}
-
-			for(size_t i = 0; i < list_len(inst->phi_args); i++) {
-				reg_t *arg = inst->phi_args[i];
-				if(arg == inst->r0) {
-					continue;
-				}
-
-				if(ir_try_coalesce(fun, inst->r0, arg)) {
-					inst->phi_args[i] = inst->r0;
-				}
-			}
-		}
-	}
-}
-
-/* inserts parallel moves */
-static void insert_parallel_moves(ir_func_t *fun)
-{
-	ir_blk_flow(fun);
-	/* collect all edges */
-	LIST(edge_t) edges = list_make(edge_t);
-
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-		if(!has_any_phis(blk)) {
-			continue;
-		}
-
-		for(size_t i = 0; i < list_len(blk->pred); i++) {
-			edge_t edge = { .from = blk->pred[i], .to = blk };
-			if(!has_edge(edges, edge)) {
-				list_append(edges, edge);
-			}
-		}
-	}
-
-	/* insert parallel moves along all the edges */
-	for(size_t i = 0; i < list_len(edges); i++) {
-		edge_t edge = edges[i];
-		if(list_len(edge.from->succ) > 1) {
-			/* place at start of `edge.to` */
-			assemble_pmov(edge, 1);
-		} else {
-			/* place at end of `edge.from` */
-			assemble_pmov(edge, 0);
-		}
-	}
-
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			if(ins->type == IR_INST_PHI) {
-				list_delete(ins->phi_args);
-				list_delete(ins->phi_preds);
-				ins->type = IR_INST_NOP;
-			}
-		}
-	}
-
-	list_delete(edges);
-	return;
-}
-
 /* pre-step to destroying SSA form */
 static void split_critical(ir_func_t *fun)
 {
@@ -593,6 +474,121 @@ static void split_critical(ir_func_t *fun)
 	return;
 }
 
+/* isolates phi functions */
+/* Algorithm 21.1 from the SSA book [https://pfalcon.github.io/ssabook/latest/book-full.pdf] */
+static void isolate_phis(ir_func_t *fun)
+{
+	/* create parallel moves at each block, 1 at end and 1 after phis */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *beg_pmov = blk->insts;
+		beg_pmov->type = IR_INST_PMOV;
+		ir_inst_t *end_pmov = ir_inst_make(IR_INST_PMOV, NULL, NULL, NULL, 0);
+
+		beg_pmov->pmov_args = list_make(reg_pmov_t);
+		end_pmov->pmov_args = list_make(reg_pmov_t);
+
+		end_pmov->next = blk->tail;
+		blk->tailprev->next = end_pmov;
+		blk->tailprev = end_pmov;
+	}
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_PHI) {
+				continue;
+			}
+
+			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+				reg_t *arg = inst->phi_args[j];
+				ir_inst_t *pmov = inst->phi_preds[j]->tailprev;
+				/* check: does this interfere with the other args? */
+				bool need = false;
+				if(ir_intersect(arg, inst->r0)) {
+					need = true;
+				}
+
+				for(size_t k = 0; k < list_len(inst->phi_args); k++) {
+					if(need)
+						break;
+					if(k == j)
+						continue;
+
+					if(ir_intersect(arg, inst->phi_args[k])) {
+						need = true;
+					}
+				}
+
+				if(!need)
+					continue;
+
+				reg_t *fresh = reg_make();
+				list_append(pmov->pmov_args,
+							((reg_pmov_t){ .dst = fresh, .src = arg }));
+
+				inst->phi_args[j] = fresh;
+			}
+
+			ir_inst_t *pmov = blk->insts;
+
+			reg_t *fresh = reg_make();
+
+			list_append(pmov->pmov_args,
+						((reg_pmov_t){ .dst = inst->r0, .src = fresh }));
+			inst->r0 = fresh;
+
+			/* coalesce args, delete phi */
+			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+				/* TODO: union find? */
+				ir_replace_reg(fun, inst->phi_args[j], inst->r0);
+			}
+
+			list_delete(inst->phi_args);
+			list_delete(inst->phi_preds);
+			inst->type = IR_INST_NOP;
+		}
+	}
+
+	return;
+}
+
+static void cleanup_ins(ir_inst_t *ins, ir_blk_t *thisblk)
+{
+	/* simplify dead block jumps */
+	if(ir_inst_is_br(ins->type) || ins->type == IR_INST_JMP) {
+		ir_inst_t *first = ins->true_blk->insts;
+		if(first->type == IR_INST_JMP && first->true_blk != ins->true_blk) {
+			ir_blk_t *blk = first->true_blk;
+			ir_reroute_pred(blk, ins->true_blk, thisblk);
+			ins->true_blk = blk;
+		}
+	}
+
+	if(ir_inst_is_br(ins->type)) {
+		ir_inst_t *first = ins->false_blk->insts;
+		if(first->type == IR_INST_JMP && first->true_blk != ins->false_blk) {
+			ir_blk_t *blk = first->true_blk;
+			ir_reroute_pred(blk, ins->false_blk, thisblk);
+			ins->false_blk = blk;
+		}
+	}
+
+	return;
+}
+
+static void cleanup_critical_jumps(ir_func_t *func)
+{
+	ir_nopremover(func);
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			cleanup_ins(inst, blk);
+		}
+	}
+	return;
+}
+
 /* Leroy's algorithm for sequentializing parallel moves. */
 /* Couldn't find a paper/description for it, but https://github.com/tekknolagi/tekknolagi.github.com/blob/main/_posts/2025-08-13-linear-scan.md seems to have the implementation. */
 
@@ -603,7 +599,7 @@ enum leroy_status {
 };
 
 static void move_one(reg_t **src, reg_t **dst, uint8_t *status, size_t i,
-					 size_t len, LIST(reg_pmov_t) * seq)
+					 size_t len, LIST(reg_pmov_t) * seq, reg_t *tmp)
 {
 	if(src[i] == dst[i]) {
 		return;
@@ -613,10 +609,9 @@ static void move_one(reg_t **src, reg_t **dst, uint8_t *status, size_t i,
 		if(src[j] == dst[j]) {
 			switch(status[j]) {
 			case TO_MOVE:
-				move_one(src, dst, status, j, len, seq);
+				move_one(src, dst, status, j, len, seq, tmp);
 				break;
 			case BEING_MOVED: {
-				reg_t *tmp = reg_make();
 				list_append(*seq, ((reg_pmov_t){ .dst = tmp, .src = src[j] }));
 				src[j] = tmp;
 			}; break;
@@ -634,6 +629,7 @@ static void move_one(reg_t **src, reg_t **dst, uint8_t *status, size_t i,
 static LIST(reg_pmov_t) deparallelize_pmov(ir_inst_t *pmov)
 {
 	LIST(reg_pmov_t) seq = list_make(reg_pmov_t);
+	reg_t *tmp = reg_make();
 
 	if(list_len(pmov->pmov_args) == 0) {
 		return seq;
@@ -652,7 +648,7 @@ static LIST(reg_pmov_t) deparallelize_pmov(ir_inst_t *pmov)
 
 	for(size_t i = 0; i < len; i++) {
 		if(status[i] == TO_MOVE) {
-			move_one(src, dst, status, i, len, &seq);
+			move_one(src, dst, status, i, len, &seq, tmp);
 		}
 	}
 
@@ -721,7 +717,6 @@ void ir_ssa_enter(ir_func_t *fun)
 {
 	prof_begin("ssa");
 	reg_reset_counter();
-	UNUSED(fun);
 	ir_fix(fun);
 	ir_nopremover(fun);
 	ir_blk_flow(fun);
@@ -784,8 +779,6 @@ void ir_ssa_enter(ir_func_t *fun)
 		}
 		list_delete(allocated[i]->blkregs);
 	}
-
-	// ir_dump(fun, 'v');
 
 	list_delete(sealed_blks);
 	list_delete(postorder);
@@ -929,9 +922,9 @@ void ir_ssa_exit(ir_func_t *fun)
 	ir_fix(fun);
 	ir_blk_flow(fun);
 	split_critical(fun);
-	coalesce_phis(fun);
-	insert_parallel_moves(fun);
+	isolate_phis(fun);
 	deparallelize_pmovs(fun);
+	cleanup_critical_jumps(fun);
 	ir_blk_flow(fun);
 	ir_basic_block_placement(fun);
 	ir_nopremover(fun);

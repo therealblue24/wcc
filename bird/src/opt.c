@@ -622,6 +622,96 @@ static void build_next_mem_ins(ir_func_t *func)
 	}
 }
 
+/* TODO: Use hashmaps. Only string-indexed hashmaps are implemented as of now */
+static int list_has_imm(LIST(ir_inst_t *) list, ir_inst_t *ins)
+{
+	uint64_t want = ins->imm & (ins->is_32bit ? UINT32_MAX : UINT64_MAX);
+	for(size_t i = 0; i < list_len(list); i++) {
+		uint64_t imm = list[i]->imm &
+					   (list[i]->is_32bit ? UINT32_MAX : UINT64_MAX);
+		if(want == imm) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+static int list_has_leas(LIST(ir_inst_t *) list, ir_inst_t *ins)
+{
+	for(size_t i = 0; i < list_len(list); i++) {
+		if(list[i]->imm == ins->imm) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+static int list_has_lea(LIST(ir_inst_t *) list, ir_inst_t *ins)
+{
+	for(size_t i = 0; i < list_len(list); i++) {
+		if(list[i]->label == ins->label) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+static int ir_reuse_opt(ir_func_t *func)
+{
+	int change = 0;
+	LIST(ir_inst_t *) imm = list_make(ir_inst_t *);
+	LIST(ir_inst_t *) leas = list_make(ir_inst_t *);
+	LIST(ir_inst_t *) lea = list_make(ir_inst_t *);
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_IMM && inst->type != IR_INST_LEAS &&
+			   inst->type != IR_INST_LEA) {
+				continue;
+			}
+
+			int indx = -1;
+			switch(inst->type) {
+			case IR_INST_IMM: {
+				if((indx = list_has_imm(imm, inst)) == -1) {
+					list_append(imm, inst);
+				} else {
+					change = 1;
+					inst->type = IR_INST_MOV;
+					inst->r1 = imm[indx]->r0;
+				}
+			}; break;
+			case IR_INST_LEAS: {
+				if((indx = list_has_leas(leas, inst)) == -1) {
+					list_append(leas, inst);
+				} else {
+					change = 1;
+					inst->type = IR_INST_MOV;
+					inst->r1 = leas[indx]->r0;
+				}
+			}; break;
+			case IR_INST_LEA: {
+				if((indx = list_has_lea(lea, inst)) == -1) {
+					list_append(lea, inst);
+				} else {
+					change = 1;
+					inst->type = IR_INST_MOV;
+					inst->r1 = lea[indx]->r0;
+				}
+			}; break;
+			default:
+				break;
+			}
+		}
+	}
+
+	list_delete(imm);
+	list_delete(leas);
+	list_delete(lea);
+	return change;
+}
+
 static int ir_memopt_ins(ir_inst_t *ins)
 {
 	int change = 0;
@@ -1946,6 +2036,14 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		});
 
 		/* move elimination */
+
+		/* reusing opt */
+
+		/* gatekeep this opt since its slow */
+		if(opt_level >= 2 && (left + 16) >= max_tolerated_change) {
+			TIMEIT("reuse", { change |= ir_reuse_opt(func); });
+		}
+
 		TIMEIT("movelim", {
 			change |= ir_imm_elim(func);
 			change |= ir_mov_elim(func);

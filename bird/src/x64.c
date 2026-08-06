@@ -326,8 +326,11 @@ static void store(FILE *f, size_t size, int reg_to, bool is_32bit,
 /* produces results in (r/e)ax, (r/e)dx */
 static void handle_div(FILE *f, bool is_32bit, bool unsignd, char *r1, char *r2)
 {
+	/* move numerator into acc */
 	fprintf(f, "\tmov %s, %s\n\t", is_32bit ? "eax" : "rax", r1);
+	/* setup data */
 	fprintf(f, unsignd ? "xor edx, edx" : (is_32bit ? "cdq" : "cqo"));
+	/* do division */
 	fprintf(f, "\n\t%sdiv %s\n", unsignd ? "" : "i", r2);
 	return;
 }
@@ -345,7 +348,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 	}
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 		int r0i = -1;
-		UNUSEDA int r1i = -1;
+		int r1i = -1;
 		int r2i = -1;
 		if(ins->r0 && ins->r0->rr >= 0) {
 			r0i = ins->r0->rr;
@@ -362,8 +365,8 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 														NULL;
 		const char *r2x = ins->r2 && ins->r2->rr >= 0 ? x64_reg[ins->r2->rr] :
 														NULL;
-		const UNUSEDA char *r0b =
-			ins->r0 && ins->r0->rr >= 0 ? x64_reg8[ins->r0->rr] : NULL;
+		const char *r0b = ins->r0 && ins->r0->rr >= 0 ? x64_reg8[ins->r0->rr] :
+														NULL;
 		const char *r1b = ins->r1 && ins->r1->rr >= 0 ? x64_reg8[ins->r1->rr] :
 														NULL;
 		const UNUSEDA char *r2b =

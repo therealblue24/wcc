@@ -15,6 +15,12 @@ void ir_coalesce(ir_func_t *fun);
 /* tries to coalesce reg `reg` with `join_with` */
 int ir_try_coalesce(ir_func_t *fun, reg_t *reg, reg_t *join_with);
 
+/* replace reg */
+void ir_replace_reg(ir_func_t *fun, reg_t *from, reg_t *to);
+
+/* do 2 register's lifetimes intersect? */
+bool ir_intersect(reg_t *a, reg_t *b);
+
 /* calculates register defs & last use for all blocks in `fun`. returns registers allocated */
 LIST(reg_t *) ir_blk_reglive(ir_func_t *fun);
 

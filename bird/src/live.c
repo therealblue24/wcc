@@ -103,6 +103,11 @@ static void fill_ins_outs(ir_blk_t *blk)
 				fill_ins_outs_reg(blk, inst->call_args[i]->r);
 			}
 		}
+
+		/* special case: return */
+		if(inst->type == IR_INST_RET && inst->r1) {
+			set_add(&blk->regs_out, inst->r1);
+		}
 	}
 }
 
@@ -274,7 +279,7 @@ void ir_blk_liveness(ir_func_t *fun)
 		}                  \
 	} while(0)
 
-static void replace_reg(ir_func_t *fun, reg_t *from, reg_t *to)
+void ir_replace_reg(ir_func_t *fun, reg_t *from, reg_t *to)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
@@ -292,17 +297,31 @@ static void replace_reg(ir_func_t *fun, reg_t *from, reg_t *to)
 					REPLACE(ins->phi_args[i], from, to);
 				}
 			}
+			if(ins->type == IR_INST_PMOV) {
+				for(size_t i = 0; i < list_len(ins->pmov_args); i++) {
+					REPLACE(ins->pmov_args[i].dst, from, to);
+					REPLACE(ins->pmov_args[i].src, from, to);
+				}
+			}
 		}
 	}
 }
 
 #undef REPLACE
 
-static bool intersect(reg_t *a, reg_t *b)
+#define USE(x) ((x) * 2)
+#define DEF(x) (USE(x) + 1)
+
+#define intersect ir_intersect
+bool ir_intersect(reg_t *a, reg_t *b)
 {
 	/* thx https://stackoverflow.com/a/1558990 */
-	return !((a->last_use < b->def) || (b->last_use < a->def));
+	return !((USE(a->last_use) < DEF(b->def)) ||
+			 (USE(b->last_use) < DEF(a->def)));
 }
+
+#undef USE
+#undef DEF
 
 static long long_min(long a, long b)
 {
@@ -323,6 +342,19 @@ static void join_intervals(reg_t *reg, reg_t *join_with)
 	return;
 }
 
+int ir_try_coalesce(ir_func_t *fun, reg_t *reg, reg_t *join_with)
+{
+	if(intersect(join_with, reg)) {
+		return 0;
+	}
+
+	/* replace r0 with r1, join intervals */
+	join_intervals(reg, join_with);
+
+	ir_replace_reg(fun, join_with, reg);
+	return 1;
+}
+
 static void coalesce_block(ir_func_t *fun, ir_blk_t *blk)
 {
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
@@ -334,15 +366,9 @@ static void coalesce_block(ir_func_t *fun, ir_blk_t *blk)
 			continue;
 		}
 
-		if(intersect(ins->r0, ins->r1)) {
-			continue;
+		if(ir_try_coalesce(fun, ins->r1, ins->r0)) {
+			ins->type = IR_INST_NOP;
 		}
-
-		/* replace r0 with r1, join intervals */
-		join_intervals(ins->r1, ins->r0);
-
-		replace_reg(fun, ins->r0, ins->r1);
-		ins->type = IR_INST_NOP;
 	}
 	return;
 }
@@ -377,19 +403,6 @@ void ir_coalesce(ir_func_t *fun)
 	}
 }
 
-int ir_try_coalesce(ir_func_t *fun, reg_t *reg, reg_t *join_with)
-{
-	if(intersect(join_with, reg)) {
-		return 0;
-	}
-
-	/* replace r0 with r1, join intervals */
-	join_intervals(reg, join_with);
-
-	replace_reg(fun, join_with, reg);
-	return 1;
-}
-
 /* calculates register defs & last use for all blocks in `fun` */
 LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 {
@@ -412,6 +425,7 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 			reg_update_counter(ins->r0, ins_count);
 			if(ins->r0 && ins->r0->def == 0) {
 				ins->r0->def = ins_count;
+				ins->r0->from = ins;
 				list_append(allocated, ins->r0);
 			}
 			reg_update_counter(ins->r1, ins_count);

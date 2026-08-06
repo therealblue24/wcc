@@ -61,7 +61,7 @@ int main()
 	}
 	div_full(num2, den2, &div2, &rem2);
 
-	print_num_unsignd(div);
-	print_num_unsignd(rem);
+	print_num_unsignd(div2);
+	print_num_unsignd(rem2);
 	return div == 1u && rem == 44667u && div == div2 && rem == rem2;
 }
