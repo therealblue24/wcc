@@ -40,4 +40,3 @@ Usage: ./bin/wcc <input file> [-o <output asm file>] [-t <arch>-<abi>] [-d] [-?/
 - `godbolt.org` (to see how `clang` generated some non-trivial stuff)
 - RandomProgrammerOnTheInternet - advice, x64-sysv backend tester
 - epic-coder-64 - advice, x64-sysv backend tester
-

@@ -7,4 +7,4 @@ Depends on `zz` in [`../zz`](../zz).
 
 ## Want to integrate it in your own project?
 
-I recommend you not. If you insist, look at `src/codegen.c` to see how it is used. You also need to define a variable named `debug` somewhere. Keep it at zero. You also need `zz`. Also see the documentation at [here](../docs/bird.md).
+Look at `src/codegen.c` to see how it is used. You also need to define a variable named `debug` somewhere. Keep it at zero. (Except if you want debug IR printing, set it to one.) You also need [`zz`](../zz). Also see the documentation at [here](../docs/bird.md).
