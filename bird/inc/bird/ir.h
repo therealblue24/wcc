@@ -221,7 +221,6 @@ typedef struct ir_blk {
 	uint64_t loop_order; /* how much times this block is reached when visited */
 	uint64_t loop_index; /* index of loop */
 	uint64_t loop_depth; /* depth of loop */
-	uint64_t incoming; /* how much incoming edges into this block? */
 	LIST(struct ir_blk *) succ; /* block's successors */
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */

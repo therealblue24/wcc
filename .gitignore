@@ -18,3 +18,5 @@ prog.s
 asm/
 asmOG/
 notes
+pas
+pascal_frontend_wip

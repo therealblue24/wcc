@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "ir.h"
 #include <stdint.h>
 
 extern int debug;
@@ -886,7 +887,7 @@ static int ir_memopt(ir_func_t *func)
 	return change;
 }
 
-static UNUSEDA int ir_leas_arith_opt(ir_func_t *func)
+static int ir_leas_arith_opt(ir_func_t *func)
 {
 	int change = 0;
 
@@ -1767,6 +1768,26 @@ static int ins_is_same(ir_inst_t *a, ir_inst_t *b)
 	return ok && a->r0 == b->r0 && a->r1 == b->r1 && a->r2 == b->r2;
 }
 
+/* removes useless blocks */
+static int ir_remblks(ir_func_t *func)
+{
+	int change = 0;
+	ir_nopremover(func);
+	ir_blk_flow(func);
+	/* first block is always entry, dont remove */
+	for(size_t i = 1; i < list_len(func->blocks);) {
+		ir_blk_t *blk = func->blocks[i];
+		if(list_len(blk->pred) == 0) {
+			ir_remove_blk(func, blk);
+			change = 1;
+		} else {
+			i++;
+		}
+	}
+
+	return change;
+}
+
 /* optimizes phis with all same value
  * also known as the "illusion of choice" optimization */
 static int ir_phiopt(ir_func_t *func)
@@ -2074,7 +2095,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			change |= ir_fold(func);
 			ir_placemarks(func);
 			/* TODO: this doesn't work */
-			// change |= ir_leas_arith_opt(func);
+			change |= ir_leas_arith_opt(func);
 			ir_placemarks(func);
 			ir_fix_phis(func);
 		});
@@ -2140,6 +2161,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	TIMEIT("exit", {
 		ir_placemarks(func);
 		ir_ssa_exit(func);
+		ir_remblks(func);
 		ir_nopremover(func);
 	});
 

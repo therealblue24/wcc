@@ -454,6 +454,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			/* Dummy stack push */
 			if(caller_save_count & 1) {
 				fprintf(f, "\tpush rcx\n");
+				p++;
 			}
 
 			if(list_len(ins->call_args)) {

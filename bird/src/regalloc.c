@@ -1,5 +1,6 @@
 #include "bird.h"
 #include "ir.h"
+#include "live.h"
 #include <limits.h>
 #include <stdlib.h>
 
@@ -38,6 +39,8 @@ static void calculate_spill_costs(LIST(reg_t *) allocated, ir_func_t *fun)
 			int64_t penalty = blk->loop_order * 2500;
 			reg_t *r;
 			set_iter(blk->regs_def, r, { r->spill_cost += penalty; });
+			set_iter(blk->regs_in, r, { r->spill_cost += penalty / 2; });
+			set_iter(blk->regs_out, r, { r->spill_cost += penalty / 2; });
 		}
 
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
@@ -61,6 +64,11 @@ static void calculate_spill_costs(LIST(reg_t *) allocated, ir_func_t *fun)
 				for(size_t j = 0; j < list_len(inst->call_args); j++) {
 					ACC(inst->call_args[j]->r, 2);
 				}
+			}
+
+			if(inst->type == IR_INST_IMM) {
+				/* incredibly silly to do so */
+				ACC(inst->r0, 25);
 			}
 		}
 	}

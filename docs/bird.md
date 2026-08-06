@@ -1,5 +1,7 @@
 # Bird IR Documentation
 
+Last updated: Jul 22
+
 ## Basics
 
 A program is a list of functions (`ir_func_t*`).
