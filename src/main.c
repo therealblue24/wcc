@@ -18,7 +18,7 @@
 
 int debug = 0;
 int opt_level = 0;
-int do_profile = 0;
+extern int do_profile;
 int print_ast = 0;
 
 char *next_arg(int max, int *argc, char *argv[])

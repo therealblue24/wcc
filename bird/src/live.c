@@ -272,43 +272,6 @@ void ir_blk_liveness(ir_func_t *fun)
 /* https://llvm.org/ProjectsWithLLVM/2004-Fall-CS426-LS.pdf  JOIN-INTERVALS */
 /* We don't have lifetime holes yet so we use a simple intersection function. */
 
-#define REPLACE(x, fr, to) \
-	do {                   \
-		if((x) == (fr)) {  \
-			(x) = (to);    \
-		}                  \
-	} while(0)
-
-void ir_replace_reg(ir_func_t *fun, reg_t *from, reg_t *to)
-{
-	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		ir_blk_t *blk = fun->blocks[i];
-		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
-			REPLACE(ins->r0, from, to);
-			REPLACE(ins->r1, from, to);
-			REPLACE(ins->r2, from, to);
-			if(ins->type == IR_INST_CALL) {
-				for(size_t i = 0; i < list_len(ins->call_args); i++) {
-					REPLACE(ins->call_args[i]->r, from, to);
-				}
-			}
-			if(ins->type == IR_INST_PHI) {
-				for(size_t i = 0; i < list_len(ins->phi_args); i++) {
-					REPLACE(ins->phi_args[i], from, to);
-				}
-			}
-			if(ins->type == IR_INST_PMOV) {
-				for(size_t i = 0; i < list_len(ins->pmov_args); i++) {
-					REPLACE(ins->pmov_args[i].dst, from, to);
-					REPLACE(ins->pmov_args[i].src, from, to);
-				}
-			}
-		}
-	}
-}
-
-#undef REPLACE
-
 #define USE(x) ((x) * 2)
 #define DEF(x) (USE(x) + 1)
 
@@ -345,20 +308,23 @@ static void join_intervals(reg_t *reg, reg_t *join_with)
 	return;
 }
 
-int ir_try_coalesce(ir_func_t *fun, reg_t *reg, reg_t *join_with)
+static int try_coalesce(reg_t *reg, reg_t *join_with)
 {
-	if(intersect(join_with, reg)) {
+	reg_t *r = ir_find(reg);
+	reg_t *j = ir_find(join_with);
+	if(intersect(j, r)) {
 		return 0;
 	}
 
 	/* replace r0 with r1, join intervals */
+	join_intervals(r, j);
 	join_intervals(reg, join_with);
 
-	ir_replace_reg(fun, join_with, reg);
+	ir_union(join_with, reg);
 	return 1;
 }
 
-static void coalesce_block(ir_func_t *fun, ir_blk_t *blk)
+static void coalesce_block(ir_blk_t *blk)
 {
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 		if(ins->noopt) {
@@ -369,26 +335,26 @@ static void coalesce_block(ir_func_t *fun, ir_blk_t *blk)
 			continue;
 		}
 
-		if(ir_try_coalesce(fun, ins->r1, ins->r0)) {
+		if(try_coalesce(ins->r1, ins->r0)) {
 			ins->type = IR_INST_NOP;
 		}
 	}
 	return;
 }
 
-static void dfs_visit(ir_func_t *fun, ir_blk_t *blk)
+static void dfs_visit(ir_blk_t *blk)
 {
 	if(blk->visited) {
 		return;
 	}
 	blk->visited = true;
 	ir_inst_t *flow = blk->tail;
-	coalesce_block(fun, blk);
+	coalesce_block(blk);
 	if(flow->true_blk) {
-		dfs_visit(fun, flow->true_blk);
+		dfs_visit(flow->true_blk);
 	}
 	if(flow->false_blk) {
-		dfs_visit(fun, flow->false_blk);
+		dfs_visit(flow->false_blk);
 	}
 	return;
 }
@@ -399,11 +365,13 @@ void ir_coalesce(ir_func_t *fun)
 		fun->blocks[i]->visited = false;
 	}
 
-	dfs_visit(fun, fun->blocks[0]);
+	dfs_visit(fun->blocks[0]);
 
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		fun->blocks[i]->visited = false;
 	}
+
+	ir_rewrite(fun);
 	return;
 }
 

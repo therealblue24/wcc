@@ -501,28 +501,8 @@ static void isolate_phis(ir_func_t *fun)
 			}
 
 			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
-				reg_t *arg = inst->phi_args[j];
+				reg_t *arg = ir_find(inst->phi_args[j]);
 				ir_inst_t *pmov = inst->phi_preds[j]->tailprev;
-				/* check: does this interfere with the other args? */
-				bool need = false;
-				if(ir_intersect(arg, inst->r0)) {
-					need = true;
-				}
-
-				for(size_t k = 0; k < list_len(inst->phi_args); k++) {
-					if(need)
-						break;
-					if(k == j)
-						continue;
-
-					if(ir_intersect(arg, inst->phi_args[k])) {
-						need = true;
-					}
-				}
-
-				if(!need)
-					continue;
-
 				reg_t *fresh = reg_make();
 				list_append(pmov->pmov_args,
 							((reg_pmov_t){ .dst = fresh, .src = arg }));
@@ -534,14 +514,14 @@ static void isolate_phis(ir_func_t *fun)
 
 			reg_t *fresh = reg_make();
 
-			list_append(pmov->pmov_args,
-						((reg_pmov_t){ .dst = inst->r0, .src = fresh }));
+			list_append(
+				pmov->pmov_args,
+				((reg_pmov_t){ .dst = ir_find(inst->r0), .src = fresh }));
 			inst->r0 = fresh;
 
 			/* coalesce args, delete phi */
 			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
-				/* TODO: union find? */
-				ir_replace_reg(fun, inst->phi_args[j], inst->r0);
+				ir_union(inst->phi_args[j], inst->r0);
 			}
 
 			list_delete(inst->phi_args);
@@ -550,6 +530,7 @@ static void isolate_phis(ir_func_t *fun)
 		}
 	}
 
+	ir_rewrite(fun);
 	return;
 }
 

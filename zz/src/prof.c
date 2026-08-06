@@ -14,6 +14,7 @@ typedef struct pentry {
 LIST(pentry_t) profile_stack = NULL;
 LIST(pentry_t) done = NULL;
 int depth = 0;
+int do_profile = 0;
 
 void prof_begin(char *name)
 {
