@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "zz/set.h"
 
 static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
 {
@@ -189,11 +190,14 @@ void ir_blk_fixup_entry(ir_func_t *fun)
 	ir_inst_t *cur = entry->insts->next;
 
 	reg_t *reg;
+	ir_inst_t *def;
 	set_iter(entry->regs_in, reg, {
-		ir_inst_t *def = ir_inst_make(IR_INST_IMM, reg, NULL, NULL, 0);
-		def->next = cur;
+		def = ir_inst_make(IR_INST_IMM, reg, NULL, NULL, 0);
 		prev->next = def;
+		prev = def;
 	});
+
+	prev->next = cur;
 
 	entry->insts = entry->insts->next;
 	ir_inst_delete(nop);
@@ -398,6 +402,12 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 			if(ins->r0 && ins->r0->def == 0) {
 				ins->r0->def = ins_count;
 				ins->r0->from = ins;
+				ins->r0->rr = -1;
+				if(ins->r0->moveset) {
+					set_delete(ins->r0->moveset);
+					ins->r0->moveset = NULL;
+				}
+				ins->r0->moveset = set_empty();
 				list_append(allocated, ins->r0);
 			}
 			reg_update_counter(ins->r1, ins_count);
@@ -408,6 +418,11 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 					reg_t *reg = ins->call_args[j]->r;
 					reg_update_counter(reg, ins_count);
 				}
+			}
+
+			if(ins->type == IR_INST_MOV) {
+				set_add(&ins->r0->moveset, ins->r1);
+				set_add(&ins->r1->moveset, ins->r0);
 			}
 
 			ins_count++;

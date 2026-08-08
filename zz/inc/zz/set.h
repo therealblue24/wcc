@@ -47,7 +47,20 @@ void *set_data(set_hdr_t *hdr);
 			   !donotuse_sset[i]) {                          \
 				continue;                                    \
 			}                                                \
-			v = (typeof(*set))(donotuse_sset[i]);            \
+			v = (typeof(*(set)))(donotuse_sset[i]);          \
+			code;                                            \
+		}                                                    \
+	} while(0)
+
+#define set_iter_count(set, C, v, code)                      \
+	do {                                                     \
+		void **donotuse_sset = (void **)((set));             \
+		for(size_t C = 0; C < set_hdr((set))->cap; C++) {    \
+			if(donotuse_sset[C] == DONOTUSE_SET_TOMBSTONE || \
+			   !donotuse_sset[C]) {                          \
+				continue;                                    \
+			}                                                \
+			v = (typeof(*(set)))(donotuse_sset[C]);          \
 			code;                                            \
 		}                                                    \
 	} while(0)

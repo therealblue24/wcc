@@ -16,6 +16,7 @@ prog.s
 *.asm
 *.png
 asm/
+asm2/
 asmOG/
 notes
 pas

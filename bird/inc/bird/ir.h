@@ -136,6 +136,8 @@ typedef struct reg {
 	int64_t spill_cost; /* cost of spilling this reg */
 	uint64_t imm; /* immediate associated with this reg */
 	long off; /* stack offset of register */
+	/* register hinting from the Wimmer paper */
+	SET(struct reg *) moveset; /* registers which are move-related */
 
 	/* for SSA construction: */
 	LIST(struct blkreg *) blkregs; /* associated block regs */

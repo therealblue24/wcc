@@ -197,15 +197,41 @@ static reg_t *regalloc_try(LIST(reg_t *) allocated, size_t amount)
 
 		/* if we have a free register, allocate it.
 		 * else, spill */
-		if(free_reg != -1) {
-			r->rr = free_reg;
-			regs[free_reg] = r;
-		} else {
+		if(free_reg == -1) {
 			/* oops */
 			reg_t *r = regs[tospill];
 			free(regs);
 			return r;
 		}
+
+		/* see if we can use any move-related regs */
+		reg_t *v;
+		reg_t *best = NULL;
+		set_iter_count(r->moveset, j, v, {
+			if(v->rr == -1 || regs[v->rr]) {
+				continue;
+			}
+			if(!best) {
+				best = v;
+				continue;
+			}
+
+			if(set_hdr(v->moveset)->size > set_hdr(best->moveset)->size) {
+				best = v;
+			}
+
+			if(set_hdr(v->moveset)->size == set_hdr(best->moveset)->size &&
+			   v->rr < best->rr) {
+				best = v;
+			}
+		});
+
+		if(best) {
+			free_reg = best->rr;
+		}
+
+		r->rr = free_reg;
+		regs[free_reg] = r;
 	}
 
 	free(regs);
@@ -226,6 +252,9 @@ void ir_regalloc(ir_func_t *fun, int amount_)
 		reg_t *spill = regalloc_try(allocd, amount);
 		if(!spill) {
 			/* we achieved an allocation */
+			for(size_t i = 0; i < list_len(allocd); i++) {
+				set_delete(allocd[i]->moveset);
+			}
 			list_delete(allocd);
 			break;
 		}

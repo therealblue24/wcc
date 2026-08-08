@@ -599,6 +599,9 @@ reg_t *ir_find(reg_t *src)
 	reg_t *cur = src;
 	while(cur->uf) {
 		cur = cur->uf;
+		if(cur == src) {
+			break;
+		}
 	}
 	return cur;
 }
@@ -1025,7 +1028,6 @@ void ir_nopremover(ir_func_t *fun)
 			if(ins->type == IR_INST_NOP) {
 				prev->next = nxt;
 				ir_inst_delete(ins);
-				ins = nxt;
 			} else {
 				prev = ins;
 			}

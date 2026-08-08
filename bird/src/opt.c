@@ -603,6 +603,14 @@ static int ins_is_mem(enum ins_type t)
 
 static void build_next_mem_ins(ir_func_t *func)
 {
+	/* reset all next_mem */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			inst->next_mem = NULL;
+		}
+	}
+
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		ir_inst_t *prev = NULL;
@@ -877,6 +885,7 @@ static int ir_memopt(ir_func_t *func)
 {
 	int change = 0;
 
+	ir_nopremover(func);
 	build_next_mem_ins(func);
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];

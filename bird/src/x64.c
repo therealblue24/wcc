@@ -440,6 +440,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 			size_t stack_used = 0;
 			size_t caller_save_count = 0;
 			int v[16] = { 0 };
+			int ps[16] = { 0 };
 			int p = 0;
 			int retval = ins->r0 ? ins->r0->rr : -1;
 			for(int i = 5; i < x64_reg_count; i++) {
@@ -447,9 +448,11 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 					fprintf(f, "\tpush %s\n", x64_reg[i]);
 					caller_save_count++;
 					v[i] = p++;
+					ps[i] = 1;
 				}
 			}
-			p--;
+			if(p)
+				p--;
 
 			/* Dummy stack push */
 			if(caller_save_count & 1) {
@@ -488,7 +491,7 @@ static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 							i64abs(ins->call_args[i]->r->off));
 				}
 
-				if(!nold && arg >= 5) {
+				if(!nold && arg >= 5 && ps[arg]) {
 					int off = v[arg];
 
 					if(off) {
