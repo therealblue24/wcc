@@ -244,7 +244,7 @@ static reg_t *try_remove_trivial_phi(ir_inst_t *phi)
 	reg_t *same = NULL;
 	for(size_t i = 0; i < list_len(phi->phi_args); i++) {
 		reg_t *op = phi->phi_args[i];
-		if((same && ins_is_same(op->from, same->from)) || op == phi->r0) {
+		if((same && ins_is_same(same->from, op->from)) || op == phi->r0) {
 			continue;
 		}
 

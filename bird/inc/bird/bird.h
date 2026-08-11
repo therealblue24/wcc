@@ -3,6 +3,13 @@
 
 #include "ir.h"
 #include "live.h"
+#include "info.h"
+#include "peep.h"
+#include "fold.h"
+#include "gvn.h"
+#include "cfg.h"
+#include "dce.h"
+#include "mem.h"
 #include "opt.h"
 #include "regalloc.h"
 #include "aarch64.h"
@@ -10,5 +17,7 @@
 #include "ssa.h"
 #include "immfold.h"
 #include "buildr.h"
+
+/* bird */
 
 #endif /* BIRD_H_ */

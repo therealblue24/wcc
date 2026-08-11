@@ -254,6 +254,7 @@ void ir_regalloc(ir_func_t *fun, int amount_)
 			/* we achieved an allocation */
 			for(size_t i = 0; i < list_len(allocd); i++) {
 				set_delete(allocd[i]->moveset);
+				allocd[i]->moveset = NULL;
 			}
 			list_delete(allocd);
 			break;

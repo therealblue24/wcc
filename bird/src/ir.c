@@ -2,6 +2,7 @@
 #include "bird.h"
 #include "regalloc.h"
 #include "zz/arena.h"
+#include "zz/set.h"
 
 extern int debug;
 
@@ -548,6 +549,11 @@ static void ir_fix_ins(ir_inst_t *ins)
 		trueblk = ins->true_blk;
 	}
 
+	if(ins->type == IR_INST_IMM || ins->type == IR_INST_MOV) {
+		ins->sign_ext = false;
+		ins->size = ins->is_32bit ? 4 : 8;
+	}
+
 	ins->false_blk = falseblk;
 	ins->true_blk = trueblk;
 
@@ -589,17 +595,23 @@ void ir_fix(ir_func_t *func)
 /* dst = src; */
 void ir_union(reg_t *dst, reg_t *src)
 {
-	dst->uf = src;
+	if(!dst) {
+		return;
+	}
+	ir_find(dst)->uf = src;
 	return;
 }
 
 /* return (val of src); */
 reg_t *ir_find(reg_t *src)
 {
+	if(!src) {
+		return src;
+	}
 	reg_t *cur = src;
 	while(cur->uf) {
 		cur = cur->uf;
-		if(cur == src) {
+		if(cur == src || cur == cur->uf) {
 			break;
 		}
 	}
