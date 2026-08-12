@@ -110,6 +110,10 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		TIMEIT("gvn", {
 			ir_fix(func);
 			ir_nopremover(func);
+			ir_blk_flow(func);
+			ir_blk_rpo(func);
+			ir_blk_dom(func);
+			ir_blk_domtree(func);
 			change |= ir_gvn(func);
 			ir_fix_phis(func);
 		});

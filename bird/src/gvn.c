@@ -98,22 +98,6 @@ static bool ins_are_same(ir_inst_t *a, ir_inst_t *b)
 	return true;
 }
 
-/* GVN hashmap */
-static ir_inst_t **map = NULL; /* val is map->r0 */
-static size_t keys; /* keys in the map */
-static size_t cap; /* capacity of map */
-
-static void reset_map(void)
-{
-	if(!map) {
-		map = zcalloc(256, sizeof(ir_inst_t *));
-		cap = 256;
-	}
-	wipe(map, cap * sizeof(ir_inst_t *));
-	keys = 0;
-	return;
-}
-
 typedef struct lookup {
 	size_t loc;
 	bool exists;
@@ -143,21 +127,21 @@ static lookup_t lookup_map(ir_inst_t **map2, size_t cap2, ir_inst_t *ins)
 	return (lookup_t){ .loc = -1, .exists = false };
 }
 
-static void rebuild_map(void);
+static ir_inst_t **rebuild_map(ir_inst_t **map, size_t *cap);
 
-static void insert_map(ir_inst_t **map2, size_t cap2, ir_inst_t *ins)
+static ir_inst_t **insert_map(ir_inst_t **map2, size_t *cap2, size_t *keys,
+							  ir_inst_t *ins)
 {
-	lookup_t l = lookup_map(map2, cap2, ins);
+	lookup_t l = lookup_map(map2, *cap2, ins);
 	if(!l.exists)
-		keys++;
+		(*keys)++;
 
-	if(keys >= (3 * cap2) / 4) {
-		rebuild_map();
-		map2 = map;
+	if(*keys >= (3 * *cap2) / 4) {
+		map2 = rebuild_map(map2, cap2);
 	}
 
 	map2[l.loc] = ins;
-	return;
+	return map2;
 }
 
 static ir_inst_t *find(ir_inst_t **map2, size_t cap2, ir_inst_t *ins)
@@ -169,59 +153,91 @@ static ir_inst_t *find(ir_inst_t **map2, size_t cap2, ir_inst_t *ins)
 	return NULL;
 }
 
-static void rebuild_map(void)
+static ir_inst_t **rebuild_map(ir_inst_t **map, size_t *cap)
 {
-	ir_inst_t **new = zcalloc(cap * 2, sizeof(ir_inst_t *));
+	ir_inst_t **new = zcalloc(*cap * 2, sizeof(ir_inst_t *));
 
-	keys = 0;
-	for(size_t i = 0; i < cap; i++) {
+	size_t dummy = 0;
+	size_t dummy2 = *cap * 2;
+	for(size_t i = 0; i < *cap; i++) {
 		if(!map[i]) {
 			continue;
 		}
 
-		insert_map(new, cap * 2, map[i]);
+		insert_map(new, &dummy2, &dummy, map[i]);
 	}
+	*cap = dummy2;
 
 	free(map);
-	map = new;
-	cap *= 2;
 
-	return;
+	return new;
 }
 
-static int gvn_rewrite(ir_inst_t *ins)
+static int gvn_rewrite(ir_blk_t *blk, ir_inst_t *ins)
 {
 	/* assumes ins is GVN-able */
-	ir_inst_t *found = find(map, cap, ins);
+	ir_inst_t *found = find(blk->gvn_map, blk->gvn_cap, ins);
 	if(found) {
 		ins->type = IR_INST_NOP;
 		ir_union(ins->r0, found->r0);
 		return 1;
 	} else {
 		/* welcome to GVN */
-		insert_map(map, cap, ins);
+		blk->gvn_map =
+			insert_map(blk->gvn_map, &blk->gvn_cap, &blk->gvn_keys, ins);
 		return 0;
 	}
 
 	return -1;
 }
 
+static int gvn_block(ir_blk_t *blk)
+{
+	/* entry block */
+	if(blk->idom == blk) {
+		blk->gvn_cap = 64;
+		blk->gvn_keys = 0;
+		blk->gvn_map = zcalloc(blk->gvn_cap, sizeof(ir_inst_t *));
+	} else {
+		/* inherit from dominator */
+		blk->gvn_cap = blk->idom->gvn_cap;
+		blk->gvn_keys = blk->idom->gvn_keys;
+		blk->gvn_map =
+			memdup(blk->idom->gvn_map, blk->gvn_cap * sizeof(ir_inst_t *));
+	}
+	int change = 0;
+	for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+		if(!inst->r0) {
+			continue;
+		}
+		if(do_not_gvn(inst)) {
+			continue;
+		}
+		change |= gvn_rewrite(blk, inst);
+	}
+	return change;
+}
+
+/* gvn dfs visit of dominator tree */
+static int dfs_visit(ir_blk_t *blk)
+{
+	int change = gvn_block(blk);
+	for(size_t i = 0; i < list_len(blk->dom); i++) {
+		change |= dfs_visit(blk->dom[i]);
+	}
+	return change;
+}
+
 int ir_gvn(ir_func_t *func)
 {
 	int change = 0;
 
+	dfs_visit(func->blocks[0]);
+
+	/* cleanup */
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		reset_map(); /* TODO: make global. requires dominator computation however */
-		ir_blk_t *blk = func->blocks[i];
-		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(!inst->r0) {
-				continue;
-			}
-			if(do_not_gvn(inst)) {
-				continue;
-			}
-			change |= gvn_rewrite(inst);
-		}
+		free(func->blocks[i]->gvn_map);
+		func->blocks[i]->gvn_map = NULL;
 	}
 
 	ir_rewrite(func);

@@ -12,4 +12,7 @@ int ir_branchopt(ir_func_t *func);
 /* requires ir_blk_rpo and ir_blk_flow (preserves both) */
 void ir_blk_dom(ir_func_t *func);
 
+/* requires ir_blk_dom */
+void ir_blk_domtree(ir_func_t *fun);
+
 #endif /* CFG_H_ */

@@ -393,6 +393,7 @@ ir_blk_t *ir_blk_make(ir_inst_t *insts)
 	blk->pred = list_make(ir_blk_t *);
 	blk->succ = list_make(ir_blk_t *);
 	blk->incomplete_phis = list_make(ir_inst_t *);
+	blk->dom = list_make(ir_blk_t *);
 	blk->regs_def = set_empty();
 	blk->regs_in = set_empty();
 	blk->regs_out = set_empty();
@@ -419,6 +420,7 @@ void ir_blk_delete(ir_blk_t *blk)
 	list_delete(blk->pred);
 	list_delete(blk->succ);
 	list_delete(blk->incomplete_phis);
+	list_delete(blk->dom);
 	set_delete(blk->regs_def);
 	set_delete(blk->regs_in);
 	set_delete(blk->regs_out);
@@ -1018,15 +1020,12 @@ static UNUSEDA void ir_dump_stats(ir_func_t *fun)
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		printf("BB%ld:\n", blk->num);
-		printf("\tregs_in = ");
-		print_reglist(blk->regs_in);
-		printf("\tregs_out = ");
-		print_reglist(blk->regs_out);
-		printf("\tregs_def = ");
-		print_reglist(blk->regs_def);
 
 		printf("\tpreds = ");
 		print_blklist(blk->pred);
+
+		printf("\tdomt = ");
+		print_blklist(blk->dom);
 
 		printf("\tsuccs = ");
 		if(blk->tail->false_blk) {
@@ -1150,7 +1149,7 @@ static UNUSEDA void ir_print_graph(ir_prog_t *prog)
 		printf("//%s\n", func->name);
 		for(size_t j = 0; j < list_len(func->blocks); j++) {
 			ir_blk_t *blk = func->blocks[j];
-			ir_blk_t *dom = blk->dom;
+			ir_blk_t *dom = blk->idom;
 			printf("\tBB%zu -> BB%zu\n", dom->num, blk->num);
 		}
 	}
@@ -1231,9 +1230,14 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 		ir_blk_flow(func);
 		ir_blk_rpo(func);
 		ir_blk_dom(func);
+		ir_blk_domtree(func);
 	}
 
 	// ir_print_graph(prog);
+	// for(size_t i = 0; i < list_len(prog->funcs); i++) {
+	// 	ir_func_t *fn = prog->funcs[i];
+	// 	ir_dump_stats(fn);
+	// }
 
 	return;
 }

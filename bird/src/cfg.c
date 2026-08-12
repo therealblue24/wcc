@@ -137,11 +137,11 @@ static ir_blk_t *intersect(ir_blk_t *b1, ir_blk_t *b2)
 	 * signs as we are comparing postorder here */
 	while(b1 != b2) {
 		while(b1->postnum > b2->postnum) {
-			b1 = b1->dom;
+			b1 = b1->idom;
 		}
 
 		while(b2->postnum > b1->postnum) {
-			b2 = b2->dom;
+			b2 = b2->idom;
 		}
 	}
 
@@ -152,9 +152,9 @@ static ir_blk_t *intersect(ir_blk_t *b1, ir_blk_t *b2)
 void ir_blk_dom(ir_func_t *fun)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
-		fun->blocks[i]->dom = NULL;
+		fun->blocks[i]->idom = NULL;
 	}
-	fun->blocks[0]->dom = fun->blocks[0];
+	fun->blocks[0]->idom = fun->blocks[0];
 
 	bool changed = true;
 	while(changed) {
@@ -169,7 +169,7 @@ void ir_blk_dom(ir_func_t *fun)
 			/* select first processed predeccesor */
 			ir_blk_t *sel = blk->pred[0];
 			for(size_t j = 0; j < list_len(blk->pred); j++) {
-				if(blk->pred[j]->dom) {
+				if(blk->pred[j]->idom) {
 					sel = blk->pred[j];
 					break;
 				}
@@ -178,16 +178,37 @@ void ir_blk_dom(ir_func_t *fun)
 			ir_blk_t *new_idom = sel;
 			for(size_t j = 0; j < list_len(blk->pred); j++) {
 				ir_blk_t *pred = blk->pred[j];
-				if(!pred->dom || pred == sel)
+				if(!pred->idom || pred == sel)
 					continue;
 				new_idom = intersect(pred, new_idom);
 			}
 
-			if(blk->dom != new_idom) {
-				blk->dom = new_idom;
+			if(blk->idom != new_idom) {
+				blk->idom = new_idom;
 				changed = true;
 			}
 		}
+	}
+
+	return;
+}
+
+/* requires ir_blk_dom */
+void ir_blk_domtree(ir_func_t *fun)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		list_hdr(blk->dom)->size = 0;
+	}
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		/* entry block moment */
+		if(blk->idom == blk || blk->idom == NULL) {
+			continue;
+		}
+
+		list_append(blk->idom->dom, blk);
 	}
 
 	return;

@@ -226,7 +226,11 @@ typedef struct ir_blk {
 	LIST(struct ir_blk *) succ; /* block's successors */
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */
-	struct ir_blk *dom; /* dominator of this block */
+	struct ir_blk *idom; /* dominator of this block */
+	LIST(struct ir_blk *) dom; /* dominator tree */
+	struct ir_inst **gvn_map; /* gvn map for this block */
+	size_t gvn_keys; /* gvn map key count */
+	size_t gvn_cap; /* gvn map capacity */
 	SET(reg_t *) regs_def; /* registers in this block */
 	SET(reg_t *) regs_in; /* registers in */
 	SET(reg_t *) regs_out; /* registers out */
