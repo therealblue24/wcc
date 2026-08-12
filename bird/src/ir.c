@@ -736,7 +736,7 @@ static void print_phiarg(ir_inst_t *phi, int indx, int mode)
 		rn = r ? r->rr : -1;
 	}
 
-	printf("[BB%ld, %%r%ld]", phi->phi_preds[indx]->num, rn);
+	printf("[BB%ld, r%ld]", phi->phi_preds[indx]->num, rn);
 	return;
 }
 
@@ -767,133 +767,133 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	case IR_INST_NOP:
 		out("nop");
 	case IR_INST_MOV:
-		out("%%r%ld = %%r%ld", r0, r1);
+		out("r%ld = r%ld", r0, r1);
 	case IR_INST_IMM:
-		out("%%r%ld = #%lld", r0, imm);
+		out("r%ld = #%lld", r0, imm);
 	case IR_INST_ADD:
-		out("%%r%ld = add %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = add r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SUB:
-		out("%%r%ld = sub %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = sub r%ld, r%ld", r0, r1, r2);
 	case IR_INST_ADDI:
-		out("%%r%ld = addi %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = add r%ld, #%lld", r0, r1, imm);
 	case IR_INST_SUBI:
-		out("%%r%ld = subi %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = sub r%ld, #%lld", r0, r1, imm);
 	case IR_INST_SHL:
-		out("%%r%ld = shl %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = shl r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SHR:
-		out("%%r%ld = shr %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = shr r%ld, r%ld", r0, r1, r2);
 	case IR_INST_ASHR:
-		out("%%r%ld = ashr %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = ashr r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SHLI:
-		out("%%r%ld = shli %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = shl r%ld, #%lld", r0, r1, imm);
 	case IR_INST_SHRI:
-		out("%%r%ld = shri %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = shr r%ld, #%lld", r0, r1, imm);
 	case IR_INST_ASHRI:
-		out("%%r%ld = ashri %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = ashr r%ld, #%lld", r0, r1, imm);
 	case IR_INST_AND:
-		out("%%r%ld = and %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = and r%ld, r%ld", r0, r1, r2);
 	case IR_INST_OR:
-		out("%%r%ld = or %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = or r%ld, r%ld", r0, r1, r2);
 	case IR_INST_EOR:
-		out("%%r%ld = eor %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = eor r%ld, r%ld", r0, r1, r2);
 	case IR_INST_ANDI:
-		out("%%r%ld = andi %%r%ld, %lld", r0, r1, imm);
+		out("r%ld = and r%ld, %lld", r0, r1, imm);
 	case IR_INST_ORI:
-		out("%%r%ld = ori %%r%ld, %lld", r0, r1, imm);
+		out("r%ld = or r%ld, %lld", r0, r1, imm);
 	case IR_INST_EORI:
-		out("%%r%ld = eori %%r%ld, %lld", r0, r1, imm);
+		out("r%ld = eor r%ld, %lld", r0, r1, imm);
 	case IR_INST_SMUL:
-		out("%%r%ld = smul %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = smul r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SDIV:
-		out("%%r%ld = sdiv %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = sdiv r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SMOD:
-		out("%%r%ld = smod %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = smod r%ld, r%ld", r0, r1, r2);
 	case IR_INST_UMUL:
-		out("%%r%ld = umul %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = umul r%ld, r%ld", r0, r1, r2);
 	case IR_INST_UDIV:
-		out("%%r%ld = udiv %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = udiv r%ld, r%ld", r0, r1, r2);
 	case IR_INST_UMOD:
-		out("%%r%ld = umod %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = umod r%ld, r%ld", r0, r1, r2);
 	case IR_INST_NEG:
-		out("%%r%ld = neg %%r%ld", r0, r1);
+		out("r%ld = neg r%ld", r0, r1);
 	case IR_INST_NOT:
-		out("%%r%ld = not %%r%ld", r0, r1);
+		out("r%ld = not r%ld", r0, r1);
 	case IR_INST_MKBOOL:
-		out("%%r%ld = mkbool %%r%ld", r0, r1);
+		out("r%ld = mkbool r%ld", r0, r1);
 	case IR_INST_NOTBOOL:
-		out("%%r%ld = notbool %%r%ld", r0, r1);
+		out("r%ld = notbool r%ld", r0, r1);
 	case IR_INST_EQ:
-		out("%%r%ld = cmp.eq %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = cmp.eq r%ld, r%ld", r0, r1, r2);
 	case IR_INST_NE:
-		out("%%r%ld = cmp.ne %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = cmp.ne r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SLT:
-		out("%%r%ld = cmp.slt %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = cmp.slt r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SLE:
-		out("%%r%ld = cmp.sle %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = cmp.sle r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SGT:
-		out("%%r%ld = cmp.sgt %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = cmp.sgt r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SGE:
-		out("%%r%ld = cmp.sge %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = cmp.sge r%ld, r%ld", r0, r1, r2);
 	case IR_INST_ULT:
-		out("%%r%ld = cmp.ult %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = cmp.ult r%ld, r%ld", r0, r1, r2);
 	case IR_INST_ULE:
-		out("%%r%ld = cmp.ule %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = cmp.ule r%ld, r%ld", r0, r1, r2);
 	case IR_INST_UGT:
-		out("%%r%ld = cmp.ugt %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = cmp.ugt r%ld, r%ld", r0, r1, r2);
 	case IR_INST_UGE:
-		out("%%r%ld = cmp.uge %%r%ld, %%r%ld", r0, r1, r2);
+		out("r%ld = cmp.uge r%ld, r%ld", r0, r1, r2);
 	case IR_INST_EQI:
-		out("%%r%ld = cmpi.eq %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = cmp.eq r%ld, #%lld", r0, r1, imm);
 	case IR_INST_NEI:
-		out("%%r%ld = cmpi.ne %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = cmp.ne r%ld, #%lld", r0, r1, imm);
 	case IR_INST_SLTI:
-		out("%%r%ld = cmpi.slt %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = cmp.slt r%ld, #%lld", r0, r1, imm);
 	case IR_INST_SLEI:
-		out("%%r%ld = cmpi.sle %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = cmp.sle r%ld, #%lld", r0, r1, imm);
 	case IR_INST_SGTI:
-		out("%%r%ld = cmpi.sgt %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = cmp.sgt r%ld, #%lld", r0, r1, imm);
 	case IR_INST_SGEI:
-		out("%%r%ld = cmpi.sge %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = cmp.sge r%ld, #%lld", r0, r1, imm);
 	case IR_INST_ULTI:
-		out("%%r%ld = cmpi.ult %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = cmp.ult r%ld, #%lld", r0, r1, imm);
 	case IR_INST_ULEI:
-		out("%%r%ld = cmpi.ule %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = cmp.ule r%ld, #%lld", r0, r1, imm);
 	case IR_INST_UGTI:
-		out("%%r%ld = cmpi.ugt %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = cmp.ugt r%ld, #%lld", r0, r1, imm);
 	case IR_INST_UGEI:
-		out("%%r%ld = cmpi.uge %%r%ld, #%lld", r0, r1, imm);
+		out("r%ld = cmp.uge r%ld, #%lld", r0, r1, imm);
 	case IR_INST_LOAD:
-		out("%%r%ld = load%s%s %%r%ld", r0, suf, ext, r1);
+		out("r%ld = load%s%s r%ld", r0, suf, ext, r1);
 	case IR_INST_STORE:
-		out("store%s %%r%ld, %%r%ld", suf, r1, r2);
+		out("store%s r%ld, r%ld", suf, r1, r2);
 	case IR_INST_LOADS:
-		out("%%r%ld = loads%s%s #%ld", r0, suf, ext, (long)imm);
+		out("r%ld = loads%s%s #%ld", r0, suf, ext, (long)imm);
 	case IR_INST_LOADSS:
-		out("%%r%ld = spill_load%s%s #%ld", r0, suf, ext, (long)imm);
+		out("r%ld = spill_load%s%s #%ld", r0, suf, ext, (long)imm);
 	case IR_INST_STORES:
-		out("stores%s #%ld, %%r%ld", suf, (long)imm, r1);
+		out("stores%s #%ld, r%ld", suf, (long)imm, r1);
 	case IR_INST_STORESS:
-		out("spill_store%s #%ld, %%r%ld", suf, (long)imm, r1);
+		out("spill_store%s #%ld, r%ld", suf, (long)imm, r1);
 	case IR_INST_ZXT:
-		out("%%r%ld = zero_ext%s %%r%ld", r0, suf, r1);
+		out("r%ld = zero_ext%s r%ld", r0, suf, r1);
 	case IR_INST_SXT:
-		out("%%r%ld = sign_ext%s %%r%ld", r0, suf, r1);
+		out("r%ld = sign_ext%s r%ld", r0, suf, r1);
 	case IR_INST_BR:
-		out("br %%r%ld, BB%ld, BB%ld", r1, ins->true_blk->num,
+		out("br r%ld, BB%ld, BB%ld", r1, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_CALL: {
 		if(ins->r0) {
-			printf("%%r%ld = ", r0);
+			printf("r%ld = ", r0);
 		}
 		printf("call %s", ins->fname);
 		for(size_t i = 0; i < list_len(ins->call_args); i++) {
 			reg_t *r = ins->call_args[i]->r;
 			long n = mode == 'r' ? r->rr : r->vr;
-			printf(", %%r%ld", n);
+			printf(", r%ld", n);
 		}
 	}; break;
 	case IR_INST_PHI: {
-		printf("%%r%ld = phi ", r0);
+		printf("r%ld = phi ", r0);
 		size_t count = list_len(ins->phi_args);
 		if(count >= 1) {
 			print_phiarg(ins, 0, mode);
@@ -909,81 +909,81 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		printf("{\n");
 		for(size_t i = 0; i < list_len(ins->pmov_args); i++) {
 			reg_pmov_t mov = ins->pmov_args[i];
-			printf("\t%%r%ld = %%r%ld\n", mov.dst->vr, mov.src->vr);
+			printf("\tr%ld = r%ld\n", mov.dst->vr, mov.src->vr);
 		}
 		printf("\t}");
 	}; break;
 	case IR_INST_BREQ:
-		out("br.eq %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+		out("br.eq r%ld, r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRNE:
-		out("br.ne %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+		out("br.ne r%ld, r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRSLT:
-		out("br.slt %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+		out("br.slt r%ld, r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRSLE:
-		out("br.sle %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+		out("br.sle r%ld, r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRSGT:
-		out("br.sgt %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+		out("br.sgt r%ld, r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRSGE:
-		out("br.sge %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+		out("br.sge r%ld, r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRULT:
-		out("br.ult %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+		out("br.ult r%ld, r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRULE:
-		out("br.ule %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+		out("br.ule r%ld, r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRUGT:
-		out("br.ugt %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+		out("br.ugt r%ld, r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRUGE:
-		out("br.uge %%r%ld, %%r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
+		out("br.uge r%ld, r%ld, BB%ld, BB%ld", r1, r2, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BREQI:
-		out("br.eqi %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+		out("br.eq r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRNEI:
-		out("br.nei %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+		out("br.ne r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRSLTI:
-		out("br.slti %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+		out("br.slt r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRSLEI:
-		out("br.slei %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+		out("br.sle r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRSGTI:
-		out("br.sgti %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+		out("br.sgt r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRSGEI:
-		out("br.sgei %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+		out("br.sge r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRULTI:
-		out("br.ulti %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+		out("br.ult r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRULEI:
-		out("br.ulei %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+		out("br.ule r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRUGTI:
-		out("br.ugti %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+		out("br.ugt r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_BRUGEI:
-		out("br.ugei %%r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
+		out("br.uge r%ld, #%lld, BB%ld, BB%ld", r1, imm, ins->true_blk->num,
 			ins->false_blk->num);
 	case IR_INST_RET: {
 		if(ins->r1) {
-			out("ret %%r%ld", r1);
+			out("ret r%ld", r1);
 		} else {
 			out("ret");
 		}
 	}
 	case IR_INST_LEAS:
-		out("%%r%ld = leas #%ld", r0, (long)imm);
+		out("r%ld = leas #%ld", r0, (long)imm);
 	case IR_INST_LEA:
-		out("%%r%ld = lea %s", r0, ins->label->name);
+		out("r%ld = lea %s", r0, ins->label->name);
 	case IR_INST_JMP:
 		out("jmp BB%ld", ins->true_blk->num);
 	default:
@@ -1001,7 +1001,7 @@ static void print_reglist(LIST(reg_t *) list)
 {
 	for(size_t i = 0; i < list_len(list); i++) {
 		reg_t *reg = list[i];
-		printf("%%r%ld, ", reg->vr);
+		printf("r%ld, ", reg->vr);
 	}
 	printf("\n");
 }
