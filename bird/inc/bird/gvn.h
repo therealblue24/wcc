@@ -3,6 +3,8 @@
 
 #include "ir.h"
 
+#define GVN_INIT_SIZE (64)
+
 /* global value numbering */
 int ir_gvn(ir_func_t *func);
 

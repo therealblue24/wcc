@@ -103,21 +103,21 @@ typedef struct lookup {
 	bool exists;
 } lookup_t;
 
-static lookup_t lookup_map(ir_inst_t **map2, size_t cap2, ir_inst_t *ins)
+static lookup_t lookup_map(ir_inst_t **map, size_t cap, ir_inst_t *ins)
 {
 	uint64_t hash = hash_ins(ins);
-	uint64_t mask = cap2 - 1;
+	uint64_t mask = cap - 1;
 	hash &= mask;
 	uint64_t step = 1; /* TODO: improve */
 	for(uint64_t i = hash - step;;) {
 		i = (i + step) & mask;
 
-		if(map2[i] == NULL) {
+		if(map[i] == NULL) {
 			return (lookup_t){ .loc = i, .exists = false };
 		}
 
 		/* check if it's really it */
-		if(ins_are_same(ins, map2[i])) {
+		if(ins_are_same(ins, map[i])) {
 			/* yup */
 			return (lookup_t){ .loc = i, .exists = true };
 		}
@@ -129,73 +129,53 @@ static lookup_t lookup_map(ir_inst_t **map2, size_t cap2, ir_inst_t *ins)
 
 static ir_inst_t **rebuild_map(ir_inst_t **map, size_t *cap);
 
-static ir_inst_t **insert_map(ir_inst_t **map2, size_t *cap2, size_t *keys,
+static ir_inst_t **insert_map(ir_inst_t **map, size_t *cap, size_t *keys,
 							  ir_inst_t *ins)
 {
-	lookup_t l = lookup_map(map2, *cap2, ins);
-	if(!l.exists)
+	lookup_t l = lookup_map(map, *cap, ins);
+	if(!l.exists) {
 		(*keys)++;
-
-	if(*keys >= (3 * *cap2) / 4) {
-		map2 = rebuild_map(map2, cap2);
 	}
 
-	map2[l.loc] = ins;
-	return map2;
+	if(*keys >= (3 * *cap) / 4) {
+		map = rebuild_map(map, cap);
+	}
+
+	map[l.loc] = ins;
+	return map;
 }
 
-static ir_inst_t *find(ir_inst_t **map2, size_t cap2, ir_inst_t *ins)
+static ir_inst_t *find(ir_inst_t **map, size_t cap, ir_inst_t *ins)
 {
-	lookup_t l = lookup_map(map2, cap2, ins);
-	if(l.exists) {
-		return map2[l.loc];
-	}
-	return NULL;
+	lookup_t l = lookup_map(map, cap, ins);
+	return l.exists ? map[l.loc] : NULL;
 }
 
 static ir_inst_t **rebuild_map(ir_inst_t **map, size_t *cap)
 {
 	ir_inst_t **new = zcalloc(*cap * 2, sizeof(ir_inst_t *));
 
-	size_t dummy = 0;
-	size_t dummy2 = *cap * 2;
+	size_t keys = 0;
+	size_t newcap = *cap * 2;
 	for(size_t i = 0; i < *cap; i++) {
 		if(!map[i]) {
 			continue;
 		}
 
-		insert_map(new, &dummy2, &dummy, map[i]);
+		insert_map(new, &newcap, &keys, map[i]);
 	}
-	*cap = dummy2;
+	*cap = newcap;
 
 	free(map);
 
 	return new;
 }
 
-static int gvn_rewrite(ir_blk_t *blk, ir_inst_t *ins)
-{
-	/* assumes ins is GVN-able */
-	ir_inst_t *found = find(blk->gvn_map, blk->gvn_cap, ins);
-	if(found) {
-		ins->type = IR_INST_NOP;
-		ir_union(ins->r0, found->r0);
-		return 1;
-	} else {
-		/* welcome to GVN */
-		blk->gvn_map =
-			insert_map(blk->gvn_map, &blk->gvn_cap, &blk->gvn_keys, ins);
-		return 0;
-	}
-
-	return -1;
-}
-
 static int gvn_block(ir_blk_t *blk)
 {
 	/* entry block */
 	if(blk->idom == blk) {
-		blk->gvn_cap = 64;
+		blk->gvn_cap = GVN_INIT_SIZE;
 		blk->gvn_keys = 0;
 		blk->gvn_map = zcalloc(blk->gvn_cap, sizeof(ir_inst_t *));
 	} else {
@@ -205,15 +185,25 @@ static int gvn_block(ir_blk_t *blk)
 		blk->gvn_map =
 			memdup(blk->idom->gvn_map, blk->gvn_cap * sizeof(ir_inst_t *));
 	}
+
 	int change = 0;
-	for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-		if(!inst->r0) {
+	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+		if(!ins->r0) {
 			continue;
 		}
-		if(do_not_gvn(inst)) {
+		if(do_not_gvn(ins)) {
 			continue;
 		}
-		change |= gvn_rewrite(blk, inst);
+		ir_inst_t *found = find(blk->gvn_map, blk->gvn_cap, ins);
+		if(found) {
+			ins->type = IR_INST_NOP;
+			ir_union(ins->r0, found->r0);
+			change = 1;
+		} else {
+			/* welcome to GVN */
+			blk->gvn_map =
+				insert_map(blk->gvn_map, &blk->gvn_cap, &blk->gvn_keys, ins);
+		}
 	}
 	return change;
 }
