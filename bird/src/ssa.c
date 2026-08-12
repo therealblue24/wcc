@@ -108,11 +108,9 @@ static void postorder_visit(LIST(long) postorder, ir_blk_t *blk)
 	blk->visited = true;
 
 	if(blk->tail->true_blk) {
-		// union_(postorder, blk->tail->true_blk->num);
 		postorder_visit(postorder, blk->tail->true_blk);
 	}
 	if(blk->tail->false_blk) {
-		// union_(postorder, blk->tail->false_blk->num);
 		postorder_visit(postorder, blk->tail->false_blk);
 	}
 

@@ -226,6 +226,7 @@ typedef struct ir_blk {
 	LIST(struct ir_blk *) succ; /* block's successors */
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */
+	struct ir_blk *dom; /* dominator of this block */
 	SET(reg_t *) regs_def; /* registers in this block */
 	SET(reg_t *) regs_in; /* registers in */
 	SET(reg_t *) regs_out; /* registers out */
@@ -241,6 +242,7 @@ typedef struct blkreg {
 typedef struct ir_func {
 	char *name; /* name of this function */
 	LIST(ir_blk_t *) blocks; /* the collection of blocks */
+	size_t rpo_indx; /* for reverse postorder calculation */
 	size_t stack_needed; /* stack space needed for this function */
 	size_t align_needed; /* stack alignment needed for this function */
 	bool alloc_strat; /* false = prefer caller-save first, true = prefer callee-save first */
@@ -440,5 +442,8 @@ reg_t *ir_find(reg_t *src);
 
 /* rewrites whole function via ir_find */
 void ir_rewrite(ir_func_t *fun);
+
+/* computes reverse postorder of block */
+void ir_blk_rpo(ir_func_t *fun);
 
 #endif /* IR_H_ */

@@ -575,6 +575,57 @@ static void ir_fix_ins(ir_inst_t *ins)
 	}
 }
 
+static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
+{
+	ir_inst_t *ret = root;
+	for(; ret; ret = ret->next) {
+		if(ir_inst_is_term(ret->type)) {
+			return ret;
+		}
+	}
+	ASSERT(ir_inst_is_term(ret->type), "IR is not constructed properly");
+	return NULL;
+}
+
+static void po_visit(ir_func_t *fun, ir_blk_t *blk)
+{
+	if(!blk || blk->visited) {
+		return;
+	}
+
+	blk->visited = true;
+	po_visit(fun, blk->tail->true_blk);
+	po_visit(fun, blk->tail->false_blk);
+	fun->blocks[fun->rpo_indx]->postnum = fun->rpo_indx;
+	fun->rpo_indx++;
+	return;
+}
+
+/* computes reverse postorder of block */
+void ir_blk_rpo(ir_func_t *fun)
+{
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		fun->blocks[i]->visited = false;
+		fun->blocks[i]->tail = find_last_or_flow_ins(fun->blocks[i]->insts);
+	}
+	/* compute postorder */
+	fun->rpo_indx = 0;
+	po_visit(fun, fun->blocks[0]);
+
+	/* reverse it */
+	size_t l = list_len(fun->blocks) - 1;
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		size_t r = l - i;
+		if(i == r)
+			continue;
+		long tmp = fun->blocks[i]->postnum;
+		fun->blocks[i]->postnum = fun->blocks[r]->postnum;
+		fun->blocks[r]->postnum = tmp;
+	}
+
+	return;
+}
+
 /* fixes IR function */
 void ir_fix(ir_func_t *func)
 {
@@ -1066,20 +1117,9 @@ void ir_func_emit(FILE *f, ir_func_t *fun, enum ir_arch arch)
 	}
 }
 
-static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
-{
-	ir_inst_t *ret = root;
-	for(; ret; ret = ret->next) {
-		if(ir_inst_is_term(ret->type)) {
-			return ret;
-		}
-	}
-	ASSERT(ir_inst_is_term(ret->type), "IR is not constructed properly");
-	return NULL;
-}
-
 static UNUSEDA void ir_print_graph(ir_prog_t *prog)
 {
+	printf("CFG:\n");
 	printf("digraph {\n");
 	for(size_t i = 0; i < list_len(prog->funcs); i++) {
 		ir_func_t *func = prog->funcs[i];
@@ -1087,6 +1127,7 @@ static UNUSEDA void ir_print_graph(ir_prog_t *prog)
 		printf("//%s\n", func->name);
 		for(size_t j = 0; j < list_len(func->blocks); j++) {
 			ir_blk_t *blk = func->blocks[j];
+
 			blk->tail = find_last_or_flow_ins(blk->insts);
 			if(blk->tail->type == IR_INST_RET) {
 				printf("\tBB%zu -> Ret_%s\n", blk->num, func->name);
@@ -1102,6 +1143,19 @@ static UNUSEDA void ir_print_graph(ir_prog_t *prog)
 		}
 	}
 	printf("}\n");
+	printf("Dom-tree:\n");
+	printf("digraph {\n");
+	for(size_t i = 0; i < list_len(prog->funcs); i++) {
+		ir_func_t *func = prog->funcs[i];
+		printf("//%s\n", func->name);
+		for(size_t j = 0; j < list_len(func->blocks); j++) {
+			ir_blk_t *blk = func->blocks[j];
+			ir_blk_t *dom = blk->dom;
+			printf("\tBB%zu -> BB%zu\n", dom->num, blk->num);
+		}
+	}
+	printf("}\n");
+	return;
 }
 
 /* generates code for an IR program */
@@ -1174,6 +1228,9 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 		ir_blk_flow(func);
 
 		ir_func_emit(f, func, arch);
+		ir_blk_flow(func);
+		ir_blk_rpo(func);
+		ir_blk_dom(func);
 	}
 
 	// ir_print_graph(prog);
