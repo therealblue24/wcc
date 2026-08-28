@@ -51,19 +51,25 @@ static uint64_t hash_ins(ir_inst_t *ins)
 {
 	uint64_t hash = hashd(ins->type);
 
-	// clang-format off
-
 	/* I had some fun with these constants. They could be
 	 * anything random enough, really. */
 	hash ^= hashk(ins->sign_ext, 0x1618033988749894);
-	hash ^= hashk(ins->size,     0x2718281828459045);
+	hash ^= hashk(ins->size, 0x2718281828459045);
 	hash ^= hashk(ins->is_32bit, 0x3141592653589793);
-	
-	if(ins_has_imm(ins->type)) hash ^= hashd(ins->imm);
-	if(ir_find(ins->r1))	hash ^= hashp(ir_find(ins->r1));
-	if(ir_find(ins->r2))	hash ^= hashp(ir_find(ins->r2));
-	if(ins->type == IR_INST_LEA) hash ^= hashp(ins->label);
-	// clang-format on
+
+	uint64_t imm = ins->imm;
+	if(ins->is_32bit && ins->type == IR_INST_IMM) {
+		imm &= UINT32_MAX;
+	}
+
+	if(ins_has_imm(ins->type))
+		hash ^= hashd(imm);
+	if(ir_find(ins->r1))
+		hash ^= hashp(ir_find(ins->r1));
+	if(ir_find(ins->r2))
+		hash ^= hashp(ir_find(ins->r2));
+	if(ins->type == IR_INST_LEA)
+		hash ^= hashp(ins->label);
 	return hash;
 }
 
@@ -79,6 +85,20 @@ static bool ins_are_same(ir_inst_t *a, ir_inst_t *b)
 
 	if(a->type != b->type) {
 		return false;
+	}
+
+	if(a->type == IR_INST_IMM) {
+		uint64_t imm1 = a->imm;
+		uint64_t imm2 = b->imm;
+		if(a->is_32bit)
+			imm1 &= UINT32_MAX;
+		if(b->is_32bit)
+			imm2 &= UINT32_MAX;
+		if(imm1 != imm2) {
+			return false;
+		} else {
+			return true;
+		}
 	}
 
 	if(a->sign_ext != b->sign_ext || a->size != b->size ||

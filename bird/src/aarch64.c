@@ -588,6 +588,16 @@ branch_cond:
 				fprintf(f, "\tb .L%s_ret\n", fn->name);
 			}
 			break;
+		case IR_INST_RETI:
+			if(is_32bit) {
+				load_imm_w(f, "w0", ins->imm);
+			} else {
+				load_imm(f, "x0", ins->imm);
+			}
+			if(blk->num != last_i) {
+				fprintf(f, "\tb .L%s_ret\n", fn->name);
+			}
+			break;
 		case IR_INST_NOP:
 			break;
 		case IR_INST_MOV:

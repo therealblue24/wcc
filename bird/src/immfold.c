@@ -66,12 +66,12 @@ check:;
 void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound,
 				   enum ir_arch arch)
 {
-	/* only fold immediates if it has less than (or equal to) 3 usages */
+	/* only fold immediates if it has less than (or equal to) 6 usages */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		reg_t *r;
 		set_iter(blk->regs_def, r, {
-			if(r->spill_cost <= 3) {
+			if(r->spill_cost <= 6) {
 				r->spill_cost = 1;
 			} else {
 				r->spill_cost = 0;
@@ -86,17 +86,38 @@ void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound,
 				continue;
 			}
 
-			if(inst->r2->insty != IR_INST_IMM) {
+			if(inst->type == IR_INST_RET && inst->r1) {
+				if(inst->r1->insty != IR_INST_IMM) {
+					continue;
+				}
+				if(!inst->r1->spill_cost) {
+					continue;
+				}
+			} else if(inst->type == IR_INST_RET) {
 				continue;
 			}
 
-			if(!inst->r2->spill_cost) {
+			if(inst->r2 && inst->r2->insty != IR_INST_IMM) {
 				continue;
 			}
 
-			int64_t immv = *(int64_t *)(&inst->r2->imm);
+			if(inst->r2 && !inst->r2->spill_cost) {
+				continue;
+			}
+
+			int64_t immv = inst->type == IR_INST_RET ?
+							   *(int64_t *)(&inst->r1->imm) :
+							   *(int64_t *)(&inst->r2->imm);
 			if(can_fold(inst->type, immv, lower_bound, higher_bound, arch)) {
 				/* fold */
+				/* special case for ret */
+				if(inst->type == IR_INST_RET) {
+					inst->imm = inst->r1->imm;
+					inst->type = ir_inst_turn_imm(inst->type);
+					inst->r1 = NULL;
+					continue;
+				}
+
 				inst->imm = inst->r2->imm;
 				if(inst->type == IR_INST_SHL || inst->type == IR_INST_SHR ||
 				   inst->type == IR_INST_ASHR) {

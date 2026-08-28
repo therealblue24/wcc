@@ -5,6 +5,7 @@
 #include "zz/base.h"
 #include "zz/list.h"
 #include "zz/set.h"
+#include "zz/bset.h"
 #include "zz/prof.h"
 
 enum ins_type {
@@ -113,6 +114,7 @@ enum ins_type {
 	IR_INST_BR, /* br %r1, true-blk, false-blk */
 	IR_INST_JMP, /* jmp blk */
 	IR_INST_RET, /* ret (%r1) */
+	IR_INST_RETI, /* ret #imm */
 	IR_INST_CALL, /* (%r0) = call Function, %a1, %a2, ... */
 
 	/* SSA */
@@ -139,8 +141,14 @@ typedef struct reg {
 	/* register hinting from the Wimmer paper */
 	SET(struct reg *) moveset; /* registers which are move-related */
 
-	/* for SSA construction: */
-	LIST(struct blkreg *) blkregs; /* associated block regs */
+	/* compact these in a union because i need to shrink size
+	 * of register struct. good start */
+	union {
+		/* for SSA construction: */
+		LIST(struct blkreg *) blkregs; /* associated block regs */
+		/* for info: */
+		LIST(struct ir_inst *) uses; /* uses of this register */
+	};
 	struct reg *ssareg; /* varialbe associated with this reg */
 	/* for optimization: */
 	bool stack_loc; /* is this register from a leas instruction? */
@@ -151,6 +159,7 @@ typedef struct reg {
 	struct reg *rhs;
 	struct reg *uf; /* union find set */
 	struct ir_inst *from; /* NOT meant to be used for any pass except phiopt! */
+	struct ir_blk *from_blk; /* NOT meant to be used for any pass except GCM */
 	size_t size; /* instruction size of register */
 	bool is_32bit;
 	bool ins_ext; /* ins has ext? */
@@ -202,6 +211,12 @@ typedef struct ir_inst {
 	LIST(reg_pmov_t) pmov_args; /* for pmov */
 	char *fname; /* for call */
 	bool noopt; /* is this inst volatile? */
+	/* for GCM: */
+	bool pinned; /* is this inst pinned? */
+	bool visited; /* is this inst visited? */
+	struct ir_blk *blk; /* block to place this inst */
+	struct ir_blk *early; /* earliest blk to place this inst */
+	struct ir_blk *late; /* latest blk to place this inst */
 	bool sign_ext; /* sign extend this load? */
 	size_t size; /* load/store/zero_ext/sign_ext size */
 	bool is_32bit; /* is the operation 32 bit (true) or 64 bit (false)? */
@@ -221,13 +236,13 @@ typedef struct ir_blk {
 	bool visited;
 	bool active;
 	uint64_t loop_order; /* how much times this block is reached when visited */
-	uint64_t loop_index; /* index of loop */
-	uint64_t loop_depth; /* depth of loop */
+	uint64_t loop_nest; /* depth of loop */
 	LIST(struct ir_blk *) succ; /* block's successors */
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */
 	struct ir_blk *idom; /* dominator of this block */
 	LIST(struct ir_blk *) dom; /* dominator tree */
+	uint64_t dom_depth; /* dominator tree depth */
 	struct ir_inst **gvn_map; /* gvn map for this block */
 	size_t gvn_keys; /* gvn map key count */
 	size_t gvn_cap; /* gvn map capacity */

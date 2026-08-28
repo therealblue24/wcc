@@ -46,7 +46,13 @@ void *list_donotuse_reserve(void *list, size_t count, size_t size)
 void *list_donotuse_fit(void *list, size_t count, size_t size)
 {
 	list_hdr_t *hdr = list_hdr(list);
-	if(hdr->size + count > hdr->cap) {
+
+	size_t want = hdr->cap;
+	while(hdr->size + count > want) {
+		want = LIST_NEW_SIZE(want);
+	}
+
+	if(want != hdr->cap) {
 		return list_donotuse_reserve(list, LIST_NEW_SIZE(hdr->size + count),
 									 size);
 	}

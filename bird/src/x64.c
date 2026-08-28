@@ -626,12 +626,22 @@ branch_cond:
 			fprintf(f, "\tjmp .BB%ld\n", ins->true_blk->num);
 			break;
 		case IR_INST_RET:
-			if(r1 != NULL) {
+			if(r1) {
 				if(is_32bit) {
 					fprintf(f, "\tmov eax, %s\n", r1);
 				} else {
 					fprintf(f, "\tmov rax, %s\n", r1);
 				}
+			}
+			if(blk->num != last_i) {
+				fprintf(f, "\tjmp %s_ret\n", fn->name);
+			}
+			break;
+		case IR_INST_RETI:
+			if(is_32bit) {
+				fprintf(f, "\tmov eax, %lld\n", ins->imm);
+			} else {
+				fprintf(f, "\tmov rax, %lld\n", ins->imm);
 			}
 			if(blk->num != last_i) {
 				fprintf(f, "\tjmp %s_ret\n", fn->name);

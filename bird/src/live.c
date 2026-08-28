@@ -37,7 +37,7 @@ static void fill_succ_pred(ir_blk_t *blk)
 	/* find the last inst. */
 	blk->tail = find_last_or_flow_ins(blk->insts);
 	ir_inst_t *flow = blk->tail;
-	if(flow->type == IR_INST_RET) {
+	if(flow->type == IR_INST_RET || flow->type == IR_INST_RETI) {
 		blk->returns = true;
 		return;
 	}
@@ -328,8 +328,9 @@ static int try_coalesce(reg_t *reg, reg_t *join_with)
 	return 1;
 }
 
-static void coalesce_block(ir_blk_t *blk)
+static int coalesce_block(ir_blk_t *blk)
 {
+	int change = 0;
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 		if(ins->noopt) {
 			continue;
@@ -339,44 +340,51 @@ static void coalesce_block(ir_blk_t *blk)
 			continue;
 		}
 
+		if(ins->r1 == ins->r0) {
+			ins->type = IR_INST_NOP;
+			continue;
+		}
+
 		if(try_coalesce(ins->r1, ins->r0)) {
+			change = 1;
 			ins->type = IR_INST_NOP;
 		}
 	}
-	return;
+	return change;
 }
 
-static void dfs_visit(ir_blk_t *blk)
+static int dfs_visit(ir_blk_t *blk)
 {
 	if(blk->visited) {
-		return;
+		return 0;
 	}
+	int change = 0;
 	blk->visited = true;
 	ir_inst_t *flow = blk->tail;
-	coalesce_block(blk);
+	change = coalesce_block(blk);
 	if(flow->true_blk) {
-		dfs_visit(flow->true_blk);
+		change |= dfs_visit(flow->true_blk);
 	}
 	if(flow->false_blk) {
-		dfs_visit(flow->false_blk);
+		change |= dfs_visit(flow->false_blk);
 	}
-	return;
+	return change;
 }
 
-void ir_coalesce(ir_func_t *fun)
+int ir_coalesce(ir_func_t *fun)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		fun->blocks[i]->visited = false;
 	}
 
-	dfs_visit(fun->blocks[0]);
+	int change = dfs_visit(fun->blocks[0]);
 
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		fun->blocks[i]->visited = false;
 	}
 
 	ir_rewrite(fun);
-	return;
+	return change;
 }
 
 /* calculates register defs & last use for all blocks in `fun` */

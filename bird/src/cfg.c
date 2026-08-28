@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "zz/list.h"
 #include "zz/set.h"
 
 static int ins_proves_live(enum ins_type t)
@@ -153,6 +154,7 @@ void ir_blk_dom(ir_func_t *fun)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		fun->blocks[i]->idom = NULL;
+		fun->blocks[i]->dom_depth = 0;
 	}
 	fun->blocks[0]->idom = fun->blocks[0];
 
@@ -190,6 +192,17 @@ void ir_blk_dom(ir_func_t *fun)
 		}
 	}
 
+	/* compute depths */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_blk_t *idom = blk->idom;
+		if(idom == blk || idom == NULL) {
+			blk->dom_depth = 0;
+			continue;
+		}
+		blk->dom_depth = idom->dom_depth + 1;
+	}
+
 	return;
 }
 
@@ -212,4 +225,104 @@ void ir_blk_domtree(ir_func_t *fun)
 	}
 
 	return;
+}
+
+/* finds least common ancestor of b1 and b2
+ * requires ir_blk_dom */
+/* Global Code Motion [and] Global Value Numbering by Cliff Click
+ * is where this impl comes from */
+ir_blk_t *ir_blk_lca(ir_blk_t *b1, ir_blk_t *b2)
+{
+	if(!b1) {
+		return b2;
+	}
+	if(!b2) {
+		return b1;
+	}
+
+	while(b1->dom_depth > b2->dom_depth) {
+		b1 = b1->idom;
+	}
+	while(b2->dom_depth > b1->dom_depth) {
+		b2 = b2->idom;
+	}
+
+	while(b1 != b2) {
+		b1 = b1->idom;
+		b2 = b2->idom;
+	}
+
+	return b1;
+}
+
+/* does `blk` dominate `other`? */
+bool ir_blk_does_dom(ir_blk_t *blk, ir_blk_t *other)
+{
+	if(blk == other) {
+		return true;
+	}
+
+	/* climb up tree */
+	while(other != other->idom) {
+		other = other->idom;
+		if(other == NULL) {
+			return false;
+		} else if(other == blk) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/* marks a loop */
+static void traverse(ir_blk_t *blk, ir_blk_t *hdr)
+{
+	if(blk == hdr || blk->visited) {
+		return;
+	}
+	blk->visited = true;
+
+	blk->loop_nest++;
+	for(size_t i = 0; i < list_len(blk->pred); i++) {
+		traverse(blk->pred[i], hdr);
+	}
+	return;
+}
+
+static int handleblk(ir_blk_t *blk, ir_blk_t *succ)
+{
+	if(ir_blk_does_dom(succ, blk)) {
+		blk->loop_nest++;
+		succ->loop_nest++;
+		for(size_t i = 0; i < list_len(blk->pred); i++) {
+			traverse(blk->pred[i], succ);
+		}
+		return 1;
+	}
+	return 0;
+}
+
+/* computes loop nesting counts */
+/* requires ir_blk_flow */
+void ir_blk_loopnest(ir_func_t *func)
+{
+	/* clear counts */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		blk->visited = false;
+		blk->loop_nest = 0;
+	}
+
+	/* find loops */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(size_t j = 0; j < list_len(blk->succ); j++) {
+			if(handleblk(blk, blk->succ[j])) {
+				for(size_t k = 0; k < list_len(func->blocks); k++) {
+					func->blocks[j]->visited = false;
+				}
+			}
+		}
+	}
 }

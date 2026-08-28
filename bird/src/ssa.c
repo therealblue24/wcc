@@ -1,5 +1,6 @@
 /* Implementation of the "Simple and Efficient Construction of Static Single Assignment Form" algorithm, by Matthias Braun, Sebastian Buchwald, Sebastian Hack, Roland Leißa, Christoph Mallon, and Andreas Zwinkau. */
 
+#include "ssa.h"
 #include "bird.h"
 #include "ir.h"
 #include "live.h"
@@ -476,6 +477,15 @@ static void split_critical(ir_func_t *fun)
 /* Algorithm 21.1 from the SSA book [https://pfalcon.github.io/ssabook/latest/book-full.pdf] */
 static void isolate_phis(ir_func_t *fun)
 {
+	/* append NOP to each block, find befores */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *nop = ins_nop();
+		nop->next = blk->insts;
+		blk->insts = nop;
+		find_before_last_term_ins(blk);
+	}
+
 	/* create parallel moves at each block, 1 at end and 1 after phis */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
@@ -532,14 +542,13 @@ static void isolate_phis(ir_func_t *fun)
 	return;
 }
 
-static void cleanup_ins(ir_inst_t *ins, ir_blk_t *thisblk)
+static void cleanup_ins(ir_inst_t *ins)
 {
 	/* simplify dead block jumps */
 	if(ir_inst_is_br(ins->type) || ins->type == IR_INST_JMP) {
 		ir_inst_t *first = ins->true_blk->insts;
 		if(first->type == IR_INST_JMP && first->true_blk != ins->true_blk) {
 			ir_blk_t *blk = first->true_blk;
-			ir_reroute_pred(blk, ins->true_blk, thisblk);
 			ins->true_blk = blk;
 		}
 	}
@@ -548,7 +557,6 @@ static void cleanup_ins(ir_inst_t *ins, ir_blk_t *thisblk)
 		ir_inst_t *first = ins->false_blk->insts;
 		if(first->type == IR_INST_JMP && first->true_blk != ins->false_blk) {
 			ir_blk_t *blk = first->true_blk;
-			ir_reroute_pred(blk, ins->false_blk, thisblk);
 			ins->false_blk = blk;
 		}
 	}
@@ -562,7 +570,7 @@ static void cleanup_critical_jumps(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			cleanup_ins(inst, blk);
+			cleanup_ins(inst);
 		}
 	}
 	return;
@@ -578,7 +586,7 @@ enum leroy_status {
 };
 
 static void move_one(reg_t **src, reg_t **dst, uint8_t *status, size_t i,
-					 size_t len, LIST(reg_pmov_t) * seq, reg_t *tmp)
+					 size_t len, LIST(reg_pmov_t) * seq)
 {
 	if(src[i] == dst[i]) {
 		return;
@@ -588,9 +596,10 @@ static void move_one(reg_t **src, reg_t **dst, uint8_t *status, size_t i,
 		if(src[j] == dst[j]) {
 			switch(status[j]) {
 			case TO_MOVE:
-				move_one(src, dst, status, j, len, seq, tmp);
+				move_one(src, dst, status, j, len, seq);
 				break;
 			case BEING_MOVED: {
+				reg_t *tmp = reg_make();
 				list_append(*seq, ((reg_pmov_t){ .dst = tmp, .src = src[j] }));
 				src[j] = tmp;
 			}; break;
@@ -608,7 +617,6 @@ static void move_one(reg_t **src, reg_t **dst, uint8_t *status, size_t i,
 static LIST(reg_pmov_t) deparallelize_pmov(ir_inst_t *pmov)
 {
 	LIST(reg_pmov_t) seq = list_make(reg_pmov_t);
-	reg_t *tmp = reg_make();
 
 	if(list_len(pmov->pmov_args) == 0) {
 		return seq;
@@ -627,7 +635,7 @@ static LIST(reg_pmov_t) deparallelize_pmov(ir_inst_t *pmov)
 
 	for(size_t i = 0; i < len; i++) {
 		if(status[i] == TO_MOVE) {
-			move_one(src, dst, status, i, len, &seq, tmp);
+			move_one(src, dst, status, i, len, &seq);
 		}
 	}
 
@@ -757,6 +765,7 @@ void ir_ssa_enter(ir_func_t *fun)
 			free(allocated[i]->blkregs[j]);
 		}
 		list_delete(allocated[i]->blkregs);
+		allocated[i]->blkregs = NULL;
 	}
 
 	list_delete(sealed_blks);
@@ -900,7 +909,6 @@ void ir_ssa_exit(ir_func_t *fun)
 	ir_nopremover(fun);
 	ir_fix(fun);
 	ir_blk_flow(fun);
-	split_critical(fun);
 	isolate_phis(fun);
 	deparallelize_pmovs(fun);
 	cleanup_critical_jumps(fun);

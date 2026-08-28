@@ -1,11 +1,7 @@
 #include "bird/bird.h"
-#include "zz/set.h"
+#include "zz/all.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include "zz/base.h"
-#include "zz/arena.h"
-#include "zz/strmap.h"
-#include "zz/prof.h"
 #include <ctype.h>
 #include <stdarg.h>
 #include "lex.h"

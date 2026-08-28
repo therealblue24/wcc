@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "cfg.h"
 #include "info.h"
 #include "ir.h"
 #include "ssa.h"
@@ -38,6 +39,11 @@ static int ir_remblks(ir_func_t *func)
 	return change;
 }
 
+static long blknum(ir_blk_t *b)
+{
+	return b ? b->num : -1;
+}
+
 /* optimizes an IR function */
 void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 {
@@ -46,8 +52,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		func->blocks[i]->tail = find_last_or_flow_ins(func->blocks[i]->insts);
 	}
 
-	int change = 0;
-	int max_tolerated_change;
+	int change = 1;
+	int max_tolerated_change = 1;
 	switch(opt_level) {
 	case 0:
 		max_tolerated_change = 0;
@@ -61,9 +67,6 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	case 3:
 		max_tolerated_change = 64; /* mimic the nature of -O3 */
 		break;
-	default:
-		max_tolerated_change = 0;
-		break;
 	}
 
 	if(debug) {
@@ -74,7 +77,6 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 	ir_ssa_enter(func);
 	ir_blk_flow(func);
-	ir_mov_elim(func);
 	ir_simpleopt(func);
 
 	if(debug) {
@@ -84,7 +86,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	}
 
 	int left = max_tolerated_change;
-	while(left) {
+	while(left && change) {
 		change = 0;
 
 		TIMEIT("info", {
@@ -118,6 +120,21 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 			ir_fix_phis(func);
 		});
 
+		/* GCM */
+		/* TODO: Make this work!!! */
+		// TIMEIT("gcm", {
+		// 	ir_fix(func);
+		// 	ir_nopremover(func);
+		// 	ir_blk_flow(func);
+		// 	ir_blk_rpo(func);
+		// 	ir_blk_dom(func);
+		// 	ir_blk_loopnest(func);
+		// 	ir_placemarks(func);
+		// 	ir_fill_use(func);
+		// 	change |= ir_gcm(func);
+		// 	ir_del_use(func);
+		// });
+
 		/* SSA-related opts */
 		TIMEIT("phi", {
 			change |= ir_phiopt(func);
@@ -129,6 +146,8 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		ir_placemarks(func);
 
 		TIMEIT("movelim", {
+			ir_blk_dom(func);
+			ir_blk_loopnest(func);
 			change |= ir_mov_elim(func);
 			change |= ir_imm_elim(func);
 		});

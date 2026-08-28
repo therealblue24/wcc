@@ -722,12 +722,16 @@ int ir_mov_elim(ir_func_t *func)
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			if(inst->type != IR_INST_MOV) {
+			if(inst->type != IR_INST_PHI) {
 				continue;
 			}
 
-			if(inst->r0->phi_related) {
-				inst->r0->insty = IR_INST_NOP;
+			/* do not move elim backedge phis */
+			if(blk->loop_nest) {
+				for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+					reg_t *arg = inst->phi_args[j];
+					arg->insty = IR_INST_NOP;
+				}
 			}
 		}
 	}
@@ -744,7 +748,11 @@ int ir_mov_elim(ir_func_t *func)
 					REPLACE(inst->call_args[j]->r);
 				}
 			}
-
+			if(inst->type == IR_INST_PHI) {
+				for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+					REPLACE(inst->phi_args[j]);
+				}
+			}
 			if(inst->type == IR_INST_MOV && inst->r0 == inst->r1) {
 				inst->type = IR_INST_NOP;
 			}
@@ -776,10 +784,16 @@ int ir_mov_elim32(ir_func_t *func)
 			if(!inst->r0 || (inst->r0 && !possible_to_elim32(inst->r0))) {
 				continue;
 			}
+			if(inst->type != IR_INST_PHI) {
+				continue;
+			}
 
-			if(inst->r0->phi_related) {
-				/* don't elim */
-				inst->r0->insty = IR_INST_NOP;
+			/* do not move elim backedge phis */
+			if(blk->loop_nest) {
+				for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+					reg_t *arg = inst->phi_args[j];
+					arg->insty = IR_INST_NOP;
+				}
 			}
 		}
 	}
@@ -794,6 +808,20 @@ int ir_mov_elim32(ir_func_t *func)
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
 			REPLACE(inst->r1);
 			REPLACE(inst->r2);
+
+			if(inst->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(inst->call_args); j++) {
+					REPLACE(inst->call_args[j]->r);
+				}
+			}
+			if(inst->type == IR_INST_PHI) {
+				for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+					REPLACE(inst->phi_args[j]);
+				}
+			}
+			if(inst->type == IR_INST_MOV && inst->r0 == inst->r1) {
+				inst->type = IR_INST_NOP;
+			}
 		}
 	}
 

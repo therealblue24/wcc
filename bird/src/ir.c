@@ -1,5 +1,6 @@
 #include "ir.h"
 #include "bird.h"
+#include "cfg.h"
 #include "regalloc.h"
 #include "zz/arena.h"
 #include "zz/set.h"
@@ -19,7 +20,8 @@ static long runk(int reset)
 
 int ir_inst_is_term(enum ins_type type)
 {
-	return ir_inst_is_br(type) || type == IR_INST_JMP || type == IR_INST_RET;
+	return ir_inst_is_br(type) || type == IR_INST_JMP || type == IR_INST_RET ||
+		   type == IR_INST_RETI;
 }
 
 int ir_inst_is_foldable(enum ins_type type)
@@ -83,7 +85,7 @@ int ir_inst_can_fold_imm(enum ins_type type)
 	return type == IR_INST_SHL || type == IR_INST_SHR || type == IR_INST_ASHR ||
 		   type == IR_INST_ADD || type == IR_INST_SUB || type == IR_INST_OR ||
 		   type == IR_INST_AND || type == IR_INST_EOR || ir_inst_is_cmp(type) ||
-		   ir_inst_is_br_cond(type);
+		   ir_inst_is_br_cond(type) || type == IR_INST_RET;
 }
 
 /* turn instruction type -> immediate instruction type */
@@ -121,6 +123,7 @@ int ir_inst_turn_imm(enum ins_type type)
 		CASE(IR_INST_BRULE);
 		CASE(IR_INST_BRUGT);
 		CASE(IR_INST_BRUGE);
+		CASE(IR_INST_RET);
 	default:
 		return type;
 	}
@@ -980,6 +983,9 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 			out("ret");
 		}
 	}
+	case IR_INST_RETI:
+		out("ret #%lld", imm);
+
 	case IR_INST_LEAS:
 		out("r%ld = leas #%ld", r0, (long)imm);
 	case IR_INST_LEA:
@@ -1055,10 +1061,9 @@ void ir_dump(ir_func_t *fun, int mode)
 		ir_blk_t *blk = fun->blocks[i];
 		printf("BB%ld: ; preds = ", blk->num);
 		for(size_t j = 0; j < list_len(blk->pred); j++) {
-			printf("BB%ld%s", blk->pred[j]->num,
-				   j == (list_len(blk->pred) - 1) ? "" : ", ");
+			printf("BB%ld, ", blk->pred[j]->num);
 		}
-		putchar('\n');
+		printf("nest = %llu\n", blk->loop_nest);
 
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
 			int num = inst->is_32bit ? 32 : 64;
@@ -1128,7 +1133,8 @@ static UNUSEDA void ir_print_graph(ir_prog_t *prog)
 			ir_blk_t *blk = func->blocks[j];
 
 			blk->tail = find_last_or_flow_ins(blk->insts);
-			if(blk->tail->type == IR_INST_RET) {
+			if(blk->tail->type == IR_INST_RET ||
+			   blk->tail->type == IR_INST_RETI) {
 				printf("\tBB%zu -> Ret_%s\n", blk->num, func->name);
 			} else if(blk->tail->type == IR_INST_JMP) {
 				printf("\tBB%zu -> BB%zu\n", blk->num,
@@ -1150,7 +1156,8 @@ static UNUSEDA void ir_print_graph(ir_prog_t *prog)
 		for(size_t j = 0; j < list_len(func->blocks); j++) {
 			ir_blk_t *blk = func->blocks[j];
 			ir_blk_t *dom = blk->idom;
-			printf("\tBB%zu -> BB%zu\n", dom->num, blk->num);
+			printf("\t\"BB%zu (%llu)\" -> \"BB%zu (%llu)\"\n", dom->num,
+				   dom->loop_nest, blk->num, blk->loop_nest);
 		}
 	}
 	printf("}\n");
@@ -1231,6 +1238,7 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 		ir_blk_rpo(func);
 		ir_blk_dom(func);
 		ir_blk_domtree(func);
+		ir_blk_loopnest(func);
 	}
 
 	// ir_print_graph(prog);

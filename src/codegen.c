@@ -519,7 +519,7 @@ void codegen_stmt(node_t *node)
 			cond = ir_buildr_creat_imm32(build, 1);
 		}
 
-		bool is32 = node->cond->type->size <= 4;
+		bool is32 = node->cond ? node->cond->type->size <= 4 : true;
 		ir_buildr_creat_br_set(build, is32, cond, then, resume, then);
 
 		codegen_stmt(node->then);

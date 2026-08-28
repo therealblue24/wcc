@@ -10,7 +10,7 @@ void ir_blk_reguse(ir_func_t *fun);
 void ir_blk_flow(ir_func_t *fun);
 
 /* requires liveness: coalesces non-interfering registers */
-void ir_coalesce(ir_func_t *fun);
+int ir_coalesce(ir_func_t *fun);
 
 /* do 2 register's lifetimes intersect? */
 bool ir_intersect(reg_t *a, reg_t *b);
