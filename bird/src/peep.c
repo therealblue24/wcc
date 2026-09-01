@@ -249,6 +249,12 @@ exit:
 		change = 1;
 	}
 
+	if(ins->type == IR_INST_NOT && ins->r1->insty == IR_INST_NOT) {
+		ins->type = IR_INST_MOV;
+		ins->r1 = ins->r1->lhs;
+		change = 1;
+	}
+
 	/* %r1 = mkbool %r0
 	 * %r2 = mkbool %r1
 	 * ->

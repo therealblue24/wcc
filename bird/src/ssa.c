@@ -237,7 +237,7 @@ static reg_t *try_remove_trivial_phi(ir_inst_t *phi)
 		phi->r1 = phi->phi_args[0];
 		list_delete(phi->phi_args);
 		list_delete(phi->phi_preds);
-		return phi->r0;
+		return phi->r1;
 	}
 
 	reg_t *same = NULL;
@@ -702,6 +702,7 @@ static void deparallelize_pmovs(ir_func_t *fun)
 
 void ir_ssa_enter(ir_func_t *fun)
 {
+	func_phi = fun;
 	prof_begin("ssa");
 	reg_reset_counter();
 	ir_fix(fun);
@@ -737,6 +738,12 @@ void ir_ssa_enter(ir_func_t *fun)
 		size_t i = postorder[ip];
 		ir_blk_t *blk = fun->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type == IR_INST_MOV) {
+				write_reg(blk, inst->r0, read_reg(blk, inst->r1));
+				inst->type = IR_INST_NOP;
+				inst->r0 = inst->r1 = NULL;
+			}
+
 			if(inst->r0) {
 				inst->r0 = write_reg(blk, inst->r0, ssa_tmp(inst->r0));
 			}
@@ -911,6 +918,7 @@ void ir_ssa_exit(ir_func_t *fun)
 	ir_blk_flow(fun);
 	isolate_phis(fun);
 	deparallelize_pmovs(fun);
+	ir_fix(fun);
 	cleanup_critical_jumps(fun);
 	ir_blk_flow(fun);
 	ir_basic_block_placement(fun);

@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "x64.h"
 #include "zz/set.h"
 
 static ir_inst_t *find_last_or_flow_ins(ir_inst_t *root)
@@ -322,13 +323,30 @@ static int try_coalesce(reg_t *reg, reg_t *join_with)
 
 	/* replace r0 with r1, join intervals */
 	join_intervals(r, j);
-	join_intervals(reg, join_with);
-
-	ir_union(join_with, reg);
+	ir_union(j, r);
 	return 1;
 }
 
-static int coalesce_block(ir_blk_t *blk)
+static int coalesce_moves(ir_inst_t *ins)
+{
+	if(ins->type != IR_INST_MOV) {
+		return 0;
+	}
+
+	if(ins->r1 == ins->r0) {
+		ins->type = IR_INST_NOP;
+		return 0;
+	}
+
+	if(try_coalesce(ins->r1, ins->r0)) {
+		ins->type = IR_INST_NOP;
+		return 1;
+	}
+
+	return 0;
+}
+
+static int coalesce_block(ir_blk_t *blk, int (*func)(ir_inst_t *ins))
 {
 	int change = 0;
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
@@ -336,24 +354,12 @@ static int coalesce_block(ir_blk_t *blk)
 			continue;
 		}
 
-		if(ins->type != IR_INST_MOV) {
-			continue;
-		}
-
-		if(ins->r1 == ins->r0) {
-			ins->type = IR_INST_NOP;
-			continue;
-		}
-
-		if(try_coalesce(ins->r1, ins->r0)) {
-			change = 1;
-			ins->type = IR_INST_NOP;
-		}
+		change |= func(ins);
 	}
 	return change;
 }
 
-static int dfs_visit(ir_blk_t *blk)
+static int dfs_visit(ir_blk_t *blk, int (*func)(ir_inst_t *ins))
 {
 	if(blk->visited) {
 		return 0;
@@ -361,12 +367,12 @@ static int dfs_visit(ir_blk_t *blk)
 	int change = 0;
 	blk->visited = true;
 	ir_inst_t *flow = blk->tail;
-	change = coalesce_block(blk);
+	change = coalesce_block(blk, func);
 	if(flow->true_blk) {
-		change |= dfs_visit(flow->true_blk);
+		change |= dfs_visit(flow->true_blk, func);
 	}
 	if(flow->false_blk) {
-		change |= dfs_visit(flow->false_blk);
+		change |= dfs_visit(flow->false_blk, func);
 	}
 	return change;
 }
@@ -377,7 +383,7 @@ int ir_coalesce(ir_func_t *fun)
 		fun->blocks[i]->visited = false;
 	}
 
-	int change = dfs_visit(fun->blocks[0]);
+	int change = dfs_visit(fun->blocks[0], coalesce_moves);
 
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		fun->blocks[i]->visited = false;
@@ -391,6 +397,7 @@ int ir_coalesce(ir_func_t *fun)
 LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 {
 	reset_liveness(fun);
+	ir_blk_reguse(fun);
 	LIST(reg_t *) allocated = list_make(reg_t *);
 	/* the algorithm here is quite simple. basically,
 	 * we assume the blocks are laid out in order,

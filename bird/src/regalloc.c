@@ -136,6 +136,7 @@ static void rewrite_ins(ir_inst_t *ins_prev, ir_inst_t *ins)
 /* spill the needed registers to spill */
 void ir_regalloc_spill(ir_func_t *fun)
 {
+	ir_fix(fun);
 	/* rewriting */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
@@ -153,7 +154,30 @@ void ir_regalloc_spill(ir_func_t *fun)
 				break;
 			}
 		}
+	}
 
+	/* fixing */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *prev = blk->insts;
+		for(ir_inst_t *ins = blk->insts->next; ins; ins = ins->next) {
+			/* r0 = spill_load #loc
+			 * r1 = spill_load #loc
+			 * ->
+			 * r1 = r0
+			 */
+			if(ins->type == IR_INST_LOADSS && prev->type == IR_INST_LOADSS &&
+			   ins->imm == prev->imm) {
+				ins->type = IR_INST_MOV;
+				ins->r1 = prev->r0;
+			}
+
+			if(ir_inst_is_term(ins->type)) {
+				break;
+			}
+		}
+
+		ir_inst_t *nop = blk->insts;
 		blk->insts = blk->insts->next;
 		ir_inst_delete(nop);
 	}
@@ -161,9 +185,26 @@ void ir_regalloc_spill(ir_func_t *fun)
 
 /* 1:1 copy of Poletto 1999 linear scan algorithm + improvments from https://llvm.org/ProjectsWithLLVM/2004-Fall-CS426-LS.pdf (aka "iterative" register allocation)  */
 
-static long get_cost(reg_t *r)
+static long get_spill_cost(reg_t *r)
 {
 	return r ? r->spill_cost : -1;
+}
+
+static long get_use(reg_t *r)
+{
+	return r ? r->last_use : -1;
+}
+
+static int worth(reg_t *cur, reg_t *cand)
+{
+	int w = get_use(cur) - get_use(cand);
+
+	/* equal? compare costs */
+	if(!w) {
+		return get_spill_cost(cur) > get_spill_cost(cand);
+	}
+
+	return w < 0;
 }
 
 static reg_t *regalloc_try(LIST(reg_t *) allocated, size_t amount)
@@ -189,8 +230,7 @@ static reg_t *regalloc_try(LIST(reg_t *) allocated, size_t amount)
 			}
 
 			/* select register to spill, just in case */
-			if(regs[i] && !regs[i]->nospill &&
-			   get_cost(regs[tospill]) > get_cost(regs[i])) {
+			if(regs[i] && !regs[i]->nospill && worth(regs[tospill], regs[i])) {
 				tospill = i;
 			}
 		}
@@ -575,10 +615,7 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 {
 	ir_blk_reguse(fun);
 	ir_blk_fixup_entry(fun);
-	/* We handle coalescing for x64 in the x64 opt stage. */
-	if(arch == IR_ARCH_AARCH64_APPLE) {
-		ir_coalesce(fun);
-	}
+	ir_coalesce(fun);
 
 	if(debug) {
 		printf("After register coalescing\n");

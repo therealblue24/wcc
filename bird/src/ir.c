@@ -996,6 +996,10 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("????");
 	}
 
+	// if(ins->r0) {
+	// 	printf("\n\tlive [%ld, %ld)", ins->r0->def, ins->r0->last_use);
+	// }
+
 	return;
 #undef imm
 #undef out
@@ -1003,12 +1007,10 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 #undef r1
 #undef r2
 }
-static void print_reglist(LIST(reg_t *) list)
+static void print_reglist(SET(reg_t *) list)
 {
-	for(size_t i = 0; i < list_len(list); i++) {
-		reg_t *reg = list[i];
-		printf("r%ld, ", reg->vr);
-	}
+	reg_t *reg;
+	set_iter(list, reg, { printf("r%ld, ", reg->vr); });
 	printf("\n");
 }
 
@@ -1041,6 +1043,13 @@ static UNUSEDA void ir_dump_stats(ir_func_t *fun)
 			printf("BB%ld, ", blk->tail->true_blk->num);
 		}
 		printf("\n");
+
+		printf("\tdef = ");
+		print_reglist(blk->regs_def);
+		printf("\tin = ");
+		print_reglist(blk->regs_in);
+		printf("\tout = ");
+		print_reglist(blk->regs_out);
 	}
 }
 

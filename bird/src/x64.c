@@ -69,7 +69,6 @@ void ir_func_opt_x64(ir_func_t *fun, int opt_level)
 	/* TODO: immediate inc/dec optimization */
 
 	ir_blk_liveness(fun);
-	ir_coalesce(fun);
 	ir_turn_into_x64(fun);
 	return;
 }

@@ -36,6 +36,20 @@ void ir_placemarks(ir_func_t *func)
 		}
 	}
 
+	/* mark 64 bit moves from 32 bit data as 32 bit */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_MOV) {
+				continue;
+			}
+			if(inst->r1->is_32bit) {
+				inst->is_32bit = true;
+				inst->r0->is_32bit = true;
+			}
+		}
+	}
+
 	/* mark 32 bit phis */
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];

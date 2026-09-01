@@ -78,7 +78,7 @@ int ir_stackreduce(ir_func_t *func)
 static int ins_is_mem(enum ins_type t)
 {
 	return t == IR_INST_LOAD || t == IR_INST_LOADS || t == IR_INST_STORE ||
-		   t == IR_INST_STORES;
+		   t == IR_INST_STORES || t == IR_INST_CALL;
 }
 
 static int ir_memopt_ins(ir_inst_t *ins)
