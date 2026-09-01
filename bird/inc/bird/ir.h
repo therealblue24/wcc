@@ -5,7 +5,6 @@
 #include "zz/base.h"
 #include "zz/list.h"
 #include "zz/set.h"
-#include "zz/bset.h"
 #include "zz/prof.h"
 
 enum ins_type {
