@@ -237,8 +237,10 @@ static char read_hexchr(char *p, char **rest)
 			res = (16 * res) + (10 + (digit - 'a'));
 		} else if(is_hex_upper(digit)) {
 			res = (16 * res) + (10 + (digit - 'A'));
-		} else
+		} else {
+			p--;
 			break;
+		}
 	}
 	*rest = p;
 	return res;
@@ -251,8 +253,10 @@ static char read_octchr(char *p, char **rest)
 		char digit = *p++;
 		if(is_oct(digit)) {
 			res = (8 * res) + (digit - '0');
-		} else
+		} else {
+			p--;
 			break;
+		}
 	}
 	*rest = p;
 	return res;

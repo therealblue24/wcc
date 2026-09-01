@@ -309,6 +309,29 @@ exit:
 		change = 1;
 	}
 
+	/* %r0 = eor %r2, %r1
+	 * where
+	 * %r2 = eor %r1, %r3
+     * ->
+	 * %r0 = %r3
+	 * might look confusing but this is to eliminate the exclusive or swaps
+	 * in form:
+	 * A ^= B, B ^= A, A ^= B
+	 */
+	if(ins->type == IR_INST_EOR && ins->r1->insty == IR_INST_EOR &&
+	   (ins->r1->lhs == ins->r2 || ins->r1->rhs == ins->r2)) {
+		ins->type = IR_INST_MOV;
+		ins->r1 = ins->r1->lhs == ins->r2 ? ins->r1->rhs : ins->r1->lhs;
+		change = 1;
+	}
+
+	if(ins->type == IR_INST_EOR && ins->r2->insty == IR_INST_EOR &&
+	   (ins->r2->lhs == ins->r1 || ins->r2->rhs == ins->r1)) {
+		ins->type = IR_INST_MOV;
+		ins->r1 = ins->r2->lhs == ins->r1 ? ins->r2->rhs : ins->r2->lhs;
+		change = 1;
+	}
+
 	/* %r0 = cmp.* %r1, %r1
 	 * ->
 	 * %r0 = imm #res */
