@@ -1246,7 +1246,7 @@ void ir_prog_compile(FILE *f, ir_prog_t *prog, enum ir_arch arch, int opt)
 		ir_blk_flow(func);
 		ir_blk_rpo(func);
 		ir_blk_dom(func);
-		ir_blk_domtree(func);
+		ir_blk_domf(func);
 		ir_blk_loopnest(func);
 	}
 

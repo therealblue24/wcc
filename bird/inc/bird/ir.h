@@ -240,7 +240,7 @@ typedef struct ir_blk {
 	LIST(struct ir_blk *) pred; /* block's predecessors */
 	LIST(ir_inst_t *) incomplete_phis; /* block's incomplete phis */
 	struct ir_blk *idom; /* dominator of this block */
-	LIST(struct ir_blk *) dom; /* dominator tree */
+	LIST(struct ir_blk *) dom; /* dominator tree OR frontier */
 	uint64_t dom_depth; /* dominator tree depth */
 	struct ir_inst **gvn_map; /* gvn map for this block */
 	size_t gvn_keys; /* gvn map key count */

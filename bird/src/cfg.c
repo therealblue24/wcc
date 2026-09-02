@@ -206,7 +206,7 @@ void ir_blk_dom(ir_func_t *fun)
 	return;
 }
 
-/* requires ir_blk_dom */
+/* requires ir_blk_dom : info cannot coexist with ir_blk_domf */
 void ir_blk_domtree(ir_func_t *fun)
 {
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
@@ -225,6 +225,32 @@ void ir_blk_domtree(ir_func_t *fun)
 	}
 
 	return;
+}
+
+/* requires ir_blk_dom : info cannot coexist with ir_blk_domtree */
+void ir_blk_domf(ir_func_t *fun)
+{
+	/* like above, straight up copy of "Figure 5: The Dominance-Frontier Algorithm" */
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		list_hdr(blk->dom)->size = 0;
+	}
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		if(list_len(blk->pred) < 2) {
+			continue;
+		}
+
+		for(size_t j = 0; j < list_len(blk->pred); j++) {
+			ir_blk_t *runner = blk->pred[j];
+			while(runner != blk->idom) {
+				list_append(runner->dom, blk);
+				runner = runner->idom;
+			}
+		}
+	}
 }
 
 /* finds least common ancestor of b1 and b2
