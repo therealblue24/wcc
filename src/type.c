@@ -81,7 +81,7 @@ bool type_is_int(type_t *ty)
 {
 	return ty && (ty->kind == TYPE_INT || ty->kind == TYPE_LONG ||
 				  ty->kind == TYPE_SHORT || ty->kind == TYPE_CHAR ||
-				  ty->kind == TYPE_BOOL);
+				  ty->kind == TYPE_BOOL || ty->kind == TYPE_ENUM);
 }
 
 bool type_is_ptr(type_t *ty)

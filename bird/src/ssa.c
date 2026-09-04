@@ -402,6 +402,9 @@ static void isolate_phis(ir_func_t *fun)
 				reg_t *arg = ir_find(inst->phi_args[j]);
 				ir_inst_t *pmov = inst->phi_preds[j]->tailprev;
 				reg_t *fresh = reg_make();
+				/* conservative estimate */
+				fresh->def = arg->def;
+				fresh->last_use = arg->last_use;
 				list_append(pmov->pmov_args,
 							((reg_pmov_t){ .dst = fresh, .src = arg }));
 

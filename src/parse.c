@@ -97,7 +97,8 @@ static void scope_add_var(obj_t *var)
 	elem->is_type = false;
 	elem->var = var;
 	strmap_put(list_peek(scopes).vars, var->name, elem);
-	strmap_put(locals, var->name, var);
+	if(!var->econ)
+		strmap_put(locals, var->name, var);
 	return;
 }
 
@@ -444,7 +445,7 @@ static bool is_declspec(token_t *tok)
 	   token_eq(tok, "signed") || token_eq(tok, "unsigned") ||
 	   token_eq(tok, "_Alignas") || token_eq(tok, "struct") ||
 	   token_eq(tok, "static") || token_eq(tok, "union") ||
-	   token_eq(tok, "typedef") || find_type(tok)) {
+	   token_eq(tok, "typedef") || token_eq(tok, "enum") || find_type(tok)) {
 		return true;
 	}
 	return false;
@@ -576,6 +577,96 @@ static type_t *parse_typedef(token_t *tok, token_t **rest)
 	return ty;
 }
 
+static type_t *parse_enum(token_t *tok, token_t **rest)
+{
+	tok = tok->next; /* skip `enum` */
+
+	/* enum ident? { elist }      decl has optional ident
+	 * enum ident? { elist , }    trailing comma
+	 * enum ident                 type uses must have ident
+	 */
+
+	/* save ident name */
+	token_t *name = NULL;
+	if(tok->kind == TOK_IDENT) {
+		name = tok;
+		tok = tok->next;
+	}
+
+	if(!token_eat(&tok, "{")) {
+		if(!name) {
+			/* i don't know how this might happen but ok */
+			compile_err(tok->loc, "invalid enum specifier");
+		}
+		*rest = tok;
+		type_t *ty = find_tag(name);
+		if(ty->kind != TYPE_ENUM) {
+			compile_err(tok->loc, "not an enum type");
+		}
+
+		return ty;
+	}
+
+	type_t *ety = type_clone(TY_INT);
+	ety->kind = TYPE_ENUM;
+	ety->ident = name;
+	if(name) {
+		scope_add_tag(ety);
+	}
+
+	/* read in values */
+	int enum_val = 0;
+	while(!token_eq(tok, "}")) {
+		if(token_eq(tok, ",")) {
+			break;
+		}
+
+		if(tok->kind != TOK_IDENT) {
+			compile_err(tok->loc, "expected an identifer");
+		}
+
+		token_t *name = tok;
+		tok = tok->next;
+		/* handle assignment */
+		if(token_eat(&tok, "=")) {
+			/* todo: big big big hack. IMplement proper constant
+			 * expression */
+			uint64_t num;
+			if(token_eq(tok, "-")) {
+				tok = tok->next;
+				if(tok->kind != TOK_NUM) {
+					compile_err(tok->loc, "expected a number");
+				}
+				num = -tok->num;
+			} else {
+				if(tok->kind != TOK_NUM) {
+					compile_err(tok->loc, "expected a number");
+				}
+				num = tok->num;
+			}
+			enum_val = num;
+			tok = tok->next;
+		}
+
+		token_eat(&tok, ",");
+
+		/* add new enum object */
+		obj_t *eobj = obj_make_noadd(mystrdup(name->content), ety, false);
+		eobj->eval = enum_val;
+		eobj->econ = true;
+
+		scope_add_var(eobj);
+
+		enum_val++;
+	}
+
+	/* complete */
+	tok = token_skip(tok, "}");
+
+	*rest = tok;
+	return ety;
+}
+
 static type_t *parse_declspec(token_t *tok, token_t **rest)
 {
 	uint64_t align = 0;
@@ -589,6 +680,10 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 
 	if(token_eq(tok, "typedef")) {
 		return parse_typedef(tok, rest);
+	}
+
+	if(token_eq(tok, "enum")) {
+		return parse_enum(tok, rest);
 	}
 
 	while(is_declspec(tok)) {
@@ -1541,7 +1636,13 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 			compile_err(tok->loc, "unknown variable '%.*s'", tok->len,
 						tok->loc);
 		}
-		node_t *node = node_var(obj, tok);
+		node_t *node;
+		if(obj->econ) {
+			node = node_num(obj->eval, tok);
+			node->type = obj->type;
+		} else {
+			node = node_var(obj, tok);
+		}
 		*rest = tok->next;
 		return node;
 	}
@@ -1691,28 +1792,28 @@ memb_parse:;
 static node_t *parse_unary(token_t *tok, token_t **rest)
 {
 	if(token_eq(tok, "+")) {
-		node_t *node = parse_unary(tok->next, rest);
+		node_t *node = parse_cast(tok->next, rest);
 		return node;
 	}
 
 	if(token_eq(tok, "-")) {
-		return node_unary(NODE_NEG, parse_unary(tok->next, rest), tok);
+		return node_unary(NODE_NEG, parse_cast(tok->next, rest), tok);
 	}
 
 	if(token_eq(tok, "&")) {
-		return node_unary(NODE_ADDR, parse_unary(tok->next, rest), tok);
+		return node_unary(NODE_ADDR, parse_cast(tok->next, rest), tok);
 	}
 
 	if(token_eq(tok, "*")) {
-		return node_unary(NODE_DEREF, parse_unary(tok->next, rest), tok);
+		return node_unary(NODE_DEREF, parse_cast(tok->next, rest), tok);
 	}
 
 	if(token_eq(tok, "~")) {
-		return node_unary(NODE_NOT, parse_unary(tok->next, rest), tok);
+		return node_unary(NODE_NOT, parse_cast(tok->next, rest), tok);
 	}
 
 	if(token_eq(tok, "!")) {
-		return node_unary(NODE_LOGNEG, parse_unary(tok->next, rest), tok);
+		return node_unary(NODE_LOGNEG, parse_cast(tok->next, rest), tok);
 	}
 
 	/* sizeof, _Alignof */

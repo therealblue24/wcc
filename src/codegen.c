@@ -825,6 +825,7 @@ void codegen_func(FILE *f, LIST(obj_t *) globals, int opt_level,
 		list_hdr(break_stack)->size = 0;
 
 		varopt(func);
+		ir_fix(func);
 
 		ir_inst_t *nop = ins_nop();
 		nop->next = fun->blocks[0]->insts;

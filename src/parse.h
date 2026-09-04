@@ -79,6 +79,8 @@ typedef struct obj {
 	size_t stack_size; /* total size of this function's stack frame */
 	reg_t *eq_reg; /* equivalent register, if used */
 	long order; /* order of object */
+	int eval; /* value of enum */
+	bool econ; /* is this value a enum constant? */
 } obj_t;
 
 /* a struct member */
