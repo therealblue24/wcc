@@ -62,7 +62,7 @@ OBJ = $(SRC:src/%.c=$(BINDIR)/%.o)
 DEP = $(OBJ:.o=.d)
 
 # all possible things
-.PHONY: dirs build test link test clean compile
+.PHONY: dirs build test link test clean compile count
 
 # default action
 all: dirs build link
@@ -98,3 +98,6 @@ clean:
 	@echo "cleaning"
 	rm -rf $(BINDIR)
 	@echo "cleaned"
+
+count:
+	@cloc $(SRC)

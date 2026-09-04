@@ -395,10 +395,24 @@ void codegen_stmt(node_t *node)
 			 * basically what we are doing
 			 */
 
+			reg_t *casenum, *casenum2, *cmpres;
+
 			/* %casenum = imm #num */
-			reg_t *casenum = ir_buildr_creat_imm(build, is32, b->cond->num);
-			/* %cmpres = cmp.eq %ctrl, %casenum */
-			reg_t *cmpres = ir_buildr_creat_cmp_eq(build, is32, ctrl, casenum);
+			casenum = ir_buildr_creat_imm(build, is32, b->cond->num);
+			if(b->cond->kind == NODE_NUM) {
+				/* %cmpres = cmp.eq %ctrl, %casenum */
+				cmpres = ir_buildr_creat_cmp_eq(build, is32, ctrl, casenum);
+			} else {
+				/* %casenum2 = imm #num2 */
+				casenum2 = ir_buildr_creat_imm(build, is32, b->cond->num2);
+				/* the range is inclusive, so we check
+				 * (x >= LOW && x <= HIGH) */
+				reg_t *cpart1 = ir_buildr_creat_cmp_ge(
+					build, is32, b->cond->type->unsignd, ctrl, casenum);
+				reg_t *cpart2 = ir_buildr_creat_cmp_le(
+					build, is32, b->cond->type->unsignd, ctrl, casenum2);
+				cmpres = ir_buildr_creat_and(build, is32, cpart1, cpart2);
+			}
 			/* br %cmpres, case_blk, chain */
 			ir_buildr_creat_br_set(build, is32, cmpres, b->case_blk, chain,
 								   chain);

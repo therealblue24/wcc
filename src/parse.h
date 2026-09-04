@@ -50,6 +50,7 @@ enum node_kind {
 	NODE_CONTINUE, /* continue */
 	NODE_SWITCH, /* switch */
 	NODE_CASE, /* case */
+	NODE_RANGE, /* num ... other_num */
 	NODE_DEFAULT, /* default */
 	NODE_GOTO, /* goto */
 	NODE_LABEL, /* label: */
@@ -139,6 +140,7 @@ typedef struct node {
 	struct node *fargs; /* function arguments, for NODE_FUNCALL */
 	obj_t *var; /* for NODE_VAR */
 	uint64_t num; /* for NODE_NUM */
+	uint64_t num2; /* for NODE_RANGE */
 } node_t;
 
 extern STRMAP(obj_t *) known_funcs;
