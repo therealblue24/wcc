@@ -340,8 +340,22 @@ int x64_arg_reg_map[6] = { 6, 5, 12, 13, 10, 9 };
 static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 								 long last_i)
 {
+	/* todo: smarter basic block placement */
 	int can_omit = list_len(blk->pred) == 1 &&
 				   blk->pred[0]->num == blk->num - 1;
+	/* try see if we can't omit it */
+	if(can_omit) {
+		ir_inst_t *br = blk->pred[0]->tail;
+		if(br->type == IR_INST_JMP) {
+			goto ok;
+		}
+
+		if(br->true_blk == blk || br->false_blk == blk) {
+			can_omit = false;
+		}
+	}
+ok:
+
 	if(!can_omit) {
 		fprintf(f, ".BB%ld:\n", blk->num);
 	}

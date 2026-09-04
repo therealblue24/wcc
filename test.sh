@@ -2,9 +2,12 @@
 
 passing=1
 
-./bin/wcc test/one_impl.c -o test/one.s -O3
+optlevel=3
+
+
+./bin/wcc test/one_impl.c -o test/one.s -O$optlevel
 clang -c test/one.s -o one.o
-clang -c -o cc.o test/cc.c -O3
+clang -c -o cc.o test/cc.c -O$optlevel
 
 ./bin/wcc --internal-test-strmap
 
@@ -15,7 +18,7 @@ assert() {
 
   printf "\e[0m"
 
-  ./bin/wcc test/$actual -o prog.s -O3
+  ./bin/wcc test/$actual -o prog.s -O$optlevel
   compilerstatus="$?"
 
   if [ "$compilerstatus" = "1" ]; then

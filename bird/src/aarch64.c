@@ -409,6 +409,19 @@ static void ir_emit_blk_aarch64_apple(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 	/* todo: smarter basic block placement */
 	int can_omit = list_len(blk->pred) == 1 &&
 				   blk->pred[0]->num == blk->num - 1;
+	/* try see if we can't omit it */
+	if(can_omit) {
+		ir_inst_t *br = blk->pred[0]->tail;
+		if(br->type == IR_INST_JMP) {
+			goto ok;
+		}
+
+		if(br->true_blk == blk || br->false_blk == blk) {
+			can_omit = false;
+		}
+	}
+ok:
+
 	if(!can_omit) {
 		fprintf(f, ".BB%ld: \t\t; preds = ", blk->num);
 		for(size_t i = 0; i < list_len(blk->pred); i++) {
