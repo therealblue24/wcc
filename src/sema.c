@@ -1,4 +1,5 @@
 #include "sema.h"
+#include "parse.h"
 #include "type.h"
 #include "zz/base.h"
 
@@ -75,6 +76,13 @@ static void sema_visit_core(node_t *node)
 			compile_warn_node(node, "comparison between signed and unsigned");
 			/* promote to unsigned */
 			node->type->unsignd = true;
+		}
+		break;
+	case NODE_RANGE:
+		if(node->num2 < node->num) {
+			compile_warn_node(node, "empty range");
+		} else if(node->num == node->num2) {
+			compile_warn_node(node, "range consists of only 1 number");
 		}
 		break;
 	case NODE_GOTO: {

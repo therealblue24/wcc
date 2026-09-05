@@ -761,6 +761,10 @@ cant:
 				if(ins->size == 8) {
 					ins->type = IR_INST_MOV;
 				}
+				if(ins->size != 1 && ins->size != 2 && ins->size != 4 &&
+				   ins->size != 8) {
+					ERROR("something seriously wrong has happened");
+				}
 				ins->r1 = replacement;
 				continue;
 			}

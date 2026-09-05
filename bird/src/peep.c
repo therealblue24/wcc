@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "ir.h"
 
 static bool ins_produces_bool(enum ins_type t)
 {
@@ -440,6 +441,85 @@ static int ir_simpleopt_ins_alg(ir_inst_t *ins)
 		change = 1;
 	}
 
+	/* %r2 = cmp.* %r0, #imm1 (is ge)
+	 * %r3 = cmp.* %r0, #imm2 (is le)
+	 * %r4 = and %r2, %r3
+	 * ->
+	 * %r2 = sub %r0, #imm1
+	 * %r3 = imm #(imm2 - imm1)
+	 * %r4 = cmp.le %r2, %r3
+	 */
+
+	if(ins->type == IR_INST_AND) {
+		reg_t *ge = NULL, *le = NULL;
+		if(ins->r1->insty == IR_INST_SGE || ins->r1->insty == IR_INST_UGE) {
+			ge = ins->r1;
+		} else if(ins->r2->insty == IR_INST_SGE ||
+				  ins->r2->insty == IR_INST_UGE) {
+			ge = ins->r2;
+		}
+
+		if(ins->r1->insty == IR_INST_SLE || ins->r1->insty == IR_INST_ULE) {
+			le = ins->r1;
+		} else if(ins->r2->insty == IR_INST_SLE ||
+				  ins->r2->insty == IR_INST_ULE) {
+			le = ins->r2;
+		}
+
+		if(!ge || !le) {
+			goto out;
+		}
+
+		ir_inst_t *ge_cmp = ge->from;
+		ir_inst_t *le_cmp = le->from;
+
+		if(ge_cmp->is_32bit != le_cmp->is_32bit) {
+			goto out;
+		}
+
+		if(ge_cmp->r2->insty != IR_INST_IMM ||
+		   le_cmp->r2->insty != IR_INST_IMM) {
+			goto out;
+		}
+
+		if(ge_cmp->r1 != le_cmp->r1) {
+			goto out;
+		}
+
+		uint32_t imm1 = ge_cmp->r2->imm &
+						(ge_cmp->r2->is_32bit ? UINT32_MAX : UINT64_MAX);
+		uint32_t imm2 = le_cmp->r2->imm &
+						(le_cmp->r2->is_32bit ? UINT32_MAX : UINT64_MAX);
+
+		if(imm1 > imm2) {
+			ins->type = IR_INST_IMM;
+			ins->imm = 0;
+			change = 1;
+			goto out;
+		}
+
+		if(imm1 == imm2) {
+			ins->type = IR_INST_EQ;
+			ins->r1 = le_cmp->r1;
+			ins->r2 = le_cmp->r2;
+			change = 1;
+			goto out;
+		}
+
+		ge_cmp->type = IR_INST_SUB;
+		uint32_t sub = (imm2 - imm1) &
+					   (ge_cmp->r2->is_32bit ? UINT32_MAX : UINT64_MAX);
+
+		ins->type = le_cmp->type;
+		le_cmp->type = IR_INST_IMM;
+		le_cmp->imm = sub;
+
+		ins->r1 = ge;
+		ins->r2 = le;
+		change = 1;
+	}
+out:
+
 	/* TODO: think of more rewritings */
 
 	return change;
@@ -455,6 +535,12 @@ int ir_simpleopt(ir_func_t *func)
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			changed |= ir_simpleopt_ins(blk, ins);
+		}
+	}
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			changed |= ir_simpleopt_ins_alg(ins);
 		}
 	}
