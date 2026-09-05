@@ -1992,7 +1992,7 @@ static obj_t *parse_function_def(type_t *decltype, token_t *tok, token_t **rest)
 		free(name);
 	} else {
 		func = obj_make_noadd(name, type_func_to(decltype), true);
-		func->order = local_order++;
+		func->order = global_order++;
 		func->is_static = decltype->is_static;
 	}
 
