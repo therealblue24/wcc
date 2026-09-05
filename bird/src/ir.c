@@ -533,6 +533,36 @@ static void ir_fix_ins(ir_inst_t *ins)
 		FIX(BR, xx, r1, xx);
 		FIX(JMP, xx, xx, xx);
 		FIX(RET, xx, r1, xx);
+		FIX(RETI, xx, xx, xx);
+		FIX(CALL, r0, xx, xx);
+		FIX(ANDI, r0, r1, xx);
+		FIX(ORI, r0, r1, xx);
+		FIX(EORI, r0, r1, xx);
+		FIX(ADDI, r0, r1, xx);
+		FIX(SUBI, r0, r1, xx);
+		FIX(SHLI, r0, r1, xx);
+		FIX(SHRI, r0, r1, xx);
+		FIX(ASHRI, r0, r1, xx);
+		FIX(BREQI, xx, r1, xx);
+		FIX(BRNEI, xx, r1, xx);
+		FIX(BRSLTI, xx, r1, xx);
+		FIX(BRSLEI, xx, r1, xx);
+		FIX(BRSGTI, xx, r1, xx);
+		FIX(BRSGEI, xx, r1, xx);
+		FIX(BRULTI, xx, r1, xx);
+		FIX(BRULEI, xx, r1, xx);
+		FIX(BRUGTI, xx, r1, xx);
+		FIX(BRUGEI, xx, r1, xx);
+		FIX(EQI, r0, r1, xx);
+		FIX(NEI, r0, r1, xx);
+		FIX(SLTI, r0, r1, xx);
+		FIX(SLEI, r0, r1, xx);
+		FIX(SGTI, r0, r1, xx);
+		FIX(SGEI, r0, r1, xx);
+		FIX(ULTI, r0, r1, xx);
+		FIX(ULEI, r0, r1, xx);
+		FIX(UGTI, r0, r1, xx);
+		FIX(UGEI, r0, r1, xx);
 	default:
 		break;
 	}
@@ -787,6 +817,10 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("r%ld = shr r%ld, r%ld", r0, r1, r2);
 	case IR_INST_ASHR:
 		out("r%ld = ashr r%ld, r%ld", r0, r1, r2);
+	case IR_INST_ROL:
+		out("r%ld = rol r%ld, r%ld", r0, r1, r2);
+	case IR_INST_ROR:
+		out("r%ld = ror r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SHLI:
 		out("r%ld = shl r%ld, #%lld", r0, r1, imm);
 	case IR_INST_SHRI:

@@ -11,7 +11,8 @@ static bool ins_is_3source(enum ins_type t)
 	/* ADD is not needed here because on x64 you can do lea A, [B+C] */
 	return t == IR_INST_SUB || t == IR_INST_SMUL || t == IR_INST_UMUL ||
 		   t == IR_INST_OR || t == IR_INST_AND || t == IR_INST_EOR ||
-		   t == IR_INST_SHL || t == IR_INST_SHR || t == IR_INST_ASHR;
+		   t == IR_INST_SHL || t == IR_INST_SHR || t == IR_INST_ASHR ||
+		   t == IR_INST_ROL || t == IR_INST_ROR;
 }
 
 /* is the instruction in form A = F(B) where it needs A and B to be separate? */
@@ -725,17 +726,31 @@ branch_cond:
 			fprintf(f, "\txor %s, %lld\n", r0, imm);
 			break;
 		case IR_INST_SHLI:
-			fprintf(f, "\tshl %s, %lld\n", r0, imm);
+			if(imm != 1) {
+				fprintf(f, "\tshl %s, %lld\n", r0, imm);
+			} else {
+				fprintf(f, "\tshl %s\n", r0);
+			}
 			break;
 		case IR_INST_SHRI:
-			fprintf(f, "\tshr %s, %lld\n", r0, imm);
+			if(imm != 1) {
+				fprintf(f, "\tshr %s, %lld\n", r0, imm);
+			} else {
+				fprintf(f, "\tshr %s\n", r0);
+			}
 			break;
 		case IR_INST_ASHRI:
-			fprintf(f, "\tsar %s, %lld\n", r0, imm);
+			if(imm != 1) {
+				fprintf(f, "\tsar %s, %lld\n", r0, imm);
+			} else {
+				fprintf(f, "\tsar %s\n", r0);
+			}
 			break;
 		case IR_INST_SHL:
 		case IR_INST_SHR:
 		case IR_INST_ASHR:
+		case IR_INST_ROL:
+		case IR_INST_ROR:
 			fprintf(f, "\tmov ecx, %s\n", r2d);
 			switch(ins->type) {
 			case IR_INST_SHL:
@@ -746,6 +761,12 @@ branch_cond:
 				break;
 			case IR_INST_ASHR:
 				fprintf(f, "\tsar %s, cl\n", r0);
+				break;
+			case IR_INST_ROL:
+				fprintf(f, "\trol %s, cl\n", r0);
+				break;
+			case IR_INST_ROR:
+				fprintf(f, "\tror %s, cl\n", r0);
 				break;
 			default: /* wth? */
 				break;

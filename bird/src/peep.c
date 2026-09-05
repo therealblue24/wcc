@@ -520,6 +520,129 @@ static int ir_simpleopt_ins_alg(ir_inst_t *ins)
 	}
 out:
 
+	/* classic
+	 * (x >> c) OP (x << (SZ - c))   = Rotate right
+	 * (x << c) OP (x >> (SZ - c))   = Rotate left
+	 * OP can be: or, eor, and, add
+	 * SZ must be 32 or 64
+	 */
+
+	/* rotate left case */
+	if(ins->type == IR_INST_OR || ins->type == IR_INST_EOR ||
+	   ins->type == IR_INST_AND || ins->type == IR_INST_ADD) {
+		bool is32 = ins->is_32bit;
+		reg_t *shl = NULL, *shr = NULL;
+		if(ins->r1->insty == IR_INST_SHL && ins->r2->insty == IR_INST_SHR) {
+			shl = ins->r1;
+			shr = ins->r2;
+		} else if(ins->r1->insty == IR_INST_SHR &&
+				  ins->r2->insty == IR_INST_SHL) {
+			shl = ins->r2;
+			shr = ins->r1;
+		} else {
+			goto out2;
+		}
+
+		/* list of constraints upcoming */
+		ir_inst_t *shl_ins = shl->from;
+		ir_inst_t *shr_ins = shr->from;
+		ir_inst_t *sub_ins = shr_ins->r2->from;
+		reg_t *x;
+		reg_t *c;
+		if(shl_ins->is_32bit != is32) {
+			goto out2;
+		}
+		if(shr_ins->is_32bit != is32) {
+			goto out2;
+		}
+
+		if(sub_ins->type != IR_INST_SUB) {
+			goto out2;
+		}
+		if(sub_ins->is_32bit != is32) {
+			goto out2;
+		}
+		if(sub_ins->r1->insty != IR_INST_IMM) {
+			goto out2;
+		}
+		if(sub_ins->r1->imm != 64 - (is32 * 32)) {
+			goto out2;
+		}
+		if(sub_ins->r2 != shl_ins->r2) {
+			goto out2;
+		}
+		if(shr_ins->r1 != shl_ins->r1) {
+			goto out2;
+		}
+		x = shr_ins->r1;
+		c = shl_ins->r2;
+
+		/* turn into ROL */
+		ins->type = IR_INST_ROL;
+		ins->r1 = x;
+		ins->r2 = c;
+		change = 1;
+	}
+out2:
+
+	/* rotate right case */
+	if(ins->type == IR_INST_OR || ins->type == IR_INST_EOR ||
+	   ins->type == IR_INST_AND || ins->type == IR_INST_ADD) {
+		bool is32 = ins->is_32bit;
+		reg_t *shl = NULL, *shr = NULL;
+		if(ins->r1->insty == IR_INST_SHL && ins->r2->insty == IR_INST_SHR) {
+			shl = ins->r1;
+			shr = ins->r2;
+		} else if(ins->r1->insty == IR_INST_SHR &&
+				  ins->r2->insty == IR_INST_SHL) {
+			shl = ins->r2;
+			shr = ins->r1;
+		} else {
+			goto out3;
+		}
+
+		/* list of constraints upcoming */
+		ir_inst_t *shl_ins = shl->from;
+		ir_inst_t *shr_ins = shr->from;
+		ir_inst_t *sub_ins = shl_ins->r2->from;
+		reg_t *x;
+		reg_t *c;
+		if(shl_ins->is_32bit != is32) {
+			goto out3;
+		}
+		if(shr_ins->is_32bit != is32) {
+			goto out3;
+		}
+
+		if(sub_ins->type != IR_INST_SUB) {
+			goto out3;
+		}
+		if(sub_ins->is_32bit != is32) {
+			goto out3;
+		}
+		if(sub_ins->r1->insty != IR_INST_IMM) {
+			goto out3;
+		}
+		if(sub_ins->r1->imm != 64 - (is32 * 32)) {
+			goto out3;
+		}
+		if(sub_ins->r2 != shr_ins->r2) {
+			goto out3;
+		}
+		if(shr_ins->r1 != shl_ins->r1) {
+			goto out3;
+		}
+		x = shr_ins->r1;
+		c = shr_ins->r2;
+
+		/* turn into ROR */
+		ins->type = IR_INST_ROR;
+		ins->r1 = x;
+		ins->r2 = c;
+		change = 1;
+	}
+out3:
+
 	/* TODO: think of more rewritings */
 
 	return change;

@@ -5,7 +5,28 @@
 void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
 {
 	UNUSED(opt_level);
-	UNUSED(fun);
+	/* turn ROLs into RORs */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		ir_inst_t *nop = ins_nop();
+		nop->next = blk->insts;
+		blk->insts = nop;
+		ir_inst_t *prev = nop;
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type == IR_INST_ROL) {
+				ir_inst_t *neg = ins_neg(inst->r2, inst->r2);
+				neg->is_32bit = true;
+				inst->type = IR_INST_ROR;
+				prev->next = neg;
+				neg->next = inst;
+			}
+			prev = inst;
+		}
+
+		blk->insts = blk->insts->next;
+		ir_inst_delete(nop);
+	}
+
 	return;
 }
 
@@ -661,6 +682,17 @@ branch_cond:
 			break;
 		case IR_INST_ASHR:
 			fprintf(f, "\tasr %s, %s, %s\n", r0, r1, r2);
+			break;
+			/* ROL does not exist, in the aarch64 opt pass
+			 * we turn ROLs into RORs by doing
+			 * r0 = rol r1, r2
+			 * ->
+			 * r2 = neg r2
+			 * r2 = ror r1, r2
+			 */
+		case IR_INST_ROL:
+		case IR_INST_ROR:
+			fprintf(f, "\tror %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_SHLI:
 			fprintf(f, "\tlsl %s, %s, #%lld\n", r0, r1, imm);

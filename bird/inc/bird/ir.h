@@ -29,6 +29,8 @@ enum ins_type {
 	IR_INST_SHL, /* %r0 = shl %r1, %r2 */
 	IR_INST_SHR, /* %r0 = shr %r1, %r2 */
 	IR_INST_ASHR, /* %r0 = ashr %r1, %r2 */
+	IR_INST_ROL, /* %r0 = rol %r1, %r2 */
+	IR_INST_ROR, /* %r0 = ror %r1, %r2 */
 
 	/* immediate ops */
 	IR_INST_ANDI,
