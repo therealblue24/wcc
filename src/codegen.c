@@ -407,6 +407,10 @@ void codegen_stmt(node_t *node)
 				casenum2 = ir_buildr_creat_imm(build, is32, b->cond->num2);
 				/* the range is inclusive, so we check
 				 * (x >= LOW && x <= HIGH) */
+				/* NOTE: yes this is inefficent compared to just
+				 * (x - LOW) <= (HIGH - LOW) but there is a bIRd
+				 * optimization pass to do that for us, so we
+				 * don't have to deal with unsigned/signed/32b/64b etc */
 				reg_t *cpart1 = ir_buildr_creat_cmp_ge(
 					build, is32, b->cond->type->unsignd, ctrl, casenum);
 				reg_t *cpart2 = ir_buildr_creat_cmp_le(

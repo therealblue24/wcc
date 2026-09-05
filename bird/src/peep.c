@@ -510,7 +510,7 @@ static int ir_simpleopt_ins_alg(ir_inst_t *ins)
 		uint32_t sub = (imm2 - imm1) &
 					   (ge_cmp->r2->is_32bit ? UINT32_MAX : UINT64_MAX);
 
-		ins->type = le_cmp->type;
+		ins->type = IR_INST_ULE;
 		le_cmp->type = IR_INST_IMM;
 		le_cmp->imm = sub;
 

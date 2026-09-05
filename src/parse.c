@@ -571,7 +571,7 @@ static type_t *parse_typedef(token_t *tok, token_t **rest)
 	tok = tok->next; /* skip `typedef` */
 	type_t *ty = parse_type_name(tok, &tok);
 	char *name = tok->content;
-	scope_add_type(name, ty);
+	scope_add_type(name, type_clone(ty));
 	tok = tok->next;
 	*rest = tok;
 	return ty;
@@ -768,6 +768,8 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 		if(found) {
 			tok = tok->next;
 			res = found;
+			align = res->align;
+			unsign = res->unsignd;
 			break;
 		}
 
