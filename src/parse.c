@@ -768,8 +768,10 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 		if(found) {
 			tok = tok->next;
 			res = found;
-			align = res->align;
-			unsign = res->unsignd;
+			if(!align)
+				align = res->align;
+			if(!unsign)
+				unsign = res->unsignd;
 			break;
 		}
 
