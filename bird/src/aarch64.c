@@ -703,6 +703,12 @@ branch_cond:
 		case IR_INST_ASHRI:
 			fprintf(f, "\tasr %s, %s, #%lld\n", r0, r1, imm);
 			break;
+		case IR_INST_ROLI:
+			fprintf(f, "\trol %s, %s, #%lld\n", r0, r1, imm);
+			break;
+		case IR_INST_RORI:
+			fprintf(f, "\tror %s, %s, #%lld\n", r0, r1, imm);
+			break;
 		case IR_INST_SMUL:
 		case IR_INST_UMUL:
 			fprintf(f, "\tmul %s, %s, %s\n", r0, r1, r2);

@@ -122,6 +122,7 @@ static void ir_fold_ins_binop64(ir_inst_t *ins)
 	uint64_t ub = ins->r2->imm;
 	int64_t sa = *((int64_t *)&ins->r1->imm);
 	int64_t sb = *((int64_t *)&ins->r2->imm);
+	uint64_t c;
 
 	ins->r1 = NULL;
 	ins->r2 = NULL;
@@ -185,6 +186,14 @@ static void ir_fold_ins_binop64(ir_inst_t *ins)
 	case IR_INST_ASHR:
 		ins->imm = sa >> (sb & 63);
 		break;
+	case IR_INST_ROL:
+		c = ub & 63;
+		ins->imm = (ua << c) | (ua >> (64 - c));
+		break;
+	case IR_INST_ROR:
+		c = ub & 63;
+		ins->imm = (ua >> c) | (ua << (64 - c));
+		break;
 	case IR_INST_EQ:
 		ins->imm = ua == ub;
 		break;
@@ -234,6 +243,7 @@ static void ir_fold_ins_binop32(ir_inst_t *ins)
 	int32_t sa = *((int32_t *)&ua);
 	int32_t sb = *((int32_t *)&ub);
 	int32_t immres = 0;
+	uint32_t c;
 
 	ins->r1 = NULL;
 	ins->r2 = NULL;
@@ -296,6 +306,14 @@ static void ir_fold_ins_binop32(ir_inst_t *ins)
 		break;
 	case IR_INST_ASHR:
 		immres = sa >> (sb & 31);
+		break;
+	case IR_INST_ROL:
+		c = ub & 31;
+		immres = (ua << c) | (ua >> (32 - c));
+		break;
+	case IR_INST_ROR:
+		c = ub & 31;
+		immres = (ua >> c) | (ua << (32 - c));
 		break;
 	case IR_INST_EQ:
 		immres = ua == ub;

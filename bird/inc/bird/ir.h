@@ -42,6 +42,8 @@ enum ins_type {
 	IR_INST_SHLI,
 	IR_INST_SHRI,
 	IR_INST_ASHRI,
+	IR_INST_ROLI,
+	IR_INST_RORI,
 
 	/* arithmetic - unaryops */
 	IR_INST_NEG, /* %r0 = neg %r1 */

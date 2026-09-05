@@ -27,3 +27,21 @@ uint32_t ror32(uint32_t x_, uint32_t c_)
 	uint32_t x = x_, c = c_;
 	return (x >> c) | (x << (32 - c));
 }
+
+uint32_t ror32c(uint32_t x_)
+{
+	uint32_t x = x_;
+	return (x >> 1) + (x << 31);
+}
+
+uint32_t rol32c(uint32_t x_)
+{
+	uint32_t x = x_;
+	return (x << 1) + (x >> 31);
+}
+
+uint32_t rol32ci(void)
+{
+	uint32_t x = 0x80000001;
+	return (x << 1) + (x >> 31);
+}

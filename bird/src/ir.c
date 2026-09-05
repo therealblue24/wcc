@@ -30,11 +30,11 @@ int ir_inst_is_foldable(enum ins_type type)
 		   type == IR_INST_SUB || type == IR_INST_UDIV ||
 		   type == IR_INST_SDIV || type == IR_INST_UMOD ||
 		   type == IR_INST_SMOD || type == IR_INST_SHL || type == IR_INST_SHR ||
-		   type == IR_INST_ASHR || type == IR_INST_MOV || type == IR_INST_NEG ||
-		   type == IR_INST_NOT || type == IR_INST_MKBOOL ||
-		   type == IR_INST_NOTBOOL || type == IR_INST_ZXT ||
-		   type == IR_INST_SXT || type == IR_INST_AND || type == IR_INST_EOR ||
-		   type == IR_INST_OR;
+		   type == IR_INST_ASHR || type == IR_INST_ROL || type == IR_INST_ROR ||
+		   type == IR_INST_MOV || type == IR_INST_NEG || type == IR_INST_NOT ||
+		   type == IR_INST_MKBOOL || type == IR_INST_NOTBOOL ||
+		   type == IR_INST_ZXT || type == IR_INST_SXT || type == IR_INST_AND ||
+		   type == IR_INST_EOR || type == IR_INST_OR;
 }
 
 static int ir_inst_is_br_cond(enum ins_type type)
@@ -83,8 +83,9 @@ int ir_inst_is_assoc(enum ins_type type)
 int ir_inst_can_fold_imm(enum ins_type type)
 {
 	return type == IR_INST_SHL || type == IR_INST_SHR || type == IR_INST_ASHR ||
-		   type == IR_INST_ADD || type == IR_INST_SUB || type == IR_INST_OR ||
-		   type == IR_INST_AND || type == IR_INST_EOR || ir_inst_is_cmp(type) ||
+		   type == IR_INST_ROL || type == IR_INST_ROR || type == IR_INST_ADD ||
+		   type == IR_INST_SUB || type == IR_INST_OR || type == IR_INST_AND ||
+		   type == IR_INST_EOR || ir_inst_is_cmp(type) ||
 		   ir_inst_is_br_cond(type) || type == IR_INST_RET;
 }
 
@@ -103,6 +104,8 @@ int ir_inst_turn_imm(enum ins_type type)
 		CASE(IR_INST_SHL);
 		CASE(IR_INST_SHR);
 		CASE(IR_INST_ASHR);
+		CASE(IR_INST_ROL);
+		CASE(IR_INST_ROR);
 		CASE(IR_INST_EQ);
 		CASE(IR_INST_NE);
 		CASE(IR_INST_SLT);
@@ -543,6 +546,8 @@ static void ir_fix_ins(ir_inst_t *ins)
 		FIX(SHLI, r0, r1, xx);
 		FIX(SHRI, r0, r1, xx);
 		FIX(ASHRI, r0, r1, xx);
+		FIX(ROLI, r0, r1, xx);
+		FIX(RORI, r0, r1, xx);
 		FIX(BREQI, xx, r1, xx);
 		FIX(BRNEI, xx, r1, xx);
 		FIX(BRSLTI, xx, r1, xx);

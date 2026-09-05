@@ -643,6 +643,55 @@ out2:
 	}
 out3:
 
+	/* now with immediates: */
+
+	if(ins->type == IR_INST_OR || ins->type == IR_INST_EOR ||
+	   ins->type == IR_INST_AND || ins->type == IR_INST_ADD) {
+		bool is32 = ins->is_32bit;
+		reg_t *shl = NULL, *shr = NULL;
+		if(ins->r1->insty == IR_INST_SHL && ins->r2->insty == IR_INST_SHR) {
+			shl = ins->r1;
+			shr = ins->r2;
+		} else if(ins->r1->insty == IR_INST_SHR &&
+				  ins->r2->insty == IR_INST_SHL) {
+			shl = ins->r2;
+			shr = ins->r1;
+		} else {
+			goto out4;
+		}
+
+		if(shl->is_32bit != shr->is_32bit) {
+			goto out4;
+		}
+		if(shl->is_32bit != is32) {
+			goto out4;
+		}
+		if(shl->lhs != shr->lhs) {
+			goto out4;
+		}
+		if(shr->rhs->insty != shl->rhs->insty) {
+			goto out4;
+		}
+		if(shr->rhs->insty != IR_INST_IMM) {
+			goto out4;
+		}
+		uint64_t rimm = shr->rhs->imm & (is32 ? 31 : 63);
+		uint64_t limm = shl->rhs->imm & (is32 ? 31 : 63);
+		reg_t *x = shl->lhs;
+
+		if(limm < rimm) {
+			ins->type = IR_INST_ROL;
+			ins->r1 = x;
+			ins->r2 = shl->rhs;
+		} else {
+			ins->type = IR_INST_ROR;
+			ins->r1 = x;
+			ins->r2 = shr->rhs;
+		}
+		change = 1;
+	}
+out4:
+
 	/* TODO: think of more rewritings */
 
 	return change;

@@ -739,6 +739,20 @@ branch_cond:
 				fprintf(f, "\tshr %s\n", r0);
 			}
 			break;
+		case IR_INST_ROLI:
+			if(imm != 1) {
+				fprintf(f, "\trol %s, %lld\n", r0, imm);
+			} else {
+				fprintf(f, "\trol %s\n", r0);
+			}
+			break;
+		case IR_INST_RORI:
+			if(imm != 1) {
+				fprintf(f, "\tror %s, %lld\n", r0, imm);
+			} else {
+				fprintf(f, "\tror %s\n", r0);
+			}
+			break;
 		case IR_INST_ASHRI:
 			if(imm != 1) {
 				fprintf(f, "\tsar %s, %lld\n", r0, imm);
