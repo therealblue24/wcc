@@ -927,7 +927,15 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		if(ins->r0) {
 			printf("r%ld = ", r0);
 		}
-		printf("call %s", ins->fname);
+
+		if(ins->is_asm) {
+			printf("asm {\n");
+			fwrite(ins->asmsrc, ins->asmlen, 1, stdout);
+			printf("\n}\n");
+		} else {
+			printf("call %s", ins->fname);
+		}
+
 		for(size_t i = 0; i < list_len(ins->call_args); i++) {
 			reg_t *r = ins->call_args[i]->r;
 			long n = mode == 'r' ? r->rr : r->vr;

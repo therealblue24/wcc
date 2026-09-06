@@ -1343,6 +1343,24 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 		return lbl;
 	}
 
+	/* __asm__(strlit); */
+	if(token_eq(tok, "__asm__")) {
+		token_t *save = tok;
+		tok = token_skip(tok->next, "(");
+		if(tok->kind != TOK_STR) {
+			compile_err(tok->loc, "expected a string");
+		}
+
+		token_t *str = tok;
+		tok = token_skip(tok->next, ")");
+		node_t *asmnod = node_make(NODE_ASM, save);
+		asmnod->asmsrc = str->content;
+		asmnod->asmlen = str->type->alen - 1;
+		tok = token_skip(tok, ";");
+		*rest = tok;
+		return asmnod;
+	}
+
 	/* compound-stmt */
 	if(token_eq(tok, "{")) {
 		node_t *compound_stmt = parse_compound_stmt(tok, &tok);

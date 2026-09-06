@@ -577,6 +577,9 @@ void codegen_stmt(node_t *node)
 		ir_buildr_set_insert_blk(build, resume);
 
 	}; break;
+	case NODE_ASM:
+		ir_buildr_creat_asm(build, node->asmsrc, node->asmlen);
+		break;
 	default:
 		compile_err_node(node, "invalid stmt");
 		break;

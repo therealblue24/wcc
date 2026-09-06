@@ -338,6 +338,103 @@ static void handle_div(FILE *f, bool is_32bit, bool unsignd, char *r1, char *r2)
 static const char *arg_reg[6] = { "rdi", "rsi", "rdx", "rcx", "r8", "r9" };
 int x64_arg_reg_map[6] = { 6, 5, 12, 13, 10, 9 };
 
+static void ir_ins_abi_call_x64(FILE *f, ir_func_t *fn, ir_inst_t *ins,
+								char *r0)
+{
+	size_t stack_used = 0;
+	size_t caller_save_count = 0;
+	int v[16] = { 0 };
+	int ps[16] = { 0 };
+	int p = 0;
+	int retval = ins->r0 ? ins->r0->rr : -1;
+	for(int i = 5; i < x64_reg_count; i++) {
+		if(fn->alloc_used[i] && i != retval) {
+			fprintf(f, "\tpush %s\n", x64_reg[i]);
+			caller_save_count++;
+			v[i] = p++;
+			ps[i] = 1;
+		}
+	}
+	if(p)
+		p--;
+
+	/* Dummy stack push */
+	if(caller_save_count & 1) {
+		fprintf(f, "\tpush rcx\n");
+		p++;
+	}
+
+	if(list_len(ins->call_args)) {
+		for(size_t i = list_len(ins->call_args) - 1; i >= 6; i--) {
+			int arg = ins->call_args[i]->r->rr;
+			if(ins->call_args[i]->r->spilld2) {
+				arg = 7;
+				fprintf(f, "\tmov %s, [rbp - %lld]\n", x64_reg[arg],
+						i64abs(ins->call_args[i]->r->off));
+			}
+
+			fprintf(f, "\tpush %s\n", x64_reg[arg]);
+			stack_used += 8;
+		}
+	}
+
+	for(int i = 0; i < 16; i++) {
+		v[i] = ((p - v[i]) * 8) - stack_used;
+	}
+
+	for(size_t i = 0; i < list_len(ins->call_args); i++) {
+		if(i >= 6) {
+			break;
+		}
+		int arg = ins->call_args[i]->r->rr;
+		int nold = 0;
+		if(ins->call_args[i]->r->spilld2) {
+			arg = 7;
+			nold = 1;
+			fprintf(f, "\tmov %s, [rbp - %lld]\n", x64_reg[arg],
+					i64abs(ins->call_args[i]->r->off));
+		}
+
+		if(!nold && arg >= 5 && ps[arg]) {
+			int off = v[arg];
+
+			if(off) {
+				fprintf(f, "\tmov %s, [rsp + %d]\n", arg_reg[i], off);
+			} else {
+				fprintf(f, "\tmov %s, [rsp]\n", arg_reg[i]);
+			}
+		} else {
+			fprintf(f, "\tmov %s, %s\n", arg_reg[i], x64_reg[arg]);
+		}
+	}
+	/* set RAX to zero.
+			 * needed for varadic functions
+			 * where `al` is the number of float va-args
+			 * we don't support varadic functions, but we do
+			 * support calling them without any va-args */
+	fprintf(f, "\txor eax, eax\n");
+	fprintf(f, "\tcall %s\n", ins->fname);
+	if(r0) {
+		if(ins->is_32bit) {
+			fprintf(f, "\tmov %s, eax\n", r0);
+		} else {
+			fprintf(f, "\tmov %s, rax\n", r0);
+		}
+	}
+	if(stack_used) {
+		fprintf(f, "\tsub rsp, %zu\n", stack_used);
+	}
+	if(caller_save_count & 1) {
+		fprintf(f, "\tpop rcx\n");
+	}
+	for(int i = x64_reg_count - 1; i >= 5; i--) {
+		if(fn->alloc_used[i] && i != retval) {
+			fprintf(f, "\tpop %s\n", x64_reg[i]);
+		}
+	}
+	return;
+}
+
 static void ir_emit_blk_x64_sysv(FILE *f, ir_func_t *fn, ir_blk_t *blk,
 								 long last_i)
 {
@@ -451,96 +548,12 @@ ok:
 			}
 		}; break;
 		case IR_INST_CALL: {
-			size_t stack_used = 0;
-			size_t caller_save_count = 0;
-			int v[16] = { 0 };
-			int ps[16] = { 0 };
-			int p = 0;
-			int retval = ins->r0 ? ins->r0->rr : -1;
-			for(int i = 5; i < x64_reg_count; i++) {
-				if(fn->alloc_used[i] && i != retval) {
-					fprintf(f, "\tpush %s\n", x64_reg[i]);
-					caller_save_count++;
-					v[i] = p++;
-					ps[i] = 1;
-				}
-			}
-			if(p)
-				p--;
-
-			/* Dummy stack push */
-			if(caller_save_count & 1) {
-				fprintf(f, "\tpush rcx\n");
-				p++;
-			}
-
-			if(list_len(ins->call_args)) {
-				for(size_t i = list_len(ins->call_args) - 1; i >= 6; i--) {
-					int arg = ins->call_args[i]->r->rr;
-					if(ins->call_args[i]->r->spilld2) {
-						arg = 7;
-						fprintf(f, "\tmov %s, [rbp - %lld]\n", x64_reg[arg],
-								i64abs(ins->call_args[i]->r->off));
-					}
-
-					fprintf(f, "\tpush %s\n", x64_reg[arg]);
-					stack_used += 8;
-				}
-			}
-
-			for(int i = 0; i < 16; i++) {
-				v[i] = ((p - v[i]) * 8) - stack_used;
-			}
-
-			for(size_t i = 0; i < list_len(ins->call_args); i++) {
-				if(i >= 6) {
-					break;
-				}
-				int arg = ins->call_args[i]->r->rr;
-				int nold = 0;
-				if(ins->call_args[i]->r->spilld2) {
-					arg = 7;
-					nold = 1;
-					fprintf(f, "\tmov %s, [rbp - %lld]\n", x64_reg[arg],
-							i64abs(ins->call_args[i]->r->off));
-				}
-
-				if(!nold && arg >= 5 && ps[arg]) {
-					int off = v[arg];
-
-					if(off) {
-						fprintf(f, "\tmov %s, [rsp + %d]\n", arg_reg[i], off);
-					} else {
-						fprintf(f, "\tmov %s, [rsp]\n", arg_reg[i]);
-					}
-				} else {
-					fprintf(f, "\tmov %s, %s\n", arg_reg[i], x64_reg[arg]);
-				}
-			}
-			/* set RAX to zero.
-			 * needed for varadic functions
-			 * where `al` is the number of float va-args
-			 * we don't support varadic functions, but we do
-			 * support calling them without any va-args */
-			fprintf(f, "\txor eax, eax\n");
-			fprintf(f, "\tcall %s\n", ins->fname);
-			if(r0) {
-				if(ins->is_32bit) {
-					fprintf(f, "\tmov %s, eax\n", r0);
-				} else {
-					fprintf(f, "\tmov %s, rax\n", r0);
-				}
-			}
-			if(stack_used) {
-				fprintf(f, "\tsub rsp, %zu\n", stack_used);
-			}
-			if(caller_save_count & 1) {
-				fprintf(f, "\tpop rcx\n");
-			}
-			for(int i = x64_reg_count - 1; i >= 5; i--) {
-				if(fn->alloc_used[i] && i != retval) {
-					fprintf(f, "\tpop %s\n", x64_reg[i]);
-				}
+			if(!ins->is_asm) {
+				ir_ins_abi_call_x64(f, fn, ins, (char *)r0);
+			} else {
+				fputc('\t', f);
+				fwrite(ins->asmsrc, ins->asmlen, 1, f);
+				fputc('\n', f);
 			}
 		} break;
 

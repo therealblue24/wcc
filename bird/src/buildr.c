@@ -273,6 +273,17 @@ reg_t *ir_buildr_creat_call(ir_buildr_t *build, char *fname,
 	return call->r0;
 }
 
+void ir_buildr_creat_asm(ir_buildr_t *build, char *asm, size_t asmlen)
+{
+	LIST(callreg_t *) args = list_make(callreg_t *);
+	ir_inst_t *call = ins_call(NULL, "__builtin_wcc_asm", args);
+	call->is_asm = true;
+	call->asmsrc = asm;
+	call->asmlen = asmlen;
+	ir_blk_add(build->insert_blk, call);
+	return;
+}
+
 void ir_buildr_creat_jmp_set(ir_buildr_t *build, ir_blk_t *blk)
 {
 	ir_buildr_creat_jmp(build, blk);

@@ -129,4 +129,6 @@ void ir_buildr_creat_ret(ir_buildr_t *build, bool is_32bit, reg_t *data);
 reg_t *ir_buildr_creat_call(ir_buildr_t *build, char *fname,
 							LIST(callreg_t *) args);
 
+void ir_buildr_creat_asm(ir_buildr_t *build, char *asm, size_t asmlen);
+
 #endif /* BUILDR_H_ */

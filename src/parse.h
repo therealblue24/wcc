@@ -56,6 +56,7 @@ enum node_kind {
 	NODE_LABEL, /* label: */
 	NODE_CAST, /* (type) */
 	NODE_MEMBER, /* struct.member */
+	NODE_ASM, /* assembly */
 };
 
 /* a variable */
@@ -137,6 +138,9 @@ typedef struct node {
 	bool typed; /* is this node already typed? */
 
 	char *fname; /* function name, for NODE_FUNCALL */
+	char *asmsrc; /* for NODE_ASM: the assembly */
+	size_t asmlen;
+
 	struct node *fargs; /* function arguments, for NODE_FUNCALL */
 	obj_t *var; /* for NODE_VAR */
 	uint64_t num; /* for NODE_NUM */

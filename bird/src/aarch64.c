@@ -511,8 +511,14 @@ ok:
 			}
 			break;
 		case IR_INST_CALL:
-			ir_ins_abi_call_aarch64(f, fn, blk, ins, ins->call_args, r0i, r1i,
-									r2i);
+			if(!ins->is_asm) {
+				ir_ins_abi_call_aarch64(f, fn, blk, ins, ins->call_args, r0i,
+										r1i, r2i);
+			} else {
+				fputc('\t', f);
+				fwrite(ins->asmsrc, ins->asmlen, 1, f);
+				fputc('\n', f);
+			}
 			break;
 		case IR_INST_BREQI:
 		case IR_INST_BRNEI:

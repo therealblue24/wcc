@@ -282,6 +282,10 @@ void type_propagate(node_t *node)
 	}
 
 	switch(node->kind) {
+	case NODE_ASM:
+		node->type = NULL;
+		break;
+
 	case NODE_NUM:
 		if(node->type)
 			break;

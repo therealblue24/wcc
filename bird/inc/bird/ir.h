@@ -209,6 +209,9 @@ typedef struct ir_inst {
 	uint64_t imm; /* immediate, if needed */
 	struct ir_blk *false_blk, *true_blk; /* for br */
 	LIST(callreg_t *) call_args; /* for call */
+	bool is_asm; /* for call */
+	char *asmsrc; /* for call (asm) */
+	size_t asmlen; /* for call (asm) */
 	LIST(reg_t *) phi_args; /* for phi */
 	LIST(struct ir_blk *) phi_preds; /* for phi */
 	LIST(reg_pmov_t) pmov_args; /* for pmov */
