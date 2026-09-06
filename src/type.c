@@ -246,6 +246,15 @@ static void usual_arith_conv(node_t **lhs, node_t **rhs)
 	return;
 }
 
+/* usual arith conv for unary + */
+node_t *type_unary_plus_prop(node_t *node)
+{
+	type_propagate(node);
+	node->type = usual_arith_conv_type(TY_INT, node->type);
+	fastcast(&node, node->type);
+	return node;
+}
+
 void type_propagate(node_t *node)
 {
 	if(!node) {

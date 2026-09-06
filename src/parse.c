@@ -1821,7 +1821,7 @@ static node_t *parse_unary(token_t *tok, token_t **rest)
 {
 	if(token_eq(tok, "+")) {
 		node_t *node = parse_cast(tok->next, rest);
-		return node;
+		return type_unary_plus_prop(node);
 	}
 
 	if(token_eq(tok, "-")) {
@@ -1854,6 +1854,7 @@ static node_t *parse_unary(token_t *tok, token_t **rest)
 			tok = token_skip(tok, ")");
 		} else {
 			node_t *expr = parse_unary(tok, &tok);
+			type_propagate(expr);
 			ty = expr->type;
 		}
 		*rest = tok;

@@ -677,6 +677,9 @@ out3:
 		}
 		uint64_t rimm = shr->rhs->imm & (is32 ? 31 : 63);
 		uint64_t limm = shl->rhs->imm & (is32 ? 31 : 63);
+		if(limm + rimm != (64 - (32 * is32))) {
+			goto out4;
+		}
 		reg_t *x = shl->lhs;
 
 		if(limm < rimm) {

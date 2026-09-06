@@ -63,4 +63,7 @@ type_t *type_func_to(type_t *ret_ty);
 struct node;
 void type_propagate(struct node *node);
 
+/* usual arith conv for unary + */
+struct node *type_unary_plus_prop(struct node *node);
+
 #endif /* TYPE_H_ */
