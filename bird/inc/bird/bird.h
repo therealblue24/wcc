@@ -9,7 +9,6 @@
 #include "gvn.h"
 #include "gcm.h"
 #include "cfg.h"
-#include "licm.h"
 #include "dce.h"
 #include "mem.h"
 #include "opt.h"
