@@ -10,6 +10,7 @@ static arena_t obj_arena;
 static arena_t node_arena;
 static arena_t memb_arena;
 static arena_t scope_arena;
+static arena_t string_arena;
 static LIST(scope_t) scopes;
 
 /* makes parsing arenas */
@@ -23,6 +24,8 @@ void parse_make_arenas(void)
 		   "failed to create struct member arena");
 	ENSURE(arena_make(&scope_arena, ARENA_DEFAULT_SIZE) == 0,
 		   "failed to create scope arena");
+	ENSURE(arena_make(&string_arena, ARENA_DEFAULT_SIZE) == 0,
+		   "failed to create strings arena");
 	scopes = list_make(obj_t *);
 	return;
 }
@@ -34,6 +37,7 @@ void parse_delete_arenas(void)
 	arena_delete(&node_arena);
 	arena_delete(&memb_arena);
 	arena_delete(&scope_arena);
+	arena_delete(&string_arena);
 	list_delete(scopes);
 	return;
 }
@@ -270,7 +274,7 @@ char *anon_name(int managed)
 	if(managed) {
 		name = zalloc(STR_SIZE);
 	} else {
-		name = scr_alloc(STR_SIZE);
+		name = arena_alloc(&string_arena, STR_SIZE);
 	}
 
 	snprintf(name, STR_SIZE - 1, ".anon%ld", runk(0));
@@ -514,7 +518,7 @@ static type_t *parse_struct_or_union(token_t *tok, token_t **rest)
 	} else {
 		/* TODO: hack */
 		char *nam = anon_name(0);
-		token_t *ident_tok = scr_alloc(sizeof(token_t));
+		token_t *ident_tok = arena_alloc(&string_arena, sizeof(token_t));
 		ident_tok->kind = TOK_IDENT;
 		ident_tok->loc = nam;
 		ident_tok->len = strnlen(nam, STR_SIZE);
@@ -1351,11 +1355,25 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 			compile_err(tok->loc, "expected a string");
 		}
 
-		token_t *str = tok;
-		tok = token_skip(tok->next, ")");
+		strb_t buildr = strb_make(tok->str, tok->type->alen - 1);
+
+		tok = tok->next;
+		while(tok->kind == TOK_STR) {
+			strb_add(&buildr, tok->str, tok->type->alen - 1);
+			tok = tok->next;
+		}
+
+		char *str = strb_build(&buildr);
+		size_t len = buildr.len;
+		char *copy = arena_alloc(&string_arena, len + 1);
+		copy[len] = 0;
+		memcpy(copy, str, len);
+		strb_delete(&buildr);
+
+		tok = token_skip(tok, ")");
 		node_t *asmnod = node_make(NODE_ASM, save);
-		asmnod->asmsrc = str->content;
-		asmnod->asmlen = str->type->alen - 1;
+		asmnod->asmsrc = copy;
+		asmnod->asmlen = len;
 		tok = token_skip(tok, ";");
 		*rest = tok;
 		return asmnod;
