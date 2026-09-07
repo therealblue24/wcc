@@ -193,31 +193,43 @@ int ir_gcm(ir_func_t *func)
 	}
 
 	/* move instructions */
-	for(size_t i = 0; i < list_len(func->blocks); i++) {
-		ir_blk_t *blk = func->blocks[i];
-		ir_inst_t *prev = blk->insts;
-		ir_inst_t *nxt;
-		for(ir_inst_t *ins = blk->insts->next; ins; ins = nxt) {
-			nxt = ins->next;
+	bool change = true;
+	while(change) {
+		change = false;
+		for(size_t i = 0; i < list_len(func->blocks); i++) {
+			ir_blk_t *blk = func->blocks[i];
+			ir_inst_t *prev = blk->insts;
+			ir_inst_t *nxt;
+			for(ir_inst_t *ins = blk->insts->next; ins; ins = nxt) {
+				nxt = ins->next;
 
-			if(ins->pinned) {
-				goto cont;
-			}
-			if(ins->blk == blk) {
-				goto cont;
-			}
+				if(ins->pinned) {
+					ins->visited = true;
+					goto cont;
+				}
+				if(ins->blk == blk) {
+					goto cont;
+				}
 
-			/* move it */
-			ir_blk_t *target = ins->blk;
-			target->tailprev->next = ins;
-			ins->next = target->tail;
-			ins->blk = target;
-			target->tailprev = ins;
-			prev->next = nxt;
-			ins = prev;
+				bool resolved1 = ins->r1 ? ins->r1->from->visited : true;
+				bool resolved2 = ins->r2 ? ins->r2->from->visited : true;
+				if(resolved1 && resolved2) {
+					change = true;
+					ins->visited = true;
+
+					/* move it */
+					ir_blk_t *target = ins->blk;
+					target->tailprev->next = ins;
+					ins->next = target->tail;
+					ins->blk = target;
+					target->tailprev = ins;
+					prev->next = nxt;
+					ins = prev;
+				}
 
 cont:
-			prev = ins;
+				prev = ins;
+			}
 		}
 	}
 

@@ -703,6 +703,87 @@ int ir_fold(ir_func_t *func)
 	return change;
 }
 
+/* analyzes if phi functions have other (or itself's) phis flow into it */
+static void elaborate_phi_relation_analysis(ir_func_t *func)
+{
+	/* reset all phi related vars except for actual phis */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(!inst->r0) {
+				continue;
+			}
+			inst->r0->phi_related = inst->type == IR_INST_PHI;
+			inst->r0->alive = inst->r0->phi_related;
+		}
+	}
+
+	/* analysis
+	 * any ins that uses a phi related var
+	 * becomes phi related */
+	/* propagate thru alive since phi related is only for args */
+	bool changed = true;
+	while(changed) {
+		changed = false;
+		for(size_t i = 0; i < list_len(func->blocks); i++) {
+			ir_blk_t *blk = func->blocks[i];
+			for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+				if(!inst->r0) {
+					continue;
+				}
+
+				if(inst->r1 && inst->r1->alive && !inst->r0->alive) {
+					inst->r0->alive = true;
+					changed = true;
+				}
+				if(inst->r2 && inst->r2->alive && !inst->r0->alive) {
+					inst->r0->alive = true;
+					changed = true;
+				}
+
+				if(inst->type == IR_INST_CALL && !inst->r0->alive) {
+					for(size_t j = 0; j < list_len(inst->call_args); j++) {
+						if(inst->call_args[j]->r->alive) {
+							inst->r0->alive = true;
+							changed = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/* reset all phi results */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(!inst->r0) {
+				continue;
+			}
+			inst->r0->phi_related = false;
+		}
+	}
+
+	/* final pass */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_PHI) {
+				continue;
+			}
+
+			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+				if(inst->phi_args[j]->alive) {
+					inst->phi_args[j]->phi_related = true;
+				}
+			}
+		}
+	}
+
+	return;
+}
+
 int ir_imm_elim(ir_func_t *func)
 {
 	int change = 0;
@@ -735,6 +816,7 @@ int ir_imm_elim(ir_func_t *func)
 /* or copy propagation, whatever you call it */
 int ir_mov_elim(ir_func_t *func)
 {
+	elaborate_phi_relation_analysis(func);
 	int change = 0;
 
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
@@ -748,7 +830,9 @@ int ir_mov_elim(ir_func_t *func)
 			if(blk->loop_nest) {
 				for(size_t j = 0; j < list_len(inst->phi_args); j++) {
 					reg_t *arg = inst->phi_args[j];
-					arg->insty = IR_INST_NOP;
+					if(arg->phi_related) {
+						arg->insty = IR_INST_NOP;
+					}
 				}
 			}
 		}
@@ -810,7 +894,9 @@ int ir_mov_elim32(ir_func_t *func)
 			if(blk->loop_nest) {
 				for(size_t j = 0; j < list_len(inst->phi_args); j++) {
 					reg_t *arg = inst->phi_args[j];
-					arg->insty = IR_INST_NOP;
+					if(arg->phi_related) {
+						arg->insty = IR_INST_NOP;
+					}
 				}
 			}
 		}

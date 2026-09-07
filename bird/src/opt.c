@@ -39,11 +39,6 @@ static int ir_remblks(ir_func_t *func)
 	return change;
 }
 
-static long blknum(ir_blk_t *b)
-{
-	return b ? b->num : -1;
-}
-
 /* optimizes an IR function */
 void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 {
@@ -132,6 +127,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		// 	ir_placemarks(func);
 		// 	ir_fill_use(func);
 		// 	change |= ir_gcm(func);
+
 		// 	ir_del_use(func);
 		// });
 
