@@ -63,6 +63,7 @@ If you want to contribute, do NOT implement the stuff under `Big stuff`. I want 
 ### Small stuff
 
 - builtins
+    - both intrinsics and 3+ argument builtins (treat 3+ argument builtins like a call but without side effects)
 - RISC-V?
     - Will be a pain because of the sign-extension for 32-bit operations on 64-bit registers. `bIRd` assumes zero-extension (which is the better extension!)
 - (custom) Bytecode backend so we can run C code on some 8 bit computers (albeit **very** slowly)
