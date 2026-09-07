@@ -435,14 +435,16 @@ static void isolate_phis(ir_func_t *fun)
 	return;
 }
 
-static void cleanup_ins(ir_inst_t *ins)
+static int cleanup_ins(ir_inst_t *ins)
 {
+	int change = 0;
 	/* simplify dead block jumps */
 	if(ir_inst_is_br(ins->type) || ins->type == IR_INST_JMP) {
 		ir_inst_t *first = ins->true_blk->insts;
 		if(first->type == IR_INST_JMP && first->true_blk != ins->true_blk) {
 			ir_blk_t *blk = first->true_blk;
 			ins->true_blk = blk;
+			change = 1;
 		}
 	}
 
@@ -451,22 +453,45 @@ static void cleanup_ins(ir_inst_t *ins)
 		if(first->type == IR_INST_JMP && first->true_blk != ins->false_blk) {
 			ir_blk_t *blk = first->true_blk;
 			ins->false_blk = blk;
+			change = 1;
 		}
 	}
 
-	return;
+	return change;
 }
 
-static void cleanup_critical_jumps(ir_func_t *func)
+/* removes useless blocks */
+static int ir_remblks(ir_func_t *func)
 {
+	int change = 0;
+	ir_nopremover(func);
+	ir_blk_flow(func);
+	/* first block is always entry, dont remove */
+	for(size_t i = 1; i < list_len(func->blocks);) {
+		ir_blk_t *blk = func->blocks[i];
+		if(list_len(blk->pred) == 0) {
+			ir_remove_blk(func, blk);
+			change = 1;
+		} else {
+			i++;
+		}
+	}
+
+	return change;
+}
+
+int ir_cleanup_critical_jumps(ir_func_t *func)
+{
+	int change = 0;
 	ir_nopremover(func);
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
-			cleanup_ins(inst);
+			change |= cleanup_ins(inst);
 		}
 	}
-	return;
+	change |= ir_remblks(func);
+	return change;
 }
 
 /* Leroy's algorithm for sequentializing parallel moves. */
@@ -812,7 +837,8 @@ void ir_ssa_exit(ir_func_t *fun)
 	isolate_phis(fun);
 	deparallelize_pmovs(fun);
 	ir_fix(fun);
-	cleanup_critical_jumps(fun);
+	while(ir_cleanup_critical_jumps(fun))
+		;
 	ir_blk_flow(fun);
 	ir_basic_block_placement(fun);
 	ir_nopremover(fun);

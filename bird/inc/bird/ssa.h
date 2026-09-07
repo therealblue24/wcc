@@ -25,4 +25,8 @@ void ir_remove_blk(ir_func_t *func, ir_blk_t *blk);
 /* fixs phi nodes */
 void ir_fix_phis(ir_func_t *func);
 
+/* cleans up critical jumps (name is kind of misleading; there are no critical
+ * jumps but this cleans up useless blocks) */
+int ir_cleanup_critical_jumps(ir_func_t *func);
+
 #endif /* IR_SSA_H_ */

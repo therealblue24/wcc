@@ -218,6 +218,7 @@ static int gvn_block(ir_blk_t *blk)
 		if(found) {
 			ins->type = IR_INST_NOP;
 			ir_union(ins->r0, found->r0);
+			ins->r0 = ins->r1 = ins->r2 = NULL;
 			change = 1;
 		} else {
 			/* welcome to GVN */
@@ -242,6 +243,7 @@ int ir_gvn(ir_func_t *func)
 {
 	int change = 0;
 
+	ir_fix(func);
 	dfs_visit(func->blocks[0]);
 
 	/* cleanup */
