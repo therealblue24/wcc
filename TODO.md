@@ -47,6 +47,9 @@ If you want to contribute, do NOT implement the stuff under `Big stuff`. I want 
 
 - Implement volatile load/stores
 
+- Performance
+    - Optimization time sinks: GVN, constant folding, dead code elimination
+
 ### Medium stuff
 
 - IR lowering

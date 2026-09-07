@@ -86,7 +86,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 
 		TIMEIT("info", {
 			/* currently unused */
-			// TIMEIT("use", { ir_blk_reguse(func); });
+			TIMEIT("use", { ir_blk_reguse(func); });
 			TIMEIT("live", { ir_blk_liveness(func); });
 			TIMEIT("mark", { ir_placemarks(func); });
 		});
