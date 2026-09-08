@@ -455,16 +455,19 @@ static bool is_declspec(token_t *tok)
 	return false;
 }
 
-static void compute_struct_member_pos(type_t *struc)
+static void compute_struct_member_pos(type_t *struc, bool is_packed)
 {
 	size_t align = 0;
 	size_t pos = 0;
+	if(is_packed) {
+		align = 1;
+	}
 	for(size_t i = 0; i < list_len(struc->membs); i++) {
 		member_t *mem = struc->membs[i];
 		pos = align_to(pos, mem->type->align);
 		mem->loc = pos;
 		pos += mem->type->size;
-		if(mem->type->align > align) {
+		if(!is_packed && mem->type->align > align) {
 			align = mem->type->align;
 		}
 	}
@@ -474,19 +477,22 @@ static void compute_struct_member_pos(type_t *struc)
 	return;
 }
 
-static void compute_union_member_pos(type_t *struc)
+static void compute_union_member_pos(type_t *struc, bool is_packed)
 {
 	/* TODO: possibly deduplicate this? I don't know if in
 	 * the future this will change further, so I'm going to keep
 	 * it for a while. */
 	size_t align = 0;
+	if(is_packed) {
+		align = 1;
+	}
 	size_t pos = 0;
 	for(size_t i = 0; i < list_len(struc->membs); i++) {
 		member_t *mem = struc->membs[i];
 		pos = align_to(pos, mem->type->align);
 		mem->loc = 0;
 		pos += mem->type->size;
-		if(mem->type->align > align) {
+		if(!is_packed && mem->type->align > align) {
 			align = mem->type->align;
 		}
 	}
@@ -499,7 +505,20 @@ static void compute_union_member_pos(type_t *struc)
 static type_t *parse_struct_or_union(token_t *tok, token_t **rest)
 {
 	token_t *marker = tok;
-	tok = tok->next;
+	tok = tok->next; /* skip `struct` or `union` */
+	bool is_packed = false;
+
+	/* check if we have __attribute__ */
+	if(token_eat(&tok, "__attribute__")) {
+		tok = token_skip(tok, "(");
+		tok = token_skip(tok, "(");
+		/* only have packed impl'd rn */
+		tok = token_skip(tok, "packed");
+		tok = token_skip(tok, ")");
+		tok = token_skip(tok, ")");
+		is_packed = true;
+	}
+
 	/* we have a name if no { */
 	char *tag = NULL;
 	type_t *tag_ty = NULL;
@@ -555,9 +574,9 @@ static type_t *parse_struct_or_union(token_t *tok, token_t **rest)
 
 	/* assign offsets, find max align */
 	if(struc->kind == TYPE_STRUCT) {
-		compute_struct_member_pos(struc);
+		compute_struct_member_pos(struc, is_packed);
 	} else {
-		compute_union_member_pos(struc);
+		compute_union_member_pos(struc, is_packed);
 	}
 
 	*rest = tok;
