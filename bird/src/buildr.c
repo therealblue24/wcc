@@ -140,10 +140,9 @@ reg_t *ir_buildr_creat_imm(ir_buildr_t *build, bool is_32bit, int64_t imm)
 
 GEN_BINOP(ir_buildr_creat_add, add);
 GEN_BINOP(ir_buildr_creat_sub, sub);
-GEN_BINOP(ir_buildr_creat_umul, umul);
+GEN_BINOP(ir_buildr_creat_mul, mul);
 GEN_BINOP(ir_buildr_creat_udiv, udiv);
 GEN_BINOP(ir_buildr_creat_umod, umod);
-GEN_BINOP(ir_buildr_creat_smul, smul);
 GEN_BINOP(ir_buildr_creat_sdiv, sdiv);
 GEN_BINOP(ir_buildr_creat_smod, smod);
 GEN_BINOP(ir_buildr_creat_and, and);
@@ -167,7 +166,6 @@ GEN_UNARYOP(ir_buildr_creat_not, not);
 GEN_UNARYOP(ir_buildr_creat_bool, mkbool);
 GEN_UNARYOP(ir_buildr_creat_invbool, notbool);
 
-GEN_BINOP_SIGN(ir_buildr_creat_mul, mul);
 GEN_BINOP_SIGN(ir_buildr_creat_div, div);
 GEN_BINOP_SIGN(ir_buildr_creat_mod, mod);
 

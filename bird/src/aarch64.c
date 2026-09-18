@@ -945,8 +945,7 @@ branch_cond:
 		case IR_INST_RORI:
 			fprintf(f, "\tror %s, %s, #%lld\n", r0, r1, imm);
 			break;
-		case IR_INST_SMUL:
-		case IR_INST_UMUL:
+		case IR_INST_MUL:
 			fprintf(f, "\tmul %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_SDIV:

@@ -134,10 +134,7 @@ static void ir_fold_ins_binop64(ir_inst_t *ins)
 	case IR_INST_SUB:
 		ins->imm = ua - ub;
 		break;
-	case IR_INST_SMUL:
-		ins->imm = sa * sb;
-		break;
-	case IR_INST_UMUL:
+	case IR_INST_MUL:
 		ins->imm = ua * ub;
 		break;
 	case IR_INST_SDIV:
@@ -255,10 +252,7 @@ static void ir_fold_ins_binop32(ir_inst_t *ins)
 	case IR_INST_SUB:
 		immres = ua - ub;
 		break;
-	case IR_INST_SMUL:
-		immres = sa * sb;
-		break;
-	case IR_INST_UMUL:
+	case IR_INST_MUL:
 		immres = ua * ub;
 		break;
 	case IR_INST_SDIV:
@@ -373,8 +367,7 @@ static void ir_zeroopt(ir_inst_t *inst)
 	case IR_INST_ASHR:
 		inst->type = IR_INST_MOV;
 		break;
-	case IR_INST_UMUL:
-	case IR_INST_SMUL:
+	case IR_INST_MUL:
 	case IR_INST_UDIV:
 	case IR_INST_SDIV:
 		inst->type = IR_INST_IMM;
@@ -424,8 +417,8 @@ int ir_leas_arith_opt(ir_func_t *func)
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
 			if(ins->type != IR_INST_ADD && ins->type != IR_INST_SUB &&
-			   ins->type != IR_INST_UMUL && ins->type != IR_INST_SMUL &&
-			   ins->type != IR_INST_UDIV && ins->type != IR_INST_SDIV) {
+			   ins->type != IR_INST_MUL && ins->type != IR_INST_UDIV &&
+			   ins->type != IR_INST_SDIV) {
 				continue;
 			}
 
@@ -454,8 +447,7 @@ int ir_leas_arith_opt(ir_func_t *func)
 			case IR_INST_SUB:
 				ins->imm -= imm;
 				break;
-			case IR_INST_UMUL:
-			case IR_INST_SMUL:
+			case IR_INST_MUL:
 				ins->imm *= imm;
 				break;
 			case IR_INST_UDIV:

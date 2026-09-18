@@ -74,9 +74,8 @@ int ir_inst_is_cmp(enum ins_type type)
 /* is this instruction associative/trivally associative? (F(B, C) == F(C, B)) */
 int ir_inst_is_assoc(enum ins_type type)
 {
-	return type == IR_INST_ADD || type == IR_INST_UMUL ||
-		   type == IR_INST_SMUL || type == IR_INST_AND || type == IR_INST_OR ||
-		   type == IR_INST_EOR;
+	return type == IR_INST_ADD || type == IR_INST_MUL || type == IR_INST_AND ||
+		   type == IR_INST_OR || type == IR_INST_EOR;
 }
 
 /* can the instruction be immediate folded? */
@@ -213,11 +212,10 @@ DEF_INS(mov, MOV, r0, r1, NULL, 0, reg_t *r0, reg_t *r1);
 DEF_INS(imm, IMM, r0, NULL, NULL, imm, reg_t *r0, uint64_t imm);
 DEF_INS(add, ADD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(sub, SUB, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(smul, SMUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
+DEF_INS(mul, MUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(sdiv, SDIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(smod, SMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(udiv, UDIV, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
-DEF_INS(umul, UMUL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(umod, UMOD, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(shl, SHL, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
 DEF_INS(shr, SHR, r0, r1, r2, 0, reg_t *r0, reg_t *r1, reg_t *r2);
@@ -846,14 +844,12 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("r%ld = or r%ld, %lld", r0, r1, imm);
 	case IR_INST_EORI:
 		out("r%ld = eor r%ld, %lld", r0, r1, imm);
-	case IR_INST_SMUL:
-		out("r%ld = smul r%ld, r%ld", r0, r1, r2);
+	case IR_INST_MUL:
+		out("r%ld = mul r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SDIV:
 		out("r%ld = sdiv r%ld, r%ld", r0, r1, r2);
 	case IR_INST_SMOD:
 		out("r%ld = smod r%ld, r%ld", r0, r1, r2);
-	case IR_INST_UMUL:
-		out("r%ld = umul r%ld, r%ld", r0, r1, r2);
 	case IR_INST_UDIV:
 		out("r%ld = udiv r%ld, r%ld", r0, r1, r2);
 	case IR_INST_UMOD:

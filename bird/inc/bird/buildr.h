@@ -52,20 +52,16 @@ reg_t *ir_buildr_creat_add(ir_buildr_t *build, bool is_32bit, reg_t *lhs,
 						   reg_t *rhs);
 reg_t *ir_buildr_creat_sub(ir_buildr_t *build, bool is_32bit, reg_t *lhs,
 						   reg_t *rhs);
-reg_t *ir_buildr_creat_mul(ir_buildr_t *build, bool is_32bit, bool unsignd,
-						   reg_t *lhs, reg_t *rhs);
+reg_t *ir_buildr_creat_mul(ir_buildr_t *build, bool is_32bit, reg_t *lhs,
+						   reg_t *rhs);
 reg_t *ir_buildr_creat_div(ir_buildr_t *build, bool is_32bit, bool unsignd,
 						   reg_t *lhs, reg_t *rhs);
 reg_t *ir_buildr_creat_mod(ir_buildr_t *build, bool is_32bit, bool unsignd,
 						   reg_t *lhs, reg_t *rhs);
 
-reg_t *ir_buildr_creat_umul(ir_buildr_t *build, bool is_32bit, reg_t *lhs,
-							reg_t *rhs);
 reg_t *ir_buildr_creat_udiv(ir_buildr_t *build, bool is_32bit, reg_t *lhs,
 							reg_t *rhs);
 reg_t *ir_buildr_creat_umod(ir_buildr_t *build, bool is_32bit, reg_t *lhs,
-							reg_t *rhs);
-reg_t *ir_buildr_creat_smul(ir_buildr_t *build, bool is_32bit, reg_t *lhs,
 							reg_t *rhs);
 reg_t *ir_buildr_creat_sdiv(ir_buildr_t *build, bool is_32bit, reg_t *lhs,
 							reg_t *rhs);

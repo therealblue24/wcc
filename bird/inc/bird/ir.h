@@ -17,10 +17,9 @@ enum ins_type {
 	/* arithmetic - binops */
 	IR_INST_ADD, /* %r0 = add %r1, %r2 */
 	IR_INST_SUB, /* %r0 = sub %r1, %r2 */
-	IR_INST_SMUL, /* %r0 = smul %r1, %r2 */
+	IR_INST_MUL, /* %r0 = mul %r1, %r2 */
 	IR_INST_SDIV, /* %r0 = sdiv %r1, %r2 */
 	IR_INST_SMOD, /* %r0 = smod %r1, %r2 */
-	IR_INST_UMUL, /* %r0 = umul %r1, %r2 */
 	IR_INST_UDIV, /* %r0 = udiv %r1, %r2 */
 	IR_INST_UMOD, /* %r0 = umod %r1, %r2 */
 	IR_INST_AND, /* %r0 = and %r1, %r2 */
@@ -328,10 +327,9 @@ DEF_INS(ashr, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(and, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(or, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(eor, reg_t *r0, reg_t *r2, reg_t *r3);
-DEF_INS(smul, reg_t *r0, reg_t *r2, reg_t *r3);
+DEF_INS(mul, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(sdiv, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(smod, reg_t *r0, reg_t *r2, reg_t *r3);
-DEF_INS(umul, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(udiv, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(umod, reg_t *r0, reg_t *r2, reg_t *r3);
 DEF_INS(eq, reg_t *r0, reg_t *r2, reg_t *r3);

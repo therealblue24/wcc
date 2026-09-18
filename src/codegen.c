@@ -312,7 +312,7 @@ reg_t *codegen_expr(node_t *node)
 	case NODE_EOR:
 		return ir_buildr_creat_eor(build, is32, lhs, rhs);
 	case NODE_MUL:
-		return ir_buildr_creat_mul(build, is32, type->unsignd, lhs, rhs);
+		return ir_buildr_creat_mul(build, is32, lhs, rhs);
 	case NODE_DIV:
 		return ir_buildr_creat_div(build, is32, type->unsignd, lhs, rhs);
 	case NODE_MOD:

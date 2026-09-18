@@ -74,8 +74,7 @@ static int ir_muldiv_opt(ir_func_t *func)
 		ir_inst_t *prev = nop;
 		for(ir_inst_t *inst = blk->insts->next; inst; inst = inst->next) {
 			if(!inst->r2 ||
-			   (inst->type != IR_INST_UDIV && inst->type != IR_INST_UMUL &&
-				inst->type != IR_INST_SMUL) ||
+			   (inst->type != IR_INST_UDIV && inst->type != IR_INST_MUL) ||
 			   inst->r2->insty != IR_INST_IMM) {
 				goto next;
 			}
@@ -100,8 +99,7 @@ static int ir_muldiv_opt(ir_func_t *func)
 			prev = imml;
 			if(inst->type == IR_INST_UDIV) {
 				inst->type = IR_INST_SHR;
-			} else if(inst->type == IR_INST_UMUL ||
-					  inst->type == IR_INST_SMUL) {
+			} else if(inst->type == IR_INST_MUL) {
 				inst->type = IR_INST_SHL;
 			}
 

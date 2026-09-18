@@ -9,10 +9,10 @@
 static bool ins_is_3source(enum ins_type t)
 {
 	/* ADD is not needed here because on x64 you can do lea A, [B+C] */
-	return t == IR_INST_SUB || t == IR_INST_SMUL || t == IR_INST_UMUL ||
-		   t == IR_INST_OR || t == IR_INST_AND || t == IR_INST_EOR ||
-		   t == IR_INST_SHL || t == IR_INST_SHR || t == IR_INST_ASHR ||
-		   t == IR_INST_ROL || t == IR_INST_ROR;
+	return t == IR_INST_SUB || t == IR_INST_MUL || t == IR_INST_OR ||
+		   t == IR_INST_AND || t == IR_INST_EOR || t == IR_INST_SHL ||
+		   t == IR_INST_SHR || t == IR_INST_ASHR || t == IR_INST_ROL ||
+		   t == IR_INST_ROR;
 }
 
 /* is the instruction in form A = F(B) where it needs A and B to be separate? */
@@ -710,8 +710,7 @@ branch_cond:
 		case IR_INST_SUBI:
 			fprintf(f, "\tsub %s, %lld\n", r0, imm);
 			break;
-		case IR_INST_SMUL:
-		case IR_INST_UMUL:
+		case IR_INST_MUL:
 			fprintf(f, "\timul %s, %s\n", r0, r2);
 			break;
 		case IR_INST_SDIV:
