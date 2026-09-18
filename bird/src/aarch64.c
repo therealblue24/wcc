@@ -1,11 +1,19 @@
 #include "bird.h"
+#include "info.h"
 #include "ir.h"
 #include <ctype.h>
 
-void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
+/* crude instruction selection if you can call it that 8/
+
+/* turn ROLs into RORs */
+/* %r0 = rol %r1, %r2
+ * ->
+ * %r2 = neg %r2
+ * %r0 = rol %r1, %r2
+ * Works somehow */
+
+static void rol_to_ror(ir_func_t *fun)
 {
-	UNUSED(opt_level);
-	/* turn ROLs into RORs */
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		ir_blk_t *blk = fun->blocks[i];
 		ir_inst_t *nop = ins_nop();
@@ -26,7 +34,184 @@ void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
 		blk->insts = blk->insts->next;
 		ir_inst_delete(nop);
 	}
+}
 
+/* clobbers phi_related marks uses in alive (true=once false=multiple) */
+static void fill_use_single(ir_func_t *fun)
+{
+	/* assume phi_related means "used once already" */
+	/* the size of the register struct is too big, have to
+	 * reuse */
+
+	/* mark all false */
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->r0) {
+				inst->r0->phi_related = inst->r0->alive = false;
+			}
+		}
+	}
+
+	/* iterate */
+#define USE(x)                       \
+	do {                             \
+		if(!(x)->phi_related) {      \
+			(x)->phi_related = true; \
+		} else {                     \
+			(x)->alive = true;       \
+		}                            \
+	} while(0)
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->r1)
+				USE(inst->r1);
+			if(inst->r2)
+				USE(inst->r2);
+			if(inst->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(inst->call_args); j++) {
+					USE(inst->call_args[j]->r);
+				}
+			}
+		}
+	}
+
+	/* now
+	 * phi_rel alive
+	 * false   false    dead
+	 * true    false    used once
+	 * true    true     used multiple times
+	 */
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			/* dead code elim */
+			if(inst->r0 && inst->type == IR_INST_CALL &&
+			   !inst->r0->phi_related) {
+				inst->r0 = NULL;
+			} else if(inst->r0 && !inst->r0->phi_related) {
+				inst->type = IR_INST_NOP;
+				inst->r0 = inst->r1 = inst->r2 = NULL;
+			}
+
+			if(inst->r0)
+				inst->r0->alive = inst->r0->phi_related && !inst->r0->alive;
+		}
+	}
+
+	return;
+}
+
+static int can_add_shl(enum ins_type t)
+{
+	return t == IR_INST_ADD || t == IR_INST_SUB || t == IR_INST_AND ||
+		   t == IR_INST_EOR || t == IR_INST_OR;
+}
+
+/* these two are just the above because currently there is no instruction
+ * that doesn't have all the lsl, lsr, asr */
+static int can_add_shr(enum ins_type t)
+{
+	return can_add_shl(t);
+}
+
+static int can_add_ashr(enum ins_type t)
+{
+	return can_add_shl(t);
+}
+
+#define X(c, v) \
+	case c:     \
+		return c##_##v
+#define LSL(c) X(c, LSL)
+#define LSR(c) X(c, LSR)
+#define ASR(c) X(c, ASR)
+
+#define gen_add(vl, vu)                                     \
+	static enum ins_type add_##vl##_to_ins(enum ins_type t) \
+	{                                                       \
+		switch(t) {                                         \
+			vu(IR_INST_ADD);                                \
+			vu(IR_INST_SUB);                                \
+			vu(IR_INST_AND);                                \
+			vu(IR_INST_OR);                                 \
+			vu(IR_INST_EOR);                                \
+		default:                                            \
+			return -1;                                      \
+		}                                                   \
+	}
+
+gen_add(lsl, LSL);
+gen_add(lsr, LSR);
+gen_add(asr, ASR);
+
+#undef X
+#undef LSL
+#undef LSR
+#undef ASR
+#undef gen_add
+
+/* turns stuff like
+ * %r0 = shl %r1, #imm
+ * %r1 = add %r2, %r0
+ * ->
+ * .
+ * %r1 = add %r2, %r1 lsl #imm
+ * only does this if the use of %r0 is unique, i.e.
+ * %r0 = shl %r1, #imm
+ * %r4 = op %r2, %r0
+ * %r5 = op %r3, %r0
+ * will not be elim'd.
+ */
+static void shift_variant(ir_func_t *fun)
+{
+	fill_use_single(fun);
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(!inst->r2) {
+				continue;
+			}
+
+			if(inst->r2->insty != IR_INST_SHLI &&
+			   inst->r2->insty != IR_INST_SHRI &&
+			   inst->r2->insty != IR_INST_ASHRI) {
+				continue;
+			}
+
+			if(can_add_shl(inst->type) && inst->r2->insty == IR_INST_SHLI &&
+			   inst->r2->alive) {
+				inst->imm = inst->r2->imm;
+				inst->r2 = inst->r2->lhs;
+				inst->type = add_lsl_to_ins(inst->type);
+			}
+			if(can_add_shr(inst->type) && inst->r2->insty == IR_INST_SHLI &&
+			   inst->r2->alive) {
+				inst->imm = inst->r2->imm;
+				inst->r2 = inst->r2->lhs;
+				inst->type = add_lsr_to_ins(inst->type);
+			}
+			if(can_add_ashr(inst->type) && inst->r2->insty == IR_INST_SHLI &&
+			   inst->r2->alive) {
+				inst->imm = inst->r2->imm;
+				inst->r2 = inst->r2->lhs;
+				inst->type = add_asr_to_ins(inst->type);
+			}
+		}
+	}
+}
+
+void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
+{
+	UNUSED(opt_level);
+	rol_to_ror(fun);
+	if(opt_level >= 1) {
+		shift_variant(fun);
+	}
 	return;
 }
 
@@ -653,8 +838,26 @@ branch_cond:
 		case IR_INST_ADD:
 			fprintf(f, "\tadd %s, %s, %s\n", r0, r1, r2);
 			break;
+		case IR_INST_ADD_LSL:
+			fprintf(f, "\tadd %s, %s, %s, lsl #%lld\n", r0, r1, r2, imm);
+			break;
+		case IR_INST_ADD_LSR:
+			fprintf(f, "\tadd %s, %s, %s, lsr #%lld\n", r0, r1, r2, imm);
+			break;
+		case IR_INST_ADD_ASR:
+			fprintf(f, "\tadd %s, %s, %s, asr #%lld\n", r0, r1, r2, imm);
+			break;
 		case IR_INST_SUB:
 			fprintf(f, "\tsub %s, %s, %s\n", r0, r1, r2);
+			break;
+		case IR_INST_SUB_LSL:
+			fprintf(f, "\tsub %s, %s, %s, lsl #%lld\n", r0, r1, r2, imm);
+			break;
+		case IR_INST_SUB_LSR:
+			fprintf(f, "\tsub %s, %s, %s, lsr #%lld\n", r0, r1, r2, imm);
+			break;
+		case IR_INST_SUB_ASR:
+			fprintf(f, "\tsub %s, %s, %s, asr #%lld\n", r0, r1, r2, imm);
 			break;
 		case IR_INST_ADDI:
 			fprintf(f, "\tadd %s, %s, #%lld\n", r0, r1, imm);
@@ -665,11 +868,38 @@ branch_cond:
 		case IR_INST_AND:
 			fprintf(f, "\tand %s, %s, %s\n", r0, r1, r2);
 			break;
+		case IR_INST_AND_LSL:
+			fprintf(f, "\tand %s, %s, %s, lsl #%lld\n", r0, r1, r2, imm);
+			break;
+		case IR_INST_AND_LSR:
+			fprintf(f, "\tand %s, %s, %s, lsr #%lld\n", r0, r1, r2, imm);
+			break;
+		case IR_INST_AND_ASR:
+			fprintf(f, "\tand %s, %s, %s, asr #%lld\n", r0, r1, r2, imm);
+			break;
 		case IR_INST_OR:
 			fprintf(f, "\torr %s, %s, %s\n", r0, r1, r2);
 			break;
+		case IR_INST_OR_LSL:
+			fprintf(f, "\torr %s, %s, %s, lsl #%lld\n", r0, r1, r2, imm);
+			break;
+		case IR_INST_OR_LSR:
+			fprintf(f, "\torr %s, %s, %s, lsr #%lld\n", r0, r1, r2, imm);
+			break;
+		case IR_INST_OR_ASR:
+			fprintf(f, "\torr %s, %s, %s, asr #%lld\n", r0, r1, r2, imm);
+			break;
 		case IR_INST_EOR:
 			fprintf(f, "\teor %s, %s, %s\n", r0, r1, r2);
+			break;
+		case IR_INST_EOR_LSL:
+			fprintf(f, "\teor %s, %s, %s, lsl #%lld\n", r0, r1, r2, imm);
+			break;
+		case IR_INST_EOR_LSR:
+			fprintf(f, "\teor %s, %s, %s, lsr #%lld\n", r0, r1, r2, imm);
+			break;
+		case IR_INST_EOR_ASR:
+			fprintf(f, "\teor %s, %s, %s, asr #%lld\n", r0, r1, r2, imm);
 			break;
 		case IR_INST_ANDI:
 			fprintf(f, "\tand %s, %s, #%lld\n", r0, r1, imm);

@@ -858,6 +858,36 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("r%ld = udiv r%ld, r%ld", r0, r1, r2);
 	case IR_INST_UMOD:
 		out("r%ld = umod r%ld, r%ld", r0, r1, r2);
+	case IR_INST_ADD_LSL:
+		out("r%ld = add r%ld, r%ld, lsl #%lld", r0, r1, r2, imm);
+	case IR_INST_ADD_LSR:
+		out("r%ld = add r%ld, r%ld, lsr #%lld", r0, r1, r2, imm);
+	case IR_INST_ADD_ASR:
+		out("r%ld = add r%ld, r%ld, asr #%lld", r0, r1, r2, imm);
+	case IR_INST_SUB_LSL:
+		out("r%ld = sub r%ld, r%ld, lsl #%lld", r0, r1, r2, imm);
+	case IR_INST_SUB_LSR:
+		out("r%ld = sub r%ld, r%ld, lsr #%lld", r0, r1, r2, imm);
+	case IR_INST_SUB_ASR:
+		out("r%ld = sub r%ld, r%ld, asr #%lld", r0, r1, r2, imm);
+	case IR_INST_AND_LSL:
+		out("r%ld = and r%ld, r%ld, lsl #%lld", r0, r1, r2, imm);
+	case IR_INST_AND_LSR:
+		out("r%ld = and r%ld, r%ld, lsr #%lld", r0, r1, r2, imm);
+	case IR_INST_AND_ASR:
+		out("r%ld = and r%ld, r%ld, asr #%lld", r0, r1, r2, imm);
+	case IR_INST_EOR_LSL:
+		out("r%ld = eor r%ld, r%ld, lsl #%lld", r0, r1, r2, imm);
+	case IR_INST_EOR_LSR:
+		out("r%ld = eor r%ld, r%ld, lsr #%lld", r0, r1, r2, imm);
+	case IR_INST_EOR_ASR:
+		out("r%ld = eor r%ld, r%ld, asr #%lld", r0, r1, r2, imm);
+	case IR_INST_OR_LSL:
+		out("r%ld = or r%ld, r%ld, lsl #%lld", r0, r1, r2, imm);
+	case IR_INST_OR_LSR:
+		out("r%ld = or r%ld, r%ld, lsr #%lld", r0, r1, r2, imm);
+	case IR_INST_OR_ASR:
+		out("r%ld = or r%ld, r%ld, asr #%lld", r0, r1, r2, imm);
 	case IR_INST_NEG:
 		out("r%ld = neg r%ld", r0, r1);
 	case IR_INST_NOT:

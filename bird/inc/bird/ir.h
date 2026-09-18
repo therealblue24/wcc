@@ -32,6 +32,23 @@ enum ins_type {
 	IR_INST_ROL, /* %r0 = rol %r1, %r2 */
 	IR_INST_ROR, /* %r0 = ror %r1, %r2 */
 
+	/* arithmetic - aarch64 shift added */
+	IR_INST_ADD_LSL,
+	IR_INST_ADD_LSR,
+	IR_INST_ADD_ASR,
+	IR_INST_SUB_LSL,
+	IR_INST_SUB_LSR,
+	IR_INST_SUB_ASR,
+	IR_INST_AND_LSL,
+	IR_INST_AND_LSR,
+	IR_INST_AND_ASR,
+	IR_INST_OR_LSL,
+	IR_INST_OR_LSR,
+	IR_INST_OR_ASR,
+	IR_INST_EOR_LSL,
+	IR_INST_EOR_LSR,
+	IR_INST_EOR_ASR,
+
 	/* immediate ops */
 	IR_INST_ANDI,
 	IR_INST_ORI,

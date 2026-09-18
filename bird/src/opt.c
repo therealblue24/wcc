@@ -2,6 +2,7 @@
 #include "cfg.h"
 #include "info.h"
 #include "ir.h"
+#include "live.h"
 #include "ssa.h"
 #include <stdint.h>
 
@@ -253,6 +254,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	});
 
 	ir_fix(func);
+	ir_dce(func);
 
 	if(debug) {
 		printf("After arch opts:\n");
