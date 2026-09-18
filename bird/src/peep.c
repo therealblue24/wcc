@@ -85,7 +85,7 @@ static int ir_muldiv_opt(ir_func_t *func)
 				goto next;
 			}
 
-			/* %r0 = udiv/umul/smul %r1, #pow2
+			/* %r0 = udiv/mul %r1, #pow2
 			 * ->
 			 * %imm = #log(pow2)
 			 * %r0 = shr/shl/shl %r1, %imm

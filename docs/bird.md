@@ -1,6 +1,6 @@
 # Bird IR Documentation
 
-Last updated: Jul 22
+Last updated: Sep 18
 
 ## Basics
 
@@ -61,16 +61,9 @@ Adds `%r1` and `%r2` and stores the result in `%r0`.
 Subtracts `%r1` and `%r2` and stores the result in `%r0`.
 
 
-### `IR_INST_SMUL`: `%r0 = smul %r1, %r2`
+### `IR_INST_MUL`: `%r0 = mul %r1, %r2`
 
-(Signed) Multiplies `%r1` and `%r2` and stores the result in `%r0`.
-
-
-### `IR_INST_UMUL`: `%r0 = umul %r1, %r2`
-
-(Unsigned) Multiplies `%r1` and `%r2` and stores the result in `%r0`.
-
-**NOTE**: on x86_64, this is the same as `IR_INST_SMUL`.
+Multiplies `%r1` and `%r2` and stores the result in `%r0`. Works for both unsigned and signed numbers.
 
 ### `IR_INST_SDIV`: `%r0 = sdiv %r1, %r2`
 
