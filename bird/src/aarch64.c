@@ -292,6 +292,20 @@ static int load_fp_imm_x10(FILE *f, long off, bool save)
 	return 1;
 }
 
+static int load_fp_imm_x10_neg(FILE *f, long off, bool save)
+{
+	if(off < 255) {
+		return 0;
+	}
+
+	if(save) {
+		fprintf(f, "\tstr x10, [sp, #-16]!\n");
+	}
+
+	load_imm(f, "x10", off);
+	return 1;
+}
+
 static int arm_reg_mapping[20] = { 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
 								   10, 0,  1,  2,  3,  4,  5,  6,  7,  8 };
 static char *arm_reg[20] = { "x19", "x20", "x21", "x22", "x23", "x24", "x25",
@@ -1048,8 +1062,8 @@ set_cond:
 			}
 			break;
 		case IR_INST_LEAS:
-			if(load_fp_imm_x10(f, -imm, false)) {
-				fprintf(f, "\tadd %s, fp, x10\n", r0x);
+			if(load_fp_imm_x10_neg(f, imm, false)) {
+				fprintf(f, "\tsub %s, fp, x10\n", r0x);
 			} else {
 				fprintf(f, "\tsub %s, fp, #%lld\n", r0x, imm);
 			}
