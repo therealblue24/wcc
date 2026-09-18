@@ -189,13 +189,13 @@ static void shift_variant(ir_func_t *fun)
 				inst->r2 = inst->r2->lhs;
 				inst->type = add_lsl_to_ins(inst->type);
 			}
-			if(can_add_shr(inst->type) && inst->r2->insty == IR_INST_SHLI &&
+			if(can_add_shr(inst->type) && inst->r2->insty == IR_INST_SHRI &&
 			   inst->r2->alive) {
 				inst->imm = inst->r2->imm;
 				inst->r2 = inst->r2->lhs;
 				inst->type = add_lsr_to_ins(inst->type);
 			}
-			if(can_add_ashr(inst->type) && inst->r2->insty == IR_INST_SHLI &&
+			if(can_add_ashr(inst->type) && inst->r2->insty == IR_INST_ASHRI &&
 			   inst->r2->alive) {
 				inst->imm = inst->r2->imm;
 				inst->r2 = inst->r2->lhs;
