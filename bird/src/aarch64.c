@@ -3,7 +3,7 @@
 #include "ir.h"
 #include <ctype.h>
 
-/* crude instruction selection if you can call it that 8/
+/* crude instruction selection if you can call it that */
 
 /* turn ROLs into RORs */
 /* %r0 = rol %r1, %r2
