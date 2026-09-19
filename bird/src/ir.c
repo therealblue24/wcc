@@ -716,6 +716,31 @@ reg_t *ir_find(reg_t *src)
 		}                       \
 	} while(0)
 
+void ir_rewrite_blk(ir_blk_t *blk)
+{
+	for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+		REPLACE(inst->r0);
+		REPLACE(inst->r1);
+		REPLACE(inst->r2);
+		if(inst->type == IR_INST_CALL) {
+			for(size_t j = 0; j < list_len(inst->call_args); j++) {
+				REPLACE(inst->call_args[j]->r);
+			}
+		}
+		if(inst->type == IR_INST_PHI) {
+			for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+				REPLACE(inst->phi_args[j]);
+			}
+		}
+		if(inst->type == IR_INST_PMOV) {
+			for(size_t j = 0; j < list_len(inst->pmov_args); j++) {
+				REPLACE(inst->pmov_args[j].dst);
+				REPLACE(inst->pmov_args[j].src);
+			}
+		}
+	}
+}
+
 /* rewrites whole function via ir_uf_find */
 void ir_rewrite(ir_func_t *fun)
 {

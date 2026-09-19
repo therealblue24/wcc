@@ -18,4 +18,7 @@ int ir_mov_elim32(ir_func_t *func);
 /* partial folding for leas inst. */
 int ir_leas_arith_opt(ir_func_t *func);
 
+/* requires ir_blk_flow, ir_blk_dom and marks */
+int ir_cmp_prop(ir_func_t *func);
+
 #endif /* FOLD_H_ */

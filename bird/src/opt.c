@@ -158,6 +158,13 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		});
 
 		ir_placemarks(func);
+		ir_blk_flow(func);
+		ir_blk_dom(func);
+
+		/* compare opt */
+		TIMEIT("cmpopt", { change |= ir_cmp_prop(func); });
+
+		ir_placemarks(func);
 
 		/* memory optimization */
 		TIMEIT("mem", {

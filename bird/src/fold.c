@@ -1,4 +1,5 @@
 #include "bird.h"
+#include "ir.h"
 
 static uint64_t zxt(uint64_t x, uint64_t size)
 {
@@ -922,6 +923,123 @@ int ir_mov_elim32(ir_func_t *func)
 	}
 
 #undef REPLACE
+
+	return change;
+}
+
+/* constant comparision optimization */
+/* taken from https://github.com/CompilerProgramming/ez-lang/blob/main/optvm/src/main/java/com/compilerprogramming/ezlang/compiler/ConstantComparisonPropagation.java */
+
+/* basically, when we encounter a comparison with a known constant,
+ * we replace the uses of the var in the block in which it matches
+ * to the constant, and also to the blocks that are dominated by
+ * that block */
+
+static void rewrite_use(ir_blk_t *blk)
+{
+	ir_rewrite_blk(blk);
+	for(size_t i = 0; i < list_len(blk->dom); i++) {
+		rewrite_use(blk->dom[i]);
+	}
+	return;
+}
+
+static int handle_br(ir_blk_t *blk, ir_inst_t *br)
+{
+	UNUSED(blk);
+	/* on false path, the register in the branch is always zero
+	 * capitalize on that */
+	reg_t *r = br->r1;
+	ir_blk_t *falseblk = br->false_blk;
+
+	reg_t *zero = reg_make();
+	ir_inst_t *zload = ins_imm(zero, 0);
+	zload->is_32bit = true;
+	zload->next = falseblk->tailprev->next;
+	falseblk->tailprev->next = zload;
+
+	ir_union(r, zero);
+	rewrite_use(falseblk);
+	r->uf = NULL;
+	return 1;
+}
+
+static int handle_breqne(ir_blk_t *blk, ir_inst_t *br, enum ins_type t)
+{
+	UNUSED(blk);
+
+	reg_t *r1 = br->r1, *r2 = br->r2;
+
+	/* ensure immediate is in r1 */
+	if(br->r2->insty == IR_INST_IMM) {
+		reg_t *tmp = r1;
+		r1 = r2;
+		r2 = tmp;
+	}
+
+	/* var is now in r2 */
+
+	ir_blk_t *target = t == IR_INST_BREQ ? br->true_blk : br->false_blk;
+
+	if(r1->insty == IR_INST_IMM) {
+		reg_t *imm = reg_make();
+		ir_inst_t *iload = ins_imm(imm, r1->imm);
+		iload->is_32bit = r1->is_32bit;
+		iload->next = target->tailprev->next;
+		target->tailprev->next = iload;
+		ir_union(r2, imm);
+		rewrite_use(target);
+		r2->uf = NULL;
+	} else {
+		/* well, in the target path we know the two vars can be coalesced */
+		ir_union(r2, r1);
+		rewrite_use(target);
+		r2->uf = NULL;
+	}
+
+	return 1;
+}
+
+/* requires ir_blk_flow, ir_blk_dom and marks */
+/* clobbers tailprev */
+int ir_cmp_prop(ir_func_t *func)
+{
+	int change = 0;
+
+	/* insert nops after all the phis */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		blk->tailprev = NULL;
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type == IR_INST_PHI) {
+				blk->tailprev = inst;
+			}
+		}
+		ir_inst_t *nop = ins_nop();
+		if(blk->tailprev) {
+			nop->next = blk->tailprev->next;
+			blk->tailprev->next = nop;
+		} else {
+			nop->next = blk->insts;
+			blk->insts = nop;
+		}
+
+		blk->tailprev = nop;
+	}
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		ir_inst_t *br = blk->tail;
+		if(!ir_inst_is_br(br->type)) {
+			continue;
+		}
+
+		if(br->type == IR_INST_BR) {
+			change |= handle_br(blk, br);
+		} else if(br->type == IR_INST_BREQ || br->type == IR_INST_BRNE) {
+			change |= handle_breqne(blk, br, br->type);
+		}
+	}
 
 	return change;
 }

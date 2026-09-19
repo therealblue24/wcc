@@ -36,7 +36,7 @@ static void calculate_spill_costs(LIST(reg_t *) allocated, ir_func_t *fun)
 		/* first, make sure registers in loops are extra costly to spill */
 		if(blk->loop_order) {
 			/* they better shoot into the goal */
-			int64_t penalty = blk->loop_order * 2500;
+			int64_t penalty = blk->loop_nest * 2500;
 			reg_t *r;
 			set_iter(blk->regs_def, r, { r->spill_cost += penalty; });
 			set_iter(blk->regs_in, r, { r->spill_cost += penalty / 2; });

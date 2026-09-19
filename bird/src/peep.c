@@ -404,6 +404,20 @@ exit:
 		}
 	}
 
+	/* simplify
+	 * br %r0, trueblk, falseblk
+	 * where %r0 = invbool %r1
+	 * to
+	 * br %r1, falseblk, trueblk */
+
+	if(ins->type == IR_INST_BR && ins->r1->insty == IR_INST_NOTBOOL) {
+		ir_blk_t *tmpblk = ins->true_blk;
+		ins->true_blk = ins->false_blk;
+		ins->false_blk = tmpblk;
+		ins->r1 = ins->r1->lhs;
+		change = 1;
+	}
+
 	return change;
 }
 

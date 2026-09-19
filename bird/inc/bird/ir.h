@@ -481,6 +481,9 @@ void ir_union(reg_t *dst, reg_t *src);
 /* return (val of src); */
 reg_t *ir_find(reg_t *src);
 
+/* like ir_rewrite but rewrites a block and does not clear the uf set */
+void ir_rewrite_blk(ir_blk_t *blk);
+
 /* rewrites whole function via ir_find */
 void ir_rewrite(ir_func_t *fun);
 
