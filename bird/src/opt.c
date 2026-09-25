@@ -261,7 +261,9 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 	});
 
 	ir_fix(func);
-	ir_dce(func);
+	if(max_tolerated_change) {
+		ir_dce(func);
+	}
 
 	if(debug) {
 		printf("After arch opts:\n");

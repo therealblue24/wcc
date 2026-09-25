@@ -1325,28 +1325,23 @@ static node_t *parse_stmt(token_t *tok, token_t **rest)
 	/* case num: */
 	if(token_eat(&tok, "case")) {
 		node_t *case_node = node_make(NODE_CASE, save);
-		if(tok->kind != TOK_NUM) {
-			compile_err(tok->loc, "expected number or case range for case");
-		}
+		token_t *numt = tok;
+		int64_t firstnum = parse_const_expr(tok, &tok);
 
-		if(token_eq(tok->next, ":")) {
-			case_node->cond = node_num_tok(tok);
-			tok = tok->next;
-		} else if(token_eq(tok->next, "...")) {
+		if(!token_eq(tok, "...")) {
+			case_node->cond = node_num(firstnum, numt);
+		} else if(token_eq(tok, "...")) {
 			node_t *rang = node_make(NODE_RANGE, tok);
-			rang->num = tok->num;
-			rang->type = tok->type;
+			rang->num = firstnum;
+			rang->type = numt->type;
 			tok = tok->next; /* ... */
-			tok = tok->next; /* next num */
-			if(tok->kind != TOK_NUM) {
-				compile_err(tok->loc, "expected number");
-			}
-			rang->num2 = tok->num;
-			if(tok->type->unsignd != rang->type->unsignd) {
+			numt = tok;
+			int64_t secondnum = parse_const_expr(tok, &tok);
+			rang->num2 = secondnum;
+			if(numt->type->unsignd != rang->type->unsignd) {
 				compile_err(tok->loc, "mismatched range signs");
 			}
 			case_node->cond = rang;
-			tok = tok->next;
 		} else {
 			compile_err(tok->loc, "expected number or case range for case");
 		}

@@ -125,7 +125,9 @@ void ir_immfold_do(ir_func_t *fun, int64_t lower_bound, int64_t higher_bound,
 				}
 				enum ins_type oldtype = inst->type;
 				inst->type = ir_inst_turn_imm(inst->type);
-				if(inst->r0 && inst->type == IR_INST_SHLI) {
+				if(inst->r0 &&
+				   (inst->type == IR_INST_SHLI || inst->type == IR_INST_SHRI ||
+					inst->type == IR_INST_ASHRI)) {
 					inst->r0->imm = inst->imm;
 					inst->r0->insty = inst->type;
 				}
