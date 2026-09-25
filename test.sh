@@ -4,6 +4,9 @@ passing=1
 
 optlevel=3
 
+if [ ! -d "asm" ]; then
+  mkdir asm
+fi
 
 ./bin/wcc test/one_impl.c -o test/one.s -O$optlevel
 clang -c test/one.s -o one.o
