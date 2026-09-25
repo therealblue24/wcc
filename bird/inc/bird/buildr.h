@@ -126,5 +126,6 @@ reg_t *ir_buildr_creat_call(ir_buildr_t *build, char *fname,
 							LIST(callreg_t *) args);
 
 void ir_buildr_creat_asm(ir_buildr_t *build, char *asm, size_t asmlen);
+void ir_buildr_creat_trap(ir_buildr_t *build);
 
 #endif /* BUILDR_H_ */

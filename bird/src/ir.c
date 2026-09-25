@@ -507,6 +507,7 @@ static void ir_fix_ins(ir_inst_t *ins)
 #define xx NULL
 	switch(ins->type) {
 		FIX(NOP, xx, xx, xx);
+		FIX(TRAP, xx, xx, xx);
 		FIX(MOV, r0, r1, xx);
 		FIX(IMM, r0, xx, xx);
 		FIX(NEG, r0, r1, xx);
@@ -829,6 +830,8 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 	switch(ins->type) {
 	case IR_INST_NOP:
 		out("nop");
+	case IR_INST_TRAP:
+		out("trap");
 	case IR_INST_MOV:
 		out("r%ld = r%ld", r0, r1);
 	case IR_INST_IMM:

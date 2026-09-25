@@ -57,6 +57,7 @@ enum node_kind {
 	NODE_CAST, /* (type) */
 	NODE_MEMBER, /* struct.member */
 	NODE_ASM, /* assembly */
+	NODE_TRAP, /* a trap */
 };
 
 /* a variable */

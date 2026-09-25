@@ -138,6 +138,9 @@ enum ins_type {
 	IR_INST_RETI, /* ret #imm */
 	IR_INST_CALL, /* (%r0) = call Function, %a1, %a2, ... */
 
+	/* debugging */
+	IR_INST_TRAP, /* trap */
+
 	/* SSA */
 	IR_INST_PHI, /* %r0 = phi [pred1, %a1], [pred2, %a1], ... */
 	IR_INST_PMOV, /* parallel move */

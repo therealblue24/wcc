@@ -1801,6 +1801,15 @@ static node_t *parse_prim(token_t *tok, token_t **rest)
 	if(tok->kind == TOK_IDENT) {
 		/* function call */
 		if(token_eq(tok->next, "(")) {
+			/* duct tape solution */
+			if(strcmp(tok->content, "__builtin_trap") == 0) {
+				node_t *trap = node_make(NODE_TRAP, tok);
+				tok = token_skip(tok->next, "(");
+				tok = token_skip(tok, ")");
+				*rest = tok;
+				return trap;
+			}
+
 			node_t *fun = node_make(NODE_FUNCALL, tok);
 			fun->fname = mystrndup(tok->loc, tok->len);
 			fun->fargs = NULL;

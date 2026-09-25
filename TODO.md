@@ -21,9 +21,8 @@ If you want to contribute, do NOT implement the stuff under `Big stuff`. I want 
 
 ### Medium stuff
 
-- Constant expressions
 - Initalizers
-- VLAs
+- VLAs (technically optional, in reality needed)
 - Varadics
 
 ### Small stuff

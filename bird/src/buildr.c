@@ -297,3 +297,10 @@ void ir_buildr_creat_br_set(ir_buildr_t *build, bool is_32bit, reg_t *cond,
 	ir_buildr_set_insert_blk(build, set_to);
 	return;
 }
+
+void ir_buildr_creat_trap(ir_buildr_t *build)
+{
+	ir_inst_t *trap = ir_inst_make(IR_INST_TRAP, NULL, NULL, NULL, 0);
+	ir_buildr_emit_ins(build, trap);
+	return;
+}

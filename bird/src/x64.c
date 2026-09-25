@@ -676,6 +676,9 @@ branch_cond:
 			break;
 		case IR_INST_NOP:
 			break;
+		case IR_INST_TRAP:
+			fprintf(f, "\tud2\n");
+			break;
 		case IR_INST_MOV:
 			fprintf(f, "\tmov %s, %s\n", r0, r1);
 			break;

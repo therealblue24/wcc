@@ -283,7 +283,8 @@ void type_propagate(node_t *node)
 
 	switch(node->kind) {
 	case NODE_ASM:
-		node->type = NULL;
+	case NODE_TRAP:
+		node->type = type_clone(TY_VOID);
 		break;
 
 	case NODE_NUM:

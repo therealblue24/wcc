@@ -231,6 +231,10 @@ reg_t *codegen_expr(node_t *node)
 		(void)codegen_expr(node->lhs);
 		return codegen_expr(node->rhs);
 	};
+	case NODE_TRAP: {
+		ir_buildr_creat_trap(build);
+		return NULL;
+	};
 	case NODE_FUNCALL: {
 		LIST(callreg_t *) callargs = list_make(reg_t *);
 		node_t *arg = node->fargs;
