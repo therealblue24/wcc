@@ -1,5 +1,3 @@
-#include "test/one.c"
-
 int main()
 {
 	int i;
