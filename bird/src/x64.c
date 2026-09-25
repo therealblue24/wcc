@@ -719,6 +719,16 @@ branch_cond:
 					   (char *)r2);
 			fprintf(f, "\tmov %s, %s\n", r0, is_32bit ? "eax" : "rax");
 			break;
+		case IR_INST_TEST:
+			if(r0i != r1i && r1i != r2i && r0i != r2i) {
+				fprintf(f, "\txor %s, %s\n", r0d, r0d);
+			}
+			fprintf(f, "\ttest %s, %s\n", r1, r2);
+			fprintf(f, "\tsetne %s\n", r0);
+			if(!(r0i != r1i && r1i != r2i && r0i != r2i)) {
+				fprintf(f, "\tmovzx %s, %s\n", r0d, r0b);
+			}
+			break;
 		case IR_INST_AND:
 			fprintf(f, "\tand %s, %s\n", r0, r2);
 			break;

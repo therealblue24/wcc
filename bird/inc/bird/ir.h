@@ -22,6 +22,8 @@ enum ins_type {
 	IR_INST_SMOD, /* %r0 = smod %r1, %r2 */
 	IR_INST_UDIV, /* %r0 = udiv %r1, %r2 */
 	IR_INST_UMOD, /* %r0 = umod %r1, %r2 */
+	/* basically just mkbool [and %r1, %r2] */
+	IR_INST_TEST, /* %r0 = test %r1, %r2 */
 	IR_INST_AND, /* %r0 = and %r1, %r2 */
 	IR_INST_OR, /* %r0 = or %r1, %r2 */
 	IR_INST_EOR, /* %r0 = eor %r1, %r2 */
@@ -159,6 +161,7 @@ typedef struct reg {
 	long off; /* stack offset of register */
 	/* register hinting from the Wimmer paper */
 	SET(struct reg *) moveset; /* registers which are move-related */
+	bool prefer_caller; /* is this register alive at a point of a call? */
 
 	/* compact these in a union because i need to shrink size
 	 * of register struct. good start */

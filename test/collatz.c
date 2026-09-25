@@ -1,7 +1,7 @@
 int collatz(int n)
 {
 	int ln = n;
-	return ln & 1 ? ln + ln + ln + 1 : ln >> 1;
+	return ln & 1 ? ln + (ln << 1) + 1 : ln >> 1;
 }
 
 int terminates(int n)

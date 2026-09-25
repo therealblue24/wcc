@@ -75,7 +75,7 @@ int ir_inst_is_cmp(enum ins_type type)
 int ir_inst_is_assoc(enum ins_type type)
 {
 	return type == IR_INST_ADD || type == IR_INST_MUL || type == IR_INST_AND ||
-		   type == IR_INST_OR || type == IR_INST_EOR;
+		   type == IR_INST_OR || type == IR_INST_EOR || type == IR_INST_TEST;
 }
 
 /* can the instruction be immediate folded? */
@@ -857,6 +857,8 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("r%ld = shr r%ld, #%lld", r0, r1, imm);
 	case IR_INST_ASHRI:
 		out("r%ld = ashr r%ld, #%lld", r0, r1, imm);
+	case IR_INST_TEST:
+		out("r%ld = test r%ld, r%ld", r0, r1, r2);
 	case IR_INST_AND:
 		out("r%ld = and r%ld, r%ld", r0, r1, r2);
 	case IR_INST_OR:

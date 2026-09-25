@@ -879,6 +879,10 @@ branch_cond:
 		case IR_INST_SUBI:
 			fprintf(f, "\tsub %s, %s, #%lld\n", r0, r1, imm);
 			break;
+		case IR_INST_TEST:
+			fprintf(f, "\ttst %s, %s\n", r1, r2);
+			fprintf(f, "\tcset %s, ne\n", r0);
+			break;
 		case IR_INST_AND:
 			fprintf(f, "\tand %s, %s, %s\n", r0, r1, r2);
 			break;

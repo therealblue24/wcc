@@ -207,7 +207,8 @@ static int worth(reg_t *cur, reg_t *cand)
 	return w < 0;
 }
 
-static reg_t *regalloc_try(LIST(reg_t *) allocated, size_t amount)
+static reg_t *regalloc_try(LIST(reg_t *) allocated, size_t amount,
+						   enum ir_arch backend)
 {
 	/* real registers */
 	reg_t **regs = zcalloc((size_t)amount, sizeof(reg_t *));
@@ -279,8 +280,39 @@ static reg_t *regalloc_try(LIST(reg_t *) allocated, size_t amount)
 	return NULL;
 }
 
+static bool alive_at_point(long point, reg_t *intv)
+{
+	return (point > intv->def) && (point <= intv->last_use);
+}
+
+static void map_register_preferences(ir_func_t *fun, LIST(reg_t *) allocd)
+{
+	/* reset all regs */
+	for(size_t i = 0; i < list_len(allocd); i++) {
+		allocd[i]->prefer_caller = false;
+	}
+
+	/* map all calls */
+	long ins_count = 1;
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
+			if(ins->type == IR_INST_CALL) {
+				for(size_t j = 0;
+					j < list_len(allocd) && allocd[j]->def <= ins_count; j++) {
+					allocd[j]->prefer_caller |=
+						alive_at_point(ins_count, allocd[j]);
+				}
+			}
+			ins_count++;
+		}
+	}
+
+	return;
+}
+
 /* TODO: model lifetime holes */
-void ir_regalloc(ir_func_t *fun, int amount_)
+void ir_regalloc(ir_func_t *fun, int amount_, enum ir_arch backend)
 {
 	prof_begin("regalloc");
 	LIST(reg_t *) allocd;
@@ -289,7 +321,10 @@ void ir_regalloc(ir_func_t *fun, int amount_)
 	for(;;) {
 		allocd = ir_blk_reglive(fun);
 		ir_dce(fun);
-		reg_t *spill = regalloc_try(allocd, amount);
+		if(backend == IR_ARCH_AARCH64_APPLE) {
+			map_register_preferences(fun, allocd);
+		}
+		reg_t *spill = regalloc_try(allocd, amount, backend);
 		if(!spill) {
 			/* we achieved an allocation */
 			for(size_t i = 0; i < list_len(allocd); i++) {
@@ -625,7 +660,7 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 	LIST(reg_t *) allocated = ir_blk_reglive(fun);
 	calculate_spill_costs(allocated, fun);
 	list_delete(allocated);
-	ir_regalloc(fun, amount);
+	ir_regalloc(fun, amount, arch);
 	ir_fix(fun);
 	int tolerance = (opt_level * 8) + 2;
 	int change = 1;

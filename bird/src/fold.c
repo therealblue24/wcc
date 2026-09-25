@@ -166,6 +166,9 @@ static void ir_fold_ins_binop64(ir_inst_t *ins)
 			ins->imm = ua % ub;
 		}
 		break;
+	case IR_INST_TEST:
+		ins->imm = !!(ua & ub);
+		break;
 	case IR_INST_AND:
 		ins->imm = ua & ub;
 		break;
@@ -283,6 +286,9 @@ static void ir_fold_ins_binop32(ir_inst_t *ins)
 		} else {
 			immres = ua % ub;
 		}
+		break;
+	case IR_INST_TEST:
+		immres = !!(ua & ub);
 		break;
 	case IR_INST_AND:
 		immres = ua & ub;

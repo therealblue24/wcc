@@ -449,7 +449,8 @@ static bool is_declspec(token_t *tok)
 	   token_eq(tok, "signed") || token_eq(tok, "unsigned") ||
 	   token_eq(tok, "_Alignas") || token_eq(tok, "struct") ||
 	   token_eq(tok, "static") || token_eq(tok, "union") ||
-	   token_eq(tok, "typedef") || token_eq(tok, "enum") || find_type(tok)) {
+	   token_eq(tok, "typedef") || token_eq(tok, "typeof") ||
+	   token_eq(tok, "enum") || find_type(tok)) {
 		return true;
 	}
 	return false;
@@ -707,6 +708,23 @@ static type_t *parse_declspec(token_t *tok, token_t **rest)
 
 	if(token_eq(tok, "enum")) {
 		return parse_enum(tok, rest);
+	}
+
+	if(token_eat(&tok, "typeof")) {
+		tok = token_skip(tok, "(");
+		type_t *ty = NULL;
+		if(is_declspec(tok)) {
+			ty = parse_declspec(tok, &tok);
+		} else {
+			node_t *expr = parse_expr(tok, &tok);
+			type_propagate(expr);
+			if(!expr->type) {
+				compile_err_node(expr, "expected a typed expression");
+			}
+			ty = expr->type;
+		}
+		*rest = token_skip(tok, ")");
+		return ty;
 	}
 
 	while(is_declspec(tok)) {

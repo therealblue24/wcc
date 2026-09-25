@@ -7,7 +7,7 @@
 #include <stdbool.h>
 
 /* do the register allocation for `amount` of registers */
-void ir_regalloc(ir_func_t *fun, int amount);
+void ir_regalloc(ir_func_t *fun, int amount, enum ir_arch arch);
 
 /* do the spilling */
 void ir_regalloc_spill(ir_func_t *fun);

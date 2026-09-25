@@ -126,17 +126,18 @@ int iswhitespace(int c)
 static int iskeyword(char *prog, size_t plen)
 {
 	static const char *keywords[] = {
-		"auto",		  "break",	   "case",			 "char",
-		"const",	  "continue",  "default",		 "do",
-		"double",	  "else",	   "enum",			 "extern",
-		"float",	  "for",	   "goto",			 "if",
-		"inline",	  "int",	   "long",			 "register",
-		"restrict",	  "return",	   "short",			 "signed",
-		"sizeof",	  "static",	   "struct",		 "switch",
-		"typedef",	  "union",	   "unsigned",		 "void",
-		"volatile",	  "while",	   "_Alignas",		 "_Alignof",
-		"_Atomic",	  "_Bool",	   "_Complex",		 "_Generic",
-		"_Imaginary", "_Noreturn", "_Static_assert", "_Thread_local"
+		"auto",			"break",	  "case",	   "char",
+		"const",		"continue",	  "default",   "do",
+		"double",		"else",		  "enum",	   "extern",
+		"float",		"for",		  "goto",	   "if",
+		"inline",		"int",		  "long",	   "register",
+		"restrict",		"return",	  "short",	   "signed",
+		"sizeof",		"static",	  "struct",	   "switch",
+		"typedef",		"typeof",	  "union",	   "unsigned",
+		"void",			"volatile",	  "while",	   "_Alignas",
+		"_Alignof",		"_Atomic",	  "_Bool",	   "_Complex",
+		"_Generic",		"_Imaginary", "_Noreturn", "_Static_assert",
+		"_Thread_local"
 	};
 	static const size_t keywords_count = sizeof(keywords) / sizeof(keywords[0]);
 

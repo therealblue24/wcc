@@ -3,7 +3,8 @@
 
 static bool ins_produces_bool(enum ins_type t)
 {
-	return t == IR_INST_MKBOOL || t == IR_INST_NOTBOOL || ir_inst_is_cmp(t);
+	return t == IR_INST_MKBOOL || t == IR_INST_NOTBOOL || t == IR_INST_TEST ||
+		   ir_inst_is_cmp(t);
 }
 
 static bool ins_is_ext(enum ins_type t)
@@ -250,6 +251,20 @@ exit:
 
 	if(ins->type == IR_INST_NOT && ins->r1->insty == IR_INST_NOT) {
 		ins->type = IR_INST_MOV;
+		ins->r1 = ins->r1->lhs;
+		change = 1;
+	}
+
+	/* %r0 = and %r1, %r2
+	 * %r3 = mkbool %r0
+	 * ->
+	 * %r0 = and %r1, %r2
+	 * %r3 = test %r1, %r2
+	 */
+
+	if(ins->type == IR_INST_MKBOOL && ins->r1->insty == IR_INST_AND) {
+		ins->type = IR_INST_TEST;
+		ins->r2 = ins->r1->rhs;
 		ins->r1 = ins->r1->lhs;
 		change = 1;
 	}
