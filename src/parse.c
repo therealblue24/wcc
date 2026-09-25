@@ -407,6 +407,7 @@ void obj_delete_all(LIST(obj_t *) objs)
 /* forward defs */
 static node_t *parse_mul(token_t *tok, token_t **rest);
 static node_t *parse_expr(token_t *tok, token_t **rest);
+static int64_t parse_const_expr(token_t *tok, token_t **rest);
 static node_t *parse_prim(token_t *tok, token_t **rest);
 static node_t *parse_postfix(token_t *tok, token_t **rest);
 static node_t *parse_unary(token_t *tok, token_t **rest);
@@ -854,11 +855,13 @@ static type_t *parse_direct_declarator(type_t *root, token_t *tok,
 
 	while(token_eq(tok, "[")) {
 		tok = token_skip(tok, "[");
-		if(tok->kind != TOK_NUM) {
-			compile_err(tok->loc, "expected a constant number");
+
+		int64_t size = parse_const_expr(tok, &tok);
+		if(size < 0) {
+			compile_err(tok->loc, "invalid array length");
 		}
-		size_t size = tok->num;
-		tok = token_skip(tok->next, "]");
+
+		tok = token_skip(tok, "]");
 		type = type_arr_to(type, size);
 	}
 
@@ -900,11 +903,12 @@ parse:
 
 	if(token_eq(tok, "[")) {
 		tok = token_skip(tok, "[");
-		if(tok->kind != TOK_NUM) {
+		int64_t size = parse_const_expr(tok, &tok);
+		if(size < 0) {
 			compile_err(tok->loc, "invalid array length");
 		}
-		ty = type_arr_to(ty, tok->num);
-		tok = token_skip(tok->next, "]");
+		ty = type_arr_to(ty, size);
+		tok = token_skip(tok, "]");
 		goto parse;
 	}
 
@@ -1583,6 +1587,111 @@ static node_t *parse_cond_expr(token_t *tok, token_t **rest)
 	return logor;
 }
 
+/* constant expression */
+
+static uint64_t zxt(uint64_t x, uint64_t size)
+{
+	uint64_t m = (1ULL << size) - 1;
+	return x & m;
+}
+
+static uint64_t sxt(uint64_t x_, uint64_t size)
+{
+	/* thank you https://graphics.stanford.edu/~seander/bithacks.html#FixedSignExtend */
+	int64_t x = x_;
+	int64_t r;
+	int64_t mask = 1ULL << (size - 1);
+	x = x & ((1ULL << size) - 1);
+	r = (x ^ mask) - mask;
+	return r;
+}
+
+/* just execute the operations in the tree */
+/* probably the only problematic recursive function */
+static int64_t exec_constexpr(node_t *node)
+{
+#define E exec_constexpr
+
+	type_propagate(node);
+
+	node_t *l = node->lhs, *r = node->rhs;
+
+	switch(node->kind) {
+	case NODE_ADD:
+		return E(l) + E(r);
+	case NODE_SUB:
+		return E(l) - E(r);
+	case NODE_MUL:
+		return E(l) * E(r);
+	case NODE_DIV:
+		return (node->type->unsignd ? (uint64_t)E(l) / (uint64_t)E(r) :
+									  E(l) / E(r));
+	case NODE_MOD:
+		return (node->type->unsignd ? (uint64_t)E(l) % (uint64_t)E(r) :
+									  E(l) % E(r));
+	case NODE_NUM:
+		return node->num;
+	case NODE_NEG:
+		return -E(l);
+	case NODE_NOT:
+		return ~E(l);
+	case NODE_LOGNEG:
+		return !E(l);
+	case NODE_SHL:
+		return E(l) << E(r);
+	case NODE_SHR:
+		return (node->type->unsignd ? (uint64_t)E(l) >> (uint64_t)E(r) :
+									  E(l) >> E(r));
+	case NODE_AND:
+		return E(l) & E(r);
+	case NODE_EOR:
+		return E(l) ^ E(r);
+	case NODE_OR:
+		return E(l) | E(r);
+	case NODE_LOGAND:
+		return E(l) && E(r);
+	case NODE_LOGOR:
+		return E(l) || E(r);
+	case NODE_EQ:
+		return E(l) == E(r);
+	case NODE_NE:
+		return E(l) != E(r);
+	case NODE_GT:
+		return (node->type->unsignd ? (uint64_t)E(l) > (uint64_t)E(r) :
+									  E(l) > E(r));
+	case NODE_GE:
+		return (node->type->unsignd ? (uint64_t)E(l) >= (uint64_t)E(r) :
+									  E(l) >= E(r));
+	case NODE_LT:
+		return (node->type->unsignd ? (uint64_t)E(l) < (uint64_t)E(r) :
+									  E(l) < E(r));
+	case NODE_LE:
+		return (node->type->unsignd ? (uint64_t)E(l) <= (uint64_t)E(r) :
+									  E(l) <= E(r));
+	case NODE_CAST:
+		if(type_is_int(node->type)) {
+			return (node->type->unsignd ? zxt(E(l), node->type->size * 8) :
+										  sxt(E(l), node->type->size * 8));
+		} else {
+			compile_err_node(node, "not a constant expression");
+		}
+
+	default:
+
+		compile_err_node(node, "not a constant expression");
+		return -1;
+	}
+
+	return -1;
+#undef E
+}
+
+/* helper function */
+static int64_t parse_const_expr(token_t *tok, token_t **rest)
+{
+	return exec_constexpr(parse_cond_expr(tok, rest));
+}
+
 static node_t *parse_relational(token_t *tok, token_t **rest)
 {
 	node_t *node = parse_shift(tok, &tok);
@@ -2014,7 +2123,7 @@ static void parse_global_var(type_t *decltype, token_t *tok, token_t **rest)
 		var->is_static = decltype->is_static;
 		/* handle initalizer */
 		if(token_eat(&tok, "=")) {
-			node_t *init = parse_initializer(tok, &tok);
+			node_t *init = node_num(parse_const_expr(tok, &tok), tok);
 			type_propagate(init);
 			/* assumes little endian */
 			uint64_t *cpy = scr_alloc(8);
@@ -2034,7 +2143,7 @@ static void parse_global_var(type_t *decltype, token_t *tok, token_t **rest)
 		}
 		/* handle initalizer */
 		if(token_eat(&tok, "=")) {
-			node_t *init = parse_initializer(tok, &tok);
+			node_t *init = node_num(parse_const_expr(tok, &tok), tok);
 			type_propagate(init);
 			/* assumes little endian */
 			uint64_t *cpy = scr_alloc(8);
