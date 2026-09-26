@@ -358,11 +358,11 @@ static void ir_ins_abi_call_x64(FILE *f, ir_func_t *fn, ir_inst_t *ins,
 	if(p)
 		p--;
 
-	/* Dummy stack push */
-	if(caller_save_count & 1) {
-		fprintf(f, "\tpush rcx\n");
-		p++;
-	}
+	// /* Dummy stack push */
+	// if(caller_save_count & 1) {
+	// 	fprintf(f, "\tpush rcx\n");
+	// 	p++;
+	// }
 
 	if(list_len(ins->call_args)) {
 		for(size_t i = list_len(ins->call_args) - 1; i >= 6; i--) {
@@ -424,9 +424,9 @@ static void ir_ins_abi_call_x64(FILE *f, ir_func_t *fn, ir_inst_t *ins,
 	if(stack_used) {
 		fprintf(f, "\tsub rsp, %zu\n", stack_used);
 	}
-	if(caller_save_count & 1) {
-		fprintf(f, "\tpop rcx\n");
-	}
+	// if(caller_save_count & 1) {
+	// 	fprintf(f, "\tpop rcx\n");
+	// }
 	for(int i = x64_reg_count - 1; i >= 5; i--) {
 		if(fn->alloc_used[i] && i != retval) {
 			fprintf(f, "\tpop %s\n", x64_reg[i]);
@@ -981,9 +981,9 @@ static int ir_func_save_regs(FILE *f, ir_func_t *fun)
 	 * I don't know. */
 	/* The choice of `rcx` is mostly random here. You can't use `rax`,
 	 * so what comes after `rax`... */
-	if(fun->need_frame && (pushd & 1)) {
-		fprintf(f, "\tpush rcx\n");
-	}
+	// if(fun->need_frame && (pushd & 1)) {
+	// 	fprintf(f, "\tpush rcx\n");
+	// }
 
 	return fun->need_frame && (pushd & 1);
 }
@@ -1003,9 +1003,9 @@ static int ir_func_restore_regs(FILE *f, ir_func_t *fun)
 	}
 
 	/* Read comment above. */
-	if(fun->need_frame && (pushd & 1)) {
-		fprintf(f, "\tpop rcx\n");
-	}
+	// if(fun->need_frame && (pushd & 1)) {
+	// 	fprintf(f, "\tpop rcx\n");
+	// }
 
 	for(size_t i = 4; i >= 0; i--) {
 		if(fun->alloc_used[i]) {
