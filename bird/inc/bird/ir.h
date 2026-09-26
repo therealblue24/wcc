@@ -166,6 +166,8 @@ typedef struct reg {
 	SET(struct reg *) moveset; /* registers which are move-related */
 	bool prefer_caller; /* is this register alive at a point of a call? */
 
+	SET(struct reg *) inter; /* interference graph */
+
 	/* compact these in a union because i need to shrink size
 	 * of register struct. good start */
 	union {
@@ -278,6 +280,7 @@ typedef struct ir_blk {
 	SET(reg_t *) regs_def; /* registers in this block */
 	SET(reg_t *) regs_in; /* registers in */
 	SET(reg_t *) regs_out; /* registers out */
+	SET(reg_t *) regs_ue; /* upward expose set */
 } ir_blk_t;
 
 /* for SSA construction */

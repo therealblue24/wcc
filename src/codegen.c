@@ -145,7 +145,7 @@ static reg_t *calc_addr(node_t *node)
 		 * out. */
 		reg_t *base = calc_addr(node->lhs);
 		reg_t *off = ir_buildr_creat_imm64(build, node->memb->loc);
-		reg_t *add = ir_buildr_creat_add(build, 0, base, off);
+		reg_t *add = ir_buildr_creat_add(build, false, base, off);
 		return add;
 	}
 

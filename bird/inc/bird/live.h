@@ -24,4 +24,16 @@ void ir_blk_liveness(ir_func_t *fun);
 /* needs ir_blk_reguse; defines the input registers to be zero for the entry block */
 void ir_blk_fixup_entry(ir_func_t *fun);
 
+/* proper liveness analysis: does NOT work for SSA IRs yet */
+int ir_proper_liveness(ir_func_t *func);
+
+/* reset interference graph */
+void ir_reset_inter_graph(ir_func_t *func);
+/* delete interference graph */
+void ir_delete_inter_graph(ir_func_t *func);
+/* print interference graph */
+void ir_print_inter_graph(ir_func_t *func);
+/* yeah you know */
+void ir_build_inter_graph(ir_func_t *func);
+
 #endif /* LIVENESS_H_ */

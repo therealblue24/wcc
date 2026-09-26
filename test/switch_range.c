@@ -5,9 +5,9 @@ int isalpha(int x)
 		return 1;
 	case 'A' ... 'Z':
 		return 1;
-	case '!' ... '!':
+	case '!':
 		return 2;
-	case 255 ... 250:
+	case 250 ... 255:
 		return 3;
 	default:
 		return 0;

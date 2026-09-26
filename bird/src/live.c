@@ -1,3 +1,4 @@
+#include "live.h"
 #include "bird.h"
 #include "x64.h"
 #include "zz/set.h"
@@ -120,6 +121,7 @@ static void reset_blk(ir_blk_t *blk)
 	set_reset(blk->regs_def);
 	set_reset(blk->regs_in);
 	set_reset(blk->regs_out);
+	set_reset(blk->regs_ue);
 	blk->loop_order = 0;
 }
 
@@ -294,35 +296,22 @@ bool ir_intersect(reg_t *a, reg_t *b)
 #undef USE
 #undef DEF
 
-static long long_min(long a, long b)
-{
-	return a < b ? a : b;
-}
-
-static long long_max(long a, long b)
-{
-	return a > b ? a : b;
-}
-
-static void join_intervals(reg_t *reg, reg_t *join_with)
-{
-	long def = long_min(reg->def, join_with->def);
-	long use = long_max(reg->last_use, join_with->last_use);
-	reg->def = def;
-	reg->last_use = use;
-	return;
-}
-
 static int try_coalesce(reg_t *reg, reg_t *join_with)
 {
 	reg_t *r = ir_find(reg);
 	reg_t *j = ir_find(join_with);
-	if(intersect(j, r)) {
+	if(set_has(r->inter, j) || set_has(j->inter, r)) {
 		return 0;
 	}
 
+	reg_t *v;
+	set_iter(j->inter, v, {
+		set_add(&r->inter, v);
+		set_add(&v->inter, r);
+		set_del(v->inter, j);
+	});
+
 	/* replace r0 with r1, join intervals */
-	join_intervals(r, j);
 	ir_union(j, r);
 	return 1;
 }
@@ -379,6 +368,10 @@ static int dfs_visit(ir_blk_t *blk, int (*func)(ir_inst_t *ins))
 
 int ir_coalesce(ir_func_t *fun)
 {
+	ir_proper_liveness(fun);
+	ir_reset_inter_graph(fun);
+	ir_build_inter_graph(fun);
+
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		fun->blocks[i]->visited = false;
 	}
@@ -390,6 +383,7 @@ int ir_coalesce(ir_func_t *fun)
 	}
 
 	ir_rewrite(fun);
+	ir_delete_inter_graph(fun);
 	return change;
 }
 
@@ -446,4 +440,199 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 		set_iter(blk->regs_out, r, { reg_update_counter(r, ins_count); });
 	}
 	return allocated;
+}
+
+/* proper liveness analysis
+ * is not SSA aware because I don't need that yet
+ * LiveIn(B) = UpwardExposed(B) U (LiveOut(B) \ Defs(B))
+ * LiveOut(B) = UNION (S : succ(B)) : LiveIn(S)
+ */
+
+static void compute_def_and_upward_exposed(ir_func_t *func)
+{
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(inst->call_args); j++) {
+					reg_t *r = inst->call_args[j]->r;
+					if(!set_has(blk->regs_def, r)) {
+						set_add(&blk->regs_ue, r);
+					}
+				}
+			}
+
+			if(inst->r1 && !set_has(blk->regs_def, inst->r1)) {
+				set_add(&blk->regs_ue, inst->r1);
+			}
+
+			if(inst->r2 && !set_has(blk->regs_def, inst->r2)) {
+				set_add(&blk->regs_ue, inst->r2);
+			}
+
+			if(inst->r0) {
+				set_add(&blk->regs_def, inst->r0);
+			}
+		}
+	}
+	return;
+}
+
+/*
+ * LiveIn(B) = UpwardExposed(B) U (LiveOut(B) \ Defs(B))
+ * LiveOut(B) = UNION (S : succ(B)) : LiveIn(S)
+ * returns if changed
+ */
+static bool compute_live_out(ir_blk_t *blk, SET(reg_t *) * scratch)
+{
+	set_reset(blk->regs_out);
+	/* old live-in set */
+	set_reset(*scratch);
+	reg_t *v;
+	set_iter(blk->regs_in, v, { set_add(scratch, v); });
+
+	for(size_t i = 0; i < list_len(blk->succ); i++) {
+		set_iter_count(blk->succ[i]->regs_in, j, v,
+					   { set_add(&blk->regs_out, v); });
+	}
+
+	/* recompute live-in */
+	set_iter(blk->regs_out, v, { set_add(&blk->regs_in, v); });
+	set_iter(blk->regs_def, v, { set_del(blk->regs_in, v); });
+	set_iter(blk->regs_ue, v, { set_add(&blk->regs_in, v); });
+
+	/* return change */
+	set_iter(*scratch, v, {
+		if(!set_has(blk->regs_in, v)) {
+			return true;
+		}
+	});
+	set_iter(blk->regs_in, v, {
+		if(!set_has(*scratch, v)) {
+			return true;
+		}
+	});
+	return false;
+}
+
+int ir_proper_liveness(ir_func_t *func)
+{
+	reset_fun(func);
+	ir_blk_flow(func);
+	compute_def_and_upward_exposed(func);
+	bool changed = true;
+	SET(reg_t *) scratch = set_empty();
+	while(changed) {
+		changed = false;
+		for(size_t i = 0; i < list_len(func->blocks); i++) {
+			ir_blk_t *blk = func->blocks[i];
+			changed |= compute_live_out(blk, &scratch);
+		}
+	}
+
+	set_delete(scratch);
+	return 0;
+}
+
+void ir_delete_inter_graph(ir_func_t *func)
+{
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		reg_t *v;
+		set_iter_count(blk->regs_def, j, v, {
+			if(v->inter) {
+				set_delete(v->inter);
+				v->inter = NULL;
+			}
+		});
+	}
+	return;
+}
+
+void ir_reset_inter_graph(ir_func_t *func)
+{
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		reg_t *v;
+		set_iter_count(blk->regs_def, j, v, {
+			if(!v->inter) {
+				v->inter = set_empty();
+			}
+			set_reset(v->inter);
+		});
+	}
+	return;
+}
+
+void ir_print_inter_graph(ir_func_t *func)
+{
+	printf("graph {\n");
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		reg_t *v, *w;
+		set_iter_count(blk->regs_def, j, v, {
+			set_iter_count(v->inter, k, w,
+						   { printf("\tr%ld -- r%ld\n", v->vr, w->vr); });
+		});
+	}
+	printf("}\n");
+}
+
+/* Big thanks to https://github.com/CompilerProgramming/ez-lang/blob/main/optvm/src/main/java/com/compilerprogramming/ezlang/compiler/InterferenceGraphBuilder.java
+ * for the algorithm behind this IG construction */
+
+void ir_build_inter_graph(ir_func_t *func)
+{
+	/* doubly linked list */
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		ir_inst_t *prev = NULL;
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			blk->tail = inst;
+			inst->next_mem = prev;
+			prev = inst;
+		}
+	}
+
+	SET(reg_t *) live = set_empty();
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		reg_t *v;
+
+		set_reset(live);
+		set_iter(blk->regs_out, v, { set_add(&live, v); });
+
+		for(ir_inst_t *inst = blk->tail; inst; inst = inst->next_mem) {
+			if(inst->type == IR_INST_MOV) {
+				set_del(live, inst->r1);
+			}
+			if(inst->r0) {
+				set_iter_count(live, j, v, {
+					if(v != inst->r0) {
+						set_add(&v->inter, inst->r0);
+						set_add(&inst->r0->inter, v);
+					}
+				});
+				set_del(live, inst->r0);
+			}
+			if(inst->r1) {
+				set_add(&live, inst->r1);
+			}
+			if(inst->r2) {
+				set_add(&live, inst->r2);
+			}
+			if(inst->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(inst->call_args); j++) {
+					v = inst->call_args[j]->r;
+					if(!v->spilld) {
+						set_add(&live, v);
+					}
+				}
+			}
+		}
+	}
+
+	set_delete(live);
+
+	return;
 }

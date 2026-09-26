@@ -971,7 +971,7 @@ void ir_remove_blk(ir_func_t *func, ir_blk_t *blk)
 		ir_remove_pred(blk->succ[i], blk);
 	}
 
-	ir_blk_delete(func->blocks[indx]);
+	ir_blk_delete_all(func->blocks[indx]);
 	ordered_remove_blk(func->blocks, indx);
 
 	return;

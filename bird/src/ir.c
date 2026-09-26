@@ -402,6 +402,7 @@ ir_blk_t *ir_blk_make(ir_inst_t *insts)
 	blk->regs_def = set_empty();
 	blk->regs_in = set_empty();
 	blk->regs_out = set_empty();
+	blk->regs_ue = set_empty();
 	blk->tail = NULL;
 	return blk;
 }
@@ -430,6 +431,7 @@ void ir_blk_delete(ir_blk_t *blk)
 	set_delete(blk->regs_def);
 	set_delete(blk->regs_in);
 	set_delete(blk->regs_out);
+	set_delete(blk->regs_ue);
 	free(blk);
 	return;
 }
