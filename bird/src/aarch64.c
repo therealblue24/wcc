@@ -154,6 +154,47 @@ gen_add(asr, ASR);
 #undef ASR
 #undef gen_add
 
+/* turns
+ * %r0 = and/eor/or %r1, %r2
+ * (%r2 = not %r3)
+ * ->
+ * %r0 = bic/eon/orn %r1, %r3
+ */
+static void not_variant(ir_func_t *fun)
+{
+	fill_use_single(fun);
+
+	for(size_t i = 0; i < list_len(fun->blocks); i++) {
+		ir_blk_t *blk = fun->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_AND && inst->type != IR_INST_OR &&
+			   inst->type != IR_INST_EOR) {
+				continue;
+			}
+
+			if(inst->r2->insty == IR_INST_NOT) {
+turn:
+				inst->r2 = inst->r2->lhs;
+				if(inst->type == IR_INST_AND) {
+					inst->type = IR_INST_BIC;
+				}
+				if(inst->type == IR_INST_EOR) {
+					inst->type = IR_INST_EON;
+				}
+				if(inst->type == IR_INST_OR) {
+					inst->type = IR_INST_ORN;
+				}
+			} else if(inst->r1->insty == IR_INST_NOT) {
+				reg_t *r = inst->r1;
+				inst->r1 = inst->r2;
+				inst->r2 = r;
+				goto turn;
+			}
+		}
+	}
+	return;
+}
+
 /* turns stuff like
  * %r0 = shl %r1, #imm
  * %r1 = add %r2, %r0
@@ -211,6 +252,7 @@ void ir_func_opt_aarch64(ir_func_t *fun, int opt_level)
 	rol_to_ror(fun);
 	if(opt_level >= 1) {
 		shift_variant(fun);
+		not_variant(fun);
 	}
 	return;
 }
@@ -889,6 +931,9 @@ branch_cond:
 		case IR_INST_AND:
 			fprintf(f, "\tand %s, %s, %s\n", r0, r1, r2);
 			break;
+		case IR_INST_BIC:
+			fprintf(f, "\tbic %s, %s, %s\n", r0, r1, r2);
+			break;
 		case IR_INST_AND_LSL:
 			fprintf(f, "\tand %s, %s, %s, lsl #%lld\n", r0, r1, r2, imm);
 			break;
@@ -901,6 +946,9 @@ branch_cond:
 		case IR_INST_OR:
 			fprintf(f, "\torr %s, %s, %s\n", r0, r1, r2);
 			break;
+		case IR_INST_ORN:
+			fprintf(f, "\torn %s, %s, %s\n", r0, r1, r2);
+			break;
 		case IR_INST_OR_LSL:
 			fprintf(f, "\torr %s, %s, %s, lsl #%lld\n", r0, r1, r2, imm);
 			break;
@@ -912,6 +960,9 @@ branch_cond:
 			break;
 		case IR_INST_EOR:
 			fprintf(f, "\teor %s, %s, %s\n", r0, r1, r2);
+			break;
+		case IR_INST_EON:
+			fprintf(f, "\teon %s, %s, %s\n", r0, r1, r2);
 			break;
 		case IR_INST_EOR_LSL:
 			fprintf(f, "\teor %s, %s, %s, lsl #%lld\n", r0, r1, r2, imm);

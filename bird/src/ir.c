@@ -874,6 +874,12 @@ void ir_print_inst(ir_inst_t *ins, int mode)
 		out("r%ld = or r%ld, r%ld", r0, r1, r2);
 	case IR_INST_EOR:
 		out("r%ld = eor r%ld, r%ld", r0, r1, r2);
+	case IR_INST_BIC:
+		out("r%ld = bic r%ld, r%ld", r0, r1, r2);
+	case IR_INST_ORN:
+		out("r%ld = orn r%ld, r%ld", r0, r1, r2);
+	case IR_INST_EON:
+		out("r%ld = eon r%ld, r%ld", r0, r1, r2);
 	case IR_INST_ANDI:
 		out("r%ld = and r%ld, %lld", r0, r1, imm);
 	case IR_INST_ORI:

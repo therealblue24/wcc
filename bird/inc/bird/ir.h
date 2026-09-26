@@ -50,6 +50,11 @@ enum ins_type {
 	IR_INST_EOR_LSR,
 	IR_INST_EOR_ASR,
 
+	/* arithmetic - aarch64 negation */
+	IR_INST_BIC,
+	IR_INST_EON,
+	IR_INST_ORN,
+
 	/* immediate ops */
 	IR_INST_ANDI,
 	IR_INST_ORI,
