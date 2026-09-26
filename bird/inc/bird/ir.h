@@ -281,6 +281,8 @@ typedef struct ir_blk {
 	SET(reg_t *) regs_in; /* registers in */
 	SET(reg_t *) regs_out; /* registers out */
 	SET(reg_t *) regs_ue; /* upward expose set */
+	SET(reg_t *) regs_phidef; /* phi defs */
+	SET(reg_t *) regs_phiuse; /* phi uses */
 } ir_blk_t;
 
 /* for SSA construction */

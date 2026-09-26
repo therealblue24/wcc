@@ -443,16 +443,28 @@ LIST(reg_t *) ir_blk_reglive(ir_func_t *fun)
 }
 
 /* proper liveness analysis
- * is not SSA aware because I don't need that yet
- * LiveIn(B) = UpwardExposed(B) U (LiveOut(B) \ Defs(B))
- * LiveOut(B) = UNION (S : succ(B)) : LiveIn(S)
+ * LiveIn(B) = PhiDefs(B) U UpwardExposed(B) U (LiveOut(B) \ Defs(B))
+ * LiveOut(B) = UNION (S : succ(B)) : (LiveIn(S) \ PhiDefs(S)) U PhiUses(B)
  */
 
-static void compute_def_and_upward_exposed(ir_func_t *func)
+static void compute_def_ue_phi(ir_func_t *func)
 {
 	for(size_t i = 0; i < list_len(func->blocks); i++) {
 		ir_blk_t *blk = func->blocks[i];
 		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type == IR_INST_PHI) {
+				set_add(&blk->regs_phidef, inst->r0);
+				for(size_t j = 0; j < list_len(inst->phi_args); j++) {
+					ir_blk_t *pred = inst->phi_preds[j];
+					reg_t *arg = inst->phi_args[j];
+					if(pred == blk && set_has(blk->regs_phidef, arg)) {
+						continue;
+					}
+					set_add(&blk->regs_phiuse, arg);
+				}
+				continue;
+			}
+
 			if(inst->type == IR_INST_CALL) {
 				for(size_t j = 0; j < list_len(inst->call_args); j++) {
 					reg_t *r = inst->call_args[j]->r;
@@ -479,8 +491,8 @@ static void compute_def_and_upward_exposed(ir_func_t *func)
 }
 
 /*
- * LiveIn(B) = UpwardExposed(B) U (LiveOut(B) \ Defs(B))
- * LiveOut(B) = UNION (S : succ(B)) : LiveIn(S)
+ * LiveIn(B) = PhiDefs(B) U UpwardExposed(B) U (LiveOut(B) \ Defs(B))
+ * LiveOut(B) = UNION (S : succ(B)) : (LiveIn(S) \ PhiDefs(S)) U PhiUses(B)
  * returns if changed
  */
 static bool compute_live_out(ir_blk_t *blk, SET(reg_t *) * scratch)
@@ -494,12 +506,17 @@ static bool compute_live_out(ir_blk_t *blk, SET(reg_t *) * scratch)
 	for(size_t i = 0; i < list_len(blk->succ); i++) {
 		set_iter_count(blk->succ[i]->regs_in, j, v,
 					   { set_add(&blk->regs_out, v); });
+		set_iter_count(blk->succ[i]->regs_phidef, j, v,
+					   { set_del(blk->regs_out, v); });
 	}
+
+	set_iter_count(blk->regs_phiuse, j, v, { set_add(&blk->regs_out, v); });
 
 	/* recompute live-in */
 	set_iter(blk->regs_out, v, { set_add(&blk->regs_in, v); });
 	set_iter(blk->regs_def, v, { set_del(blk->regs_in, v); });
 	set_iter(blk->regs_ue, v, { set_add(&blk->regs_in, v); });
+	set_iter(blk->regs_phidef, v, { set_add(&blk->regs_in, v); });
 
 	/* return change */
 	set_iter(*scratch, v, {
@@ -515,11 +532,11 @@ static bool compute_live_out(ir_blk_t *blk, SET(reg_t *) * scratch)
 	return false;
 }
 
-int ir_proper_liveness(ir_func_t *func)
+void ir_proper_liveness(ir_func_t *func)
 {
 	reset_fun(func);
 	ir_blk_flow(func);
-	compute_def_and_upward_exposed(func);
+	compute_def_ue_phi(func);
 	bool changed = true;
 	SET(reg_t *) scratch = set_empty();
 	while(changed) {
@@ -531,7 +548,7 @@ int ir_proper_liveness(ir_func_t *func)
 	}
 
 	set_delete(scratch);
-	return 0;
+	return;
 }
 
 void ir_delete_inter_graph(ir_func_t *func)
