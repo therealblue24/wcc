@@ -139,6 +139,13 @@ static int ir_simpleopt_ins(ir_blk_t *thisblk, ir_inst_t *ins)
 		change = 1;
 	}
 
+	/* replace move with extension if it leads to that */
+	if(ins->type == IR_INST_MOV && ins_is_ext(ins->r1->insty)) {
+		ins->type = ins->r1->insty;
+		ins->r1 = ins->r1->lhs;
+		change = 1;
+	}
+
 	/* elim of ext out of 32-bit op */
 	if(ins_is_ext(ins->type) && ins->r1->is_32bit && ins->size == 4) {
 		ins->type = IR_INST_MOV;

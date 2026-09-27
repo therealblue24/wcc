@@ -296,14 +296,8 @@ bool ir_intersect(reg_t *a, reg_t *b)
 #undef USE
 #undef DEF
 
-static int try_coalesce(reg_t *reg, reg_t *join_with)
+static void do_coalesce(reg_t *r, reg_t *j)
 {
-	reg_t *r = ir_find(reg);
-	reg_t *j = ir_find(join_with);
-	if(set_has(r->inter, j) || set_has(j->inter, r)) {
-		return 0;
-	}
-
 	reg_t *v;
 	set_iter(j->inter, v, {
 		set_add(&r->inter, v);
@@ -313,29 +307,76 @@ static int try_coalesce(reg_t *reg, reg_t *join_with)
 
 	/* replace r0 with r1, join intervals */
 	ir_union(j, r);
+	return;
+}
+
+static int try_coalesce_reckless(reg_t *reg, reg_t *join_with, int amount)
+{
+	UNUSED(amount);
+	reg_t *r = ir_find(reg);
+	reg_t *j = ir_find(join_with);
+	if(set_has(r->inter, j) || set_has(j->inter, r)) {
+		return 0;
+	}
+
+	do_coalesce(r, j);
+
 	return 1;
 }
 
-static int coalesce_moves(ir_inst_t *ins)
+static int try_coalesce_briggs(reg_t *reg, reg_t *join_with, int amount)
 {
-	if(ins->type != IR_INST_MOV) {
+	reg_t *r = ir_find(reg);
+	reg_t *j = ir_find(join_with);
+	if(set_has(r->inter, j) || set_has(j->inter, r)) {
 		return 0;
 	}
 
-	if(ins->r1 == ins->r0) {
-		ins->type = IR_INST_NOP;
+	reg_t *v;
+	size_t neighbors = 0;
+	set_iter(r->inter, v, {
+		if(set_hdr(v->inter)->size >= (size_t)amount) {
+			neighbors++;
+		}
+	});
+	set_iter(j->inter, v, {
+		if(set_hdr(v->inter)->size >= (size_t)amount) {
+			neighbors++;
+		}
+	});
+
+	if(neighbors >= (size_t)amount) {
 		return 0;
 	}
 
-	if(try_coalesce(ins->r1, ins->r0)) {
-		ins->type = IR_INST_NOP;
-		return 1;
-	}
-
-	return 0;
+	do_coalesce(r, j);
+	return 1;
 }
 
-static int coalesce_block(ir_blk_t *blk, int (*func)(ir_inst_t *ins))
+static int try_coalesce_george(reg_t *reg, reg_t *join_with, int amount)
+{
+	reg_t *x = ir_find(reg);
+	reg_t *y = ir_find(join_with);
+	if(set_has(x->inter, y) || set_has(y->inter, x)) {
+		return 0;
+	}
+
+	reg_t *v;
+	set_iter(y->inter, v, {
+		if(set_hdr(v->inter)->size >= (size_t)amount ||
+		   (set_has(v->inter, x) || set_has(x->inter, v))) {
+			return 0;
+		}
+	});
+
+	do_coalesce(x, y);
+
+	return 1;
+}
+
+static int coalesce_block(ir_blk_t *blk,
+						  int (*func)(reg_t *r, reg_t *j, int amount),
+						  int amount)
 {
 	int change = 0;
 	for(ir_inst_t *ins = blk->insts; ins; ins = ins->next) {
@@ -343,12 +384,25 @@ static int coalesce_block(ir_blk_t *blk, int (*func)(ir_inst_t *ins))
 			continue;
 		}
 
-		change |= func(ins);
+		if(ins->type != IR_INST_MOV) {
+			continue;
+		}
+
+		if(ins->r1 == ins->r0) {
+			ins->type = IR_INST_NOP;
+			continue;
+		}
+
+		if(func(ins->r1, ins->r0, amount)) {
+			ins->type = IR_INST_NOP;
+			change = 1;
+		}
 	}
 	return change;
 }
 
-static int dfs_visit(ir_blk_t *blk, int (*func)(ir_inst_t *ins))
+static int dfs_visit(ir_blk_t *blk, int (*func)(reg_t *r, reg_t *j, int amount),
+					 int amount)
 {
 	if(blk->visited) {
 		return 0;
@@ -356,17 +410,17 @@ static int dfs_visit(ir_blk_t *blk, int (*func)(ir_inst_t *ins))
 	int change = 0;
 	blk->visited = true;
 	ir_inst_t *flow = blk->tail;
-	change = coalesce_block(blk, func);
+	change = coalesce_block(blk, func, amount);
 	if(flow->true_blk) {
-		change |= dfs_visit(flow->true_blk, func);
+		change |= dfs_visit(flow->true_blk, func, amount);
 	}
 	if(flow->false_blk) {
-		change |= dfs_visit(flow->false_blk, func);
+		change |= dfs_visit(flow->false_blk, func, amount);
 	}
 	return change;
 }
 
-int ir_coalesce(ir_func_t *fun)
+int ir_coalesce(ir_func_t *fun, int mode, int amount)
 {
 	ir_proper_liveness(fun);
 	ir_reset_inter_graph(fun);
@@ -376,7 +430,23 @@ int ir_coalesce(ir_func_t *fun)
 		fun->blocks[i]->visited = false;
 	}
 
-	int change = dfs_visit(fun->blocks[0], coalesce_moves);
+	int (*func)(reg_t *, reg_t *, int) = NULL;
+
+	switch(mode) {
+	case 'c':
+		func = try_coalesce_reckless;
+		break;
+	case 'b':
+		func = try_coalesce_briggs;
+		break;
+	case 'g':
+		func = try_coalesce_george;
+		break;
+	default:
+		return 0;
+	}
+
+	int change = dfs_visit(fun->blocks[0], func, amount);
 
 	for(size_t i = 0; i < list_len(fun->blocks); i++) {
 		fun->blocks[i]->visited = false;
@@ -617,7 +687,10 @@ void ir_build_inter_graph(ir_func_t *func)
 		reg_t *v;
 
 		set_reset(live);
-		set_iter(blk->regs_out, v, { set_add(&live, v); });
+		set_iter(blk->regs_out, v, {
+			if(v)
+				set_add(&live, v);
+		});
 
 		for(ir_inst_t *inst = blk->tail; inst; inst = inst->next_mem) {
 			if(inst->type == IR_INST_MOV) {
@@ -625,7 +698,7 @@ void ir_build_inter_graph(ir_func_t *func)
 			}
 			if(inst->r0) {
 				set_iter_count(live, j, v, {
-					if(v != inst->r0) {
+					if(v != inst->r0 && v && v->inter) {
 						set_add(&v->inter, inst->r0);
 						set_add(&inst->r0->inter, v);
 					}

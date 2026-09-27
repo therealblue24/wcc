@@ -350,6 +350,8 @@ void ir_regalloc(ir_func_t *fun, int amount_, enum ir_arch backend)
 		spill->spilld = false;
 
 		list_delete(allocd);
+
+		ir_coalesce(fun, 'g', amount);
 	}
 	prof_end();
 	return;
@@ -650,7 +652,7 @@ void ir_finalize(ir_func_t *fun, int amount, int opt_level, enum ir_arch arch)
 {
 	ir_blk_reguse(fun);
 	ir_blk_fixup_entry(fun);
-	ir_coalesce(fun);
+	ir_coalesce(fun, 'c', amount);
 
 	if(debug) {
 		printf("After register coalescing\n");

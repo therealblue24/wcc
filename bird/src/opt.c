@@ -1,5 +1,6 @@
 #include "bird.h"
 #include "cfg.h"
+#include "fold.h"
 #include "info.h"
 #include "ir.h"
 #include "live.h"
@@ -145,6 +146,7 @@ void ir_opt(ir_func_t *func, int opt_level, enum ir_arch arch)
 		TIMEIT("movelim", {
 			ir_blk_dom(func);
 			ir_blk_loopnest(func);
+			change |= ir_elim_32ext(func);
 			change |= ir_mov_elim(func);
 			change |= ir_imm_elim(func);
 		});

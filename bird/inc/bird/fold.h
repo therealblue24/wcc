@@ -21,4 +21,8 @@ int ir_leas_arith_opt(ir_func_t *func);
 /* requires ir_blk_flow, ir_blk_dom and marks */
 int ir_cmp_prop(ir_func_t *func);
 
+/* eliminates 32-bit sign exts if all uses are 32 bit */
+/* breaks 32 bit use information */
+int ir_elim_32ext(ir_func_t *func);
+
 #endif /* FOLD_H_ */

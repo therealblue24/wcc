@@ -1049,3 +1049,55 @@ int ir_cmp_prop(ir_func_t *func)
 
 	return change;
 }
+
+/* eliminates 32-bit sign exts if all uses are 32 bit */
+/* breaks 32 bit use information */
+int ir_elim_32ext(ir_func_t *func)
+{
+	int change = 0;
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->r0) {
+				inst->r0->is_32bit = true;
+			}
+		}
+	}
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type == IR_INST_CALL) {
+				for(size_t j = 0; j < list_len(inst->call_args); j++) {
+					callreg_t *ca = inst->call_args[j];
+					ca->r->is_32bit &= ca->size <= 4;
+				}
+				continue;
+			}
+
+			if(inst->r1) {
+				inst->r1->is_32bit &= inst->is_32bit;
+			}
+			if(inst->r2) {
+				inst->r2->is_32bit &= inst->is_32bit;
+			}
+		}
+	}
+
+	for(size_t i = 0; i < list_len(func->blocks); i++) {
+		ir_blk_t *blk = func->blocks[i];
+		for(ir_inst_t *inst = blk->insts; inst; inst = inst->next) {
+			if(inst->type != IR_INST_SXT && inst->type != IR_INST_ZXT) {
+				continue;
+			}
+
+			if(inst->size == 4 && inst->r0->is_32bit) {
+				inst->type = IR_INST_MOV;
+				change = 1;
+			}
+		}
+	}
+
+	return change;
+}

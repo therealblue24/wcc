@@ -10,7 +10,12 @@ void ir_blk_reguse(ir_func_t *fun);
 void ir_blk_flow(ir_func_t *fun);
 
 /* requires liveness: coalesces non-interfering registers */
-int ir_coalesce(ir_func_t *fun);
+/* mode can be either:
+ * 'c' - Original coalescing alg -- coalesce EACH oppourtunity
+ * 'b' - Briggs coalescing
+ * 'g' - George coalescing
+ */
+int ir_coalesce(ir_func_t *fun, int mode, int amount);
 
 /* do 2 register's lifetimes intersect? */
 bool ir_intersect(reg_t *a, reg_t *b);
